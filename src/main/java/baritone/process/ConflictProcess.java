@@ -22,6 +22,7 @@ import baritone.api.behavior.IBehavior;
 import baritone.api.event.events.TickEvent;
 import baritone.api.process.PathingCommand;
 import baritone.api.process.PathingCommandType;
+import baritone.api.pathing.goals.GoalNear;
 import baritone.utils.BaritoneProcessHelper;
 import baritone.utils.bot.BotWork;
 import baritone.utils.bot.SurvivalPolicy;
@@ -56,6 +57,7 @@ public final class ConflictProcess extends BaritoneProcessHelper implements IBeh
     private int failedPaths;
     private UUID attackerId;
     private long defendUntil;
+    private boolean protectingEscort;
     private boolean ownsShield;
     private int previousSlot = -1;
     private int attackDelay;
@@ -75,9 +77,23 @@ public final class ConflictProcess extends BaritoneProcessHelper implements IBeh
         if (attacker == null || attacker == ctx.player()) return; // Environmental damage is not evidence that a bystander attacked.
         if (observedWorld != ctx.world()) { onLostControl(); observedWorld = ctx.world(); }
         quietTicks = 0;
+        protectingEscort = false;
         if (!attacker.getUUID().equals(attackerId)) { attackerId = attacker.getUUID(); defendUntil = System.currentTimeMillis() + 10000; }
         remember(attacker, true);
         begin();
+    }
+
+    public void onProtectedDamage(int victimId, DamageSource source) {
+        UUID escorted = baritone.getCompanionProcess().escortedPlayer();
+        if (escorted == null || !Baritone.settings().escortDefendOwner.value || !Baritone.settings().fleeConflicts.value
+                || ctx.world() == null || ctx.player() == null) return;
+        Entity victim = ctx.world().getEntity(victimId);
+        Entity attacker = source.getEntity() == null ? source.getDirectEntity() : source.getEntity();
+        if (victim == null || !escorted.equals(victim.getUUID()) || victim.distanceToSqr(ctx.player()) > 256
+                || attacker == null || attacker == ctx.player() || attacker.getUUID().equals(escorted)) return;
+        if (observedWorld != ctx.world()) { onLostControl(); observedWorld = ctx.world(); }
+        if (!attacker.getUUID().equals(attackerId)) { attackerId = attacker.getUUID(); defendUntil = System.currentTimeMillis() + 10000; }
+        protectingEscort = true; quietTicks = 0; remember(attacker, true); begin();
     }
 
     private void remember(Entity entity, boolean attacked) {
@@ -95,7 +111,8 @@ public final class ConflictProcess extends BaritoneProcessHelper implements IBeh
         active = true;
         quietTicks = failedPaths = 0;
         baritone.getDepositProcess().suspendForConflict();
-        if (ctx.player().containerMenu != ctx.player().inventoryMenu) ctx.player().closeContainer();
+        baritone.getWorkstationProcess().suspendForConflict();
+        if (ctx.player().containerMenu != ctx.player().inventoryMenu && ctx.player().containerMenu.getCarried().isEmpty()) ctx.player().closeContainer();
         baritone.getInputOverrideHandler().clearAllKeys();
         ctx.playerController().resetBlockRemoving();
         baritone.getPathingBehavior().softCancelIfSafe();
@@ -150,6 +167,8 @@ public final class ConflictProcess extends BaritoneProcessHelper implements IBeh
             return new PathingCommand(null, PathingCommandType.CANCEL_AND_SET_GOAL);
         }
         if (tryDefend(isSafeToCancel)) return new PathingCommand(null, PathingCommandType.REQUEST_PAUSE);
+        PathingCommand approach = escortDefenseApproach(calcFailed, isSafeToCancel);
+        if (approach != null) return approach;
         releaseShield();
         List<GoalRetreat.Threat> positions = threats.values().stream()
                 .map(threat -> new GoalRetreat.Threat(threat.position(), threat.distance())).toList();
@@ -204,6 +223,28 @@ public final class ConflictProcess extends BaritoneProcessHelper implements IBeh
         }
         return true;
     }
+    private PathingCommand escortDefenseApproach(boolean failed, boolean safe) {
+        if (!protectingEscort || failed || !safe || !"defend".equalsIgnoreCase(Baritone.settings().botConflictMode.value)
+                || System.currentTimeMillis() > defendUntil || baritone.getSculkProcess().isActive()) return null;
+        UUID escorted = baritone.getCompanionProcess().escortedPlayer();
+        Entity owner = ctx.entitiesStream().filter(entity -> entity.getUUID().equals(escorted)).findFirst().orElse(null);
+        Entity target = ctx.entitiesStream().filter(entity -> entity.getUUID().equals(attackerId)).findFirst().orElse(null);
+        if (owner == null || !(target instanceof LivingEntity) || !target.isAlive() || target.distanceToSqr(owner) > 64
+                || target.distanceToSqr(ctx.player()) > 256 || target.distanceToSqr(ctx.player()) <= 8
+                || !ctx.player().hasLineOfSight(target) || (target instanceof net.minecraft.world.entity.player.Player && baritone.getBotControl().isTrusted(target.getUUID()))) return null;
+        int nearby = (int) threats.values().stream().filter(threat -> threat.position().distSqr(ctx.playerFeet()) < 256).count();
+        if (!SurvivalPolicy.mayDefend(ctx.player().getHealth(), ctx.player().getFoodData().getFoodLevel(), nearby,
+                isType(target, "warden"), isType(target, "creeper"), true)) return null;
+        boolean armed = false;
+        for (int i = 0; i < 9; i++) {
+            var stack = ctx.player().getInventory().getItem(i);
+            if ((stack.is(ItemTags.SWORDS) || stack.is(ItemTags.AXES))
+                    && (!stack.isDamageableItem() || stack.getMaxDamage()-stack.getDamageValue() > Math.max(1,Baritone.settings().botToolReserve.value))) armed = true;
+        }
+        if (!armed) return null;
+        releaseShield();
+        return new PathingCommand(new GoalNear(target.blockPosition(), 2), PathingCommandType.REVALIDATE_GOAL_AND_PATH);
+    }
     private void stopShieldUse() {
         boolean release = ownsShield; ownsShield = false;
         if (release && ctx.player() != null && ctx.player().isUsingItem() && ctx.minecraft().gameMode != null) ctx.minecraft().gameMode.releaseUsingItem(ctx.player());
@@ -220,6 +261,9 @@ public final class ConflictProcess extends BaritoneProcessHelper implements IBeh
         baritone.getSurvivalProcess().onLostControl();
         baritone.getSculkProcess().onLostControl();
         baritone.getMineProcess().cancel();
+        baritone.getCompanionProcess().onLostControl();
+        baritone.getWorkstationProcess().onLostControl();
+        baritone.getRepairProcess().onLostControl();
         baritone.getDepositProcess().onLostControl();
         baritone.getStalkProcess().onLostControl();
         baritone.getFollowProcess().onLostControl();
@@ -234,7 +278,7 @@ public final class ConflictProcess extends BaritoneProcessHelper implements IBeh
         var id = BuiltInRegistries.ENTITY_TYPE.getKey(entity.getType());
         return id != null && id.getNamespace().equals("minecraft") && id.getPath().equals(path);
     }
-    @Override public void onLostControl() { releaseShield(); active = false; quietTicks = failedPaths = attackDelay = 0; threats.clear(); attackerId = null; defendUntil = 0; }
+    @Override public void onLostControl() { releaseShield(); active = protectingEscort = false; quietTicks = failedPaths = attackDelay = 0; threats.clear(); attackerId = null; defendUntil = 0; }
     @Override public void onPlayerDeath() { onLostControl(); }
     @Override public String displayName0() { return "Retreating from conflict"; }
 }

@@ -18,6 +18,8 @@
 package baritone.utils.mining;
 
 import baritone.Baritone;
+import baritone.api.BaritoneAPI;
+import baritone.utils.bot.BotItems;
 import baritone.api.utils.BlockOptionalMetaLookup;
 import baritone.api.utils.IPlayerContext;
 import baritone.api.utils.Rotation;
@@ -157,6 +159,8 @@ public final class MiningWasteCleanup {
             if (stack.isEmpty() || !(stack.getItem() instanceof BlockItem block)
                     || !Baritone.settings().mineWasteItems.value.contains(stack.getItem())) continue;
             boolean protectedItem = (targets != null && targets.has(stack))
+                    || (BaritoneAPI.getProvider().getBaritoneForPlayer(ctx.player()) instanceof Baritone bot
+                        && bot.getCompanionProcess().reserves(BotItems.id(stack)))
                     || Baritone.settings().depositKeepItems.value.contains(stack.getItem())
                     || stack.isDamageableItem() || stack.has(DataComponents.FOOD) || stack.has(DataComponents.EQUIPPABLE)
                     || !stack.getComponentsPatch().isEmpty();

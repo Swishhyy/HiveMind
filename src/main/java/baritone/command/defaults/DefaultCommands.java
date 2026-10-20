@@ -67,6 +67,8 @@ public final class DefaultCommands {
                 new TrustCommand(baritone),
                 new JobCommand(baritone),
                 new SurvivalCommand(baritone),
+                new CompanionCommand(baritone),
+                new MineZoneCommand(baritone),
                 new PortalCommand(baritone),
                 new ProtectCommand(baritone),
                 new ClickCommand(baritone),

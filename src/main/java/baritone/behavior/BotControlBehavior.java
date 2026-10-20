@@ -78,7 +78,7 @@ public final class BotControlBehavior extends Behavior {
             var expanded = CommandManager.expand(command);
             String label = expanded.first().toLowerCase(Locale.ROOT);
             var args = new ArgConsumer(baritone.getCommandManager(), expanded.second());
-            if (label.equals("status")) { args.requireMax(0); reply(player, baritone.getJobManager().status()); return; }
+            if (label.equals("status")) { args.requireMax(0); reply(player, baritone.getJobManager().status()); reply(player, baritone.getCompanionProcess().status()); return; }
             if (label.equals("job") && args.hasAny() && args.peekString().equalsIgnoreCase("list")) {
                 args.getString(); args.requireMax(0);
                 var queued = baritone.getJobManager().jobs(); reply(player, baritone.getJobManager().status());

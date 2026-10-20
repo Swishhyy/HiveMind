@@ -95,7 +95,8 @@ public final class SculkProcess extends BaritoneProcessHelper implements IBehavi
             if (!active) {
                 active = true; quietTicks = failures = 0;
                 baritone.getDepositProcess().suspendForConflict();
-                if (ctx.player().containerMenu != ctx.player().inventoryMenu) ctx.player().closeContainer();
+                baritone.getWorkstationProcess().suspendForConflict();
+                if (ctx.player().containerMenu != ctx.player().inventoryMenu && ctx.player().containerMenu.getCarried().isEmpty()) ctx.player().closeContainer();
                 baritone.getInputOverrideHandler().clearAllKeys(); ctx.playerController().resetBlockRemoving();
                 baritone.getPathingBehavior().softCancelIfSafe();
                 logDirect("Sculk detected nearby; leaving quietly before resuming");

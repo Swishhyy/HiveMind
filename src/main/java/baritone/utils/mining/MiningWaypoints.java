@@ -96,6 +96,10 @@ public final class MiningWaypoints {
                 areas.add(new ConstructionPolicy.Area(chest.x(), chest.y(), chest.z(), radius));
             }
         }
+        for (String name : List.of("repair", "crafting", "furnace")) {
+            WorldRoutes.Endpoint point = MiningRouteAccess.locations(ctx).station(name);
+            if (point != null && point.dimension().equals(dimension)) areas.add(new ConstructionPolicy.Area(point.x(), point.y(), point.z(), 3));
+        }
         return List.copyOf(areas);
     }
 }

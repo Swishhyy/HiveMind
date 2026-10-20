@@ -18,6 +18,7 @@
 package baritone.utils.mining;
 
 import baritone.api.utils.IPlayerContext;
+import baritone.utils.bot.BotLocations;
 import baritone.cache.WorldData;
 import net.minecraft.core.BlockPos;
 
@@ -29,6 +30,8 @@ import java.util.concurrent.ConcurrentHashMap;
 /** Client-thread adapter between Minecraft positions/worlds and the dependency-free route store. */
 public final class MiningRouteAccess {
     private static final Map<Path, WorldRoutes> STORES = new ConcurrentHashMap<>();
+    private static final Map<Path, BotLocations> LOCATIONS = new ConcurrentHashMap<>();
+    public static BotLocations locations(IPlayerContext ctx) { return LOCATIONS.computeIfAbsent(root(ctx), BotLocations::new); }
     private MiningRouteAccess() {}
 
     public static Path root(IPlayerContext ctx) {

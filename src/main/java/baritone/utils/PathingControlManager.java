@@ -73,7 +73,8 @@ public class PathingControlManager implements IPathingControlManager {
         for (IBaritoneProcess proc : processes) {
             if (preservePortalWork && (proc == baritone.getMineProcess() || proc == baritone.getDepositProcess()
                     || proc == baritone.getPortalTravelProcess() || proc == baritone.getSurvivalProcess()
-                    || proc == baritone.getJobManager())) {
+                    || proc == baritone.getJobManager() || proc == baritone.getCompanionProcess()
+                    || proc == baritone.getWorkstationProcess() || proc == baritone.getRepairProcess())) {
                 continue;
             }
             proc.onLostControl();

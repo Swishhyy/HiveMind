@@ -159,21 +159,3 @@ javadoc {
     source = sourceSets.api.allJava
     classpath += sourceSets.api.compileClasspath
 }
-
-// Development diagnostics for the un-obfuscated 26.3 client interfaces.
-tasks.register('botApiSnapshot', Exec) {
-    executable javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(25) }.get().metadata.installationPath.file('bin/javap').asFile
-    args '-classpath', sourceSets.main.compileClasspath.asPath,
-        'net.minecraft.client.multiplayer.MultiPlayerGameMode',
-        'net.minecraft.network.protocol.game.ClientboundTakeItemEntityPacket',
-        'net.minecraft.world.inventory.AbstractFurnaceMenu',
-        'net.minecraft.world.inventory.CraftingMenu',
-        'net.minecraft.world.inventory.InventoryMenu',
-        'net.minecraft.client.gui.components.EditBox',
-        'net.minecraft.world.item.enchantment.EnchantmentHelper',
-        'net.minecraft.world.entity.ExperienceOrb',
-        'net.minecraft.world.inventory.AnvilMenu',
-        'net.minecraft.world.inventory.RecipeBookMenu',
-        'net.minecraft.client.multiplayer.ClientPacketListener',
-        'net.minecraft.client.Minecraft'
-}

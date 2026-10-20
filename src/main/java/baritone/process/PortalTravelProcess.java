@@ -235,6 +235,9 @@ public final class PortalTravelProcess extends BaritoneProcessHelper implements 
     }
 
     private PathingCommand fail(String reason) {
+        baritone.getCompanionProcess().stopWithReason("Portal: " + reason);
+        baritone.getRepairProcess().stopWithReason("Portal: " + reason);
+        baritone.getWorkstationProcess().onLostControl();
         baritone.getJobManager().fail("Portal: " + reason);
         if (baritone.getDepositProcess().isResupplying()) baritone.getSurvivalProcess().supplyFailed("Portal: " + reason);
         baritone.getMineProcess().cancel();

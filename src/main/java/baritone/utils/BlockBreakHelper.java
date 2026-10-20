@@ -20,6 +20,7 @@ package baritone.utils;
 import baritone.api.BaritoneAPI;
 import baritone.Baritone;
 import baritone.utils.bot.SculkPolicy;
+import baritone.utils.mining.MiningRouteAccess;
 import baritone.api.utils.IPlayerContext;
 import baritone.utils.accessor.IPlayerControllerMP;
 import baritone.utils.mining.ConstructionPolicy;
@@ -75,7 +76,15 @@ public final class BlockBreakHelper {
                 sculk = SculkPolicy.sculk(BuiltInRegistries.BLOCK.getKey(ctx.world().getBlockState(target).getBlock()).getPath())
                         || bot.getSculkProcess().snapshot().contains(target.getX(), target.getY(), target.getZ());
             }
-            if (protectedArea || protectedContainer || sculk) {
+            boolean outsideZone = false;
+            if (BaritoneAPI.getProvider().getBaritoneForPlayer(ctx.player()) instanceof Baritone bot && bot.getMineProcess().isActive()) {
+                var locations = MiningRouteAccess.locations(ctx);
+                if (locations.zonesEnabled()) {
+                    var zone = locations.zone(MiningRouteAccess.dimension(ctx));
+                    outsideZone = zone == null || !zone.contains(MiningRouteAccess.dimension(ctx),target.getX(),target.getY(),target.getZ());
+                }
+            }
+            if (protectedArea || protectedContainer || sculk || outsideZone) {
                 stopBreakingBlock();
                 return;
             }

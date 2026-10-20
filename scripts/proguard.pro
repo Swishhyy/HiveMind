@@ -44,6 +44,8 @@
     public <fields>;
 }
 
+-keep class baritone.fabric.BotModMenu { *; }
+
 # need to keep mixin names
 -keep class baritone.launch.** { *; }
 

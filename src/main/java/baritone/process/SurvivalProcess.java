@@ -34,7 +34,7 @@ import net.minecraft.world.item.ItemStack;
 
 /** Temporary care and resupply preserve the original mining filter and deposit credit. */
 public final class SurvivalProcess extends BaritoneProcessHelper implements IBehavior {
-    private enum Stage { IDLE, CARE, SUPPLY, WAIT }
+    private enum Stage { IDLE, CARE, SUPPLY, REPAIR, WAIT }
     private Stage stage = Stage.IDLE;
     private String reason = "Ready";
     private int ticks;
@@ -52,7 +52,7 @@ public final class SurvivalProcess extends BaritoneProcessHelper implements IBeh
     private boolean controlled() { return baritone.getPathingControlManager().mostRecentInControl().orElse(null) == this; }
 
     private String shortage() {
-        if (BotInventory.needsFood(ctx)) return "Need safe food (minimum " + SurvivalPolicy.bounded(Baritone.settings().botMinimumFood.value, 1, 64) + ")";
+        if (BotInventory.needsFood(ctx) && (!baritone.getCompanionProcess().isRecovering() || ctx.player().getFoodData().getFoodLevel()<=6 || ctx.player().getHealth()<Baritone.settings().botMinimumHealth.value)) return "Need safe food (minimum " + SurvivalPolicy.bounded(Baritone.settings().botMinimumFood.value, 1, 64) + ")";
         if (baritone.getMineProcess().isActive()) {
             if (BotInventory.slot(ctx, item -> BotInventory.pickaxe(item, baritone.getMineProcess().targetsAncientDebris())) < 0)
                 return baritone.getMineProcess().targetsAncientDebris() ? "Need a diamond/netherite pickaxe with usable durability" : "Need a pickaxe with usable durability";
@@ -70,6 +70,7 @@ public final class SurvivalProcess extends BaritoneProcessHelper implements IBeh
     public boolean beforeMining() {
         if (!Baritone.settings().botSurvival.value || ctx.player() == null || ctx.player().isCreative()) return false;
         if (isActive()) return true;
+        if (baritone.getMineProcess().isActive() && baritone.getRepairProcess().tryAutomatic()) { stage=Stage.REPAIR;reason="Repairing Mending pickaxe";return true; }
         String missing = shortage();
         if (missing != null || careNeeded()) {
             reason = missing == null ? "Eating and recovering health" : missing;
@@ -94,6 +95,8 @@ public final class SurvivalProcess extends BaritoneProcessHelper implements IBeh
     }
     @Override public PathingCommand onTick(boolean failed, boolean safe) {
         if (!Baritone.settings().botSurvival.value || ctx.player() == null || !ctx.player().isAlive()) { onLostControl(); return null; }
+        if (stage == Stage.REPAIR && baritone.getRepairProcess().isActive()) return new PathingCommand(null,PathingCommandType.DEFER);
+        if (stage == Stage.REPAIR) { stage=Stage.CARE;reason=baritone.getRepairProcess().result(); }
         if (stage == Stage.SUPPLY && baritone.getDepositProcess().isActive()) return new PathingCommand(null, PathingCommandType.DEFER);
         if (!safe) return pause();
         baritone.getInputOverrideHandler().clearAllKeys(); ctx.playerController().resetBlockRemoving();
@@ -161,7 +164,7 @@ public final class SurvivalProcess extends BaritoneProcessHelper implements IBeh
     @Override public void onTick(TickEvent event) {
         if (event.getType() == TickEvent.Type.OUT || ctx.player() == null || ctx.world() == null) { releaseFood(); return; }
         if (ownsUse && !controlled()) releaseFood();
-        if (!isActive() && BotWork.active(baritone) && !baritone.getDepositProcess().isActive() && !baritone.getConflictProcess().isActive()) beforeMining();
+        if (!isActive() && BotWork.active(baritone) && !baritone.getDepositProcess().isActive() && !baritone.getConflictProcess().isActive() && !baritone.getWorkstationProcess().isActive() && !baritone.getRepairProcess().isActive()) beforeMining();
     }
     @Override public void onLostControl() { releaseFood(); stage = Stage.IDLE; reason = "Ready"; ticks = swapDelay = careTicks = 0; }
     @Override public void onPlayerDeath() { onLostControl(); }

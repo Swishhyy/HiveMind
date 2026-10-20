@@ -28,6 +28,8 @@ import baritone.api.utils.BlockOptionalMetaLookup;
 import baritone.utils.BaritoneProcessHelper;
 import baritone.utils.bot.StorageRule;
 import baritone.utils.bot.BotInventory;
+import baritone.utils.bot.BotItems;
+import java.util.Map;
 import baritone.utils.bot.SurvivalPolicy;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.item.BlockItem;
@@ -69,6 +71,11 @@ public final class DepositProcess extends BaritoneProcessHelper {
     private BlockPos returnTo;
     private boolean depositAll;
     private boolean resupply;
+    private boolean fetch;
+    private Map<String,Integer> fetchTargets = Map.of();
+    private String lastFetchError;
+    private String lastDepositError;
+    private String product;
     private boolean wantFood, wantBlocks, wantPickaxe;
     private boolean pendingWithdrawal;
     private int pendingInventoryCount;
@@ -107,12 +114,16 @@ public final class DepositProcess extends BaritoneProcessHelper {
         return empty <= threshold && MiningRouteAccess.deposit(ctx) != null && firstTransferable(false).isPresent();
     }
 
-    public void start(boolean all) {
+    public void start(boolean all) { start(all,null); }
+    public void startProductDeposit(String item) { start(false,item); returnTo = null; returnDimension = null; }
+    private void start(boolean all,String onlyProduct) {
+        this.product = onlyProduct;
         if (isActive()) {
             throw new IllegalStateException("A deposit trip is already running");
         }
+        lastDepositError = null;
         if (MiningRouteAccess.deposits(ctx).isEmpty()) throw new IllegalStateException("Look at a chest and run deposit add first");
-        if (ctx.player().containerMenu != ctx.player().inventoryMenu) {
+        if (ctx.player().containerMenu != ctx.player().inventoryMenu || !ctx.player().containerMenu.getCarried().isEmpty()) {
             throw new IllegalStateException("Close the current container before starting a deposit trip");
         }
         BlockPos feet = ctx.playerFeet();
@@ -128,7 +139,7 @@ public final class DepositProcess extends BaritoneProcessHelper {
         }
         returnTo = baritone.getMineProcess().isActive() ? ctx.playerFeet().immutable() : null;
         depositAll = all;
-        resupply = false;
+        resupply = fetch = false;
         movedItems = 0;
         refusedSlots.clear();
         if (firstTransferable(false).isEmpty()) { onLostControl(); logDirect("No transferable items to deposit"); return; }
@@ -136,7 +147,21 @@ public final class DepositProcess extends BaritoneProcessHelper {
         logDirect("Returning to storage #" + storageId + (all ? " (empty main inventory)" : " (keep supplies)"));
     }
 
-    public boolean isResupplying() { return resupply && isActive(); }
+    public boolean isResupplying() { return resupply && !fetch && isActive(); }
+    public String lastFetchError() { return lastFetchError; }
+    public String lastDepositError() { return lastDepositError; }
+    public void startFetch(Map<String,Integer> targets) {
+        if (isActive()) throw new IllegalStateException("A storage trip is already active");
+        if (targets.isEmpty() || targets.size()>128 || targets.values().stream().anyMatch(n->n<1||n>1000000)) throw new IllegalArgumentException("Invalid withdrawal request");
+        if (ctx.player().containerMenu != ctx.player().inventoryMenu || !ctx.player().containerMenu.getCarried().isEmpty()) throw new IllegalStateException("Close containers and clear the cursor before fetching items");
+        MiningRouteAccess.deposits(ctx); BlockPos feet=ctx.playerFeet();
+        remainingChests.clear();remainingChests.addAll(MiningRouteAccess.store(ctx).orderedDeposits(MiningRouteAccess.dimension(ctx),feet.getX(),feet.getY(),feet.getZ(),Baritone.settings().mineTravelBetweenDimensions.value));
+        remainingChests.removeIf(storage->storage.rule().kind()==StorageRule.Kind.DISABLED);
+        if(remainingChests.isEmpty())throw new IllegalStateException("No registered storage is reachable");
+        tripRoot=MiningRouteAccess.root(ctx);returnDimension=MiningRouteAccess.dimension(ctx);returnTo=feet.immutable();
+        depositAll=false;resupply=fetch=true;product=null;fetchTargets=Map.copyOf(targets);lastFetchError=null;movedItems=0;refusedSlots.clear();chooseNextStorage();
+        logDirect("Fetching requested items from registered storage");
+    }
 
     public void startResupply() {
         if (isActive()) throw new IllegalStateException("Finish the current storage trip before resupplying");
@@ -154,7 +179,7 @@ public final class DepositProcess extends BaritoneProcessHelper {
         if (remainingChests.isEmpty()) throw new IllegalStateException("No reachable supplies chest; register a chest with storage rule <id> supplies");
         tripRoot = MiningRouteAccess.root(ctx); returnDimension = MiningRouteAccess.dimension(ctx);
         returnTo = ctx.playerFeet().immutable();
-        depositAll = false; resupply = true; wantFood = food; wantBlocks = blocks; wantPickaxe = pick;
+        depositAll = false; resupply = true; fetch = false; product = null; wantFood = food; wantBlocks = blocks; wantPickaxe = pick;
         movedItems = 0; refusedSlots.clear();
         if (!chooseNextStorage()) { onLostControl(); throw new IllegalStateException("No supplies storage is available"); }
         logDirect("Resupplying from storage #" + storageId);
@@ -353,6 +378,7 @@ public final class DepositProcess extends BaritoneProcessHelper {
 
     private boolean needsSupply(ItemStack stack) {
         if (stack.isEmpty()) return false;
+        if (fetch) return BotItems.ordinary(stack) && BotItems.count(ctx,BotItems.id(stack)) < fetchTargets.getOrDefault(BotItems.id(stack),0);
         if (wantFood && BotInventory.food(stack)) return BotInventory.count(ctx, BotInventory::food)
                 < Math.max(SurvivalPolicy.bounded(Baritone.settings().botMinimumFood.value, 1, 64),
                         SurvivalPolicy.bounded(Baritone.settings().botRestockFood.value, 1, 128));
@@ -368,6 +394,10 @@ public final class DepositProcess extends BaritoneProcessHelper {
         for (int i = 0; i < storageSlots; i++) if (!refusedSlots.contains(i) && needsSupply(openedMenu.slots.get(i).getItem())
                 && openedMenu.slots.get(i).mayPickup(ctx.player())) { slot = i; break; }
         if (slot < 0) {
+            if (fetch) {
+                if (fetchTargets.entrySet().stream().allMatch(entry->BotItems.count(ctx,entry.getKey())>=entry.getValue()) || remainingChests.isEmpty()) return finishTransfer();
+                return tryNextStorage("Checking the next storage for requested items");
+            }
             boolean enough = (!wantFood || !BotInventory.needsFood(ctx)) && (!wantBlocks || !BotInventory.needsBlocks(ctx))
                     && (!wantPickaxe || BotInventory.slot(ctx, item -> BotInventory.pickaxe(item, baritone.getMineProcess().targetsAncientDebris())) >= 0);
             if (enough) return finishTransfer();
@@ -395,6 +425,11 @@ public final class DepositProcess extends BaritoneProcessHelper {
             if (stack.isEmpty() || (skipRefused && refusedSlots.contains(i))) {
                 continue;
             }
+            if (product != null) {
+                if (BotItems.id(stack).equals(product) && BotItems.ordinary(stack) && accepts(rule,stack)) return Optional.of(i);
+                continue;
+            }
+            if (baritone.getCompanionProcess().reserves(BotItems.id(stack))) continue;
             if (!accepts(rule, stack)) continue;
             boolean supply = stack.isDamageableItem() || stack.has(DataComponents.FOOD) || stack.has(DataComponents.EQUIPPABLE);
             if (!depositAll && buildingSlots.contains(i)) continue;
@@ -415,12 +450,14 @@ public final class DepositProcess extends BaritoneProcessHelper {
     }
 
     private PathingCommand fail(String reason) {
+        if (fetch) { onLostControl(); lastFetchError=reason; logDirect("Fetch stopped: "+reason); return new PathingCommand(null,PathingCommandType.CANCEL_AND_SET_GOAL); }
         if (baritone.getJobManager() != null) baritone.getJobManager().fail("Deposit: " + reason);
         if (resupply && baritone.getSurvivalProcess() != null) baritone.getSurvivalProcess().supplyFailed(reason);
         if (!resupply && baritone.getMineProcess() != null) {
             baritone.getMineProcess().cancel();
         }
         onLostControl();
+        lastDepositError = reason;
         logDirect("Storage trip stopped: " + reason + ". Bot work requires attention; no items were dropped.");
         return new PathingCommand(null, PathingCommandType.CANCEL_AND_SET_GOAL);
     }
@@ -446,7 +483,7 @@ public final class DepositProcess extends BaritoneProcessHelper {
 
     private PathingCommand tryNextStorage(String reason) {
         suspendForConflict();
-        if (!chooseNextStorage()) return fail(reason + "; all saved storage was tried (" + movedItems + " items deposited)");
+        if (!chooseNextStorage()) { if(fetch)return finishTransfer(); return fail(reason + "; all saved storage was tried (" + movedItems + " items deposited)"); }
         logDirect(reason + "; trying storage #" + storageId);
         return new PathingCommand(null, PathingCommandType.CANCEL_AND_SET_GOAL);
     }
@@ -488,7 +525,7 @@ public final class DepositProcess extends BaritoneProcessHelper {
     }
 
     private void closeOwnedMenu() {
-        if (openedMenu != null && ctx.player() != null && ctx.player().containerMenu == openedMenu) {
+        if (openedMenu != null && ctx.player() != null && ctx.player().containerMenu == openedMenu && openedMenu.getCarried().isEmpty()) {
             ctx.player().closeContainer();
         }
         openedMenu = null;
@@ -503,7 +540,8 @@ public final class DepositProcess extends BaritoneProcessHelper {
         synchronizedMenuId = -1;
         openRequested = false;
         depositAll = false;
-        resupply = wantFood = wantBlocks = wantPickaxe = pendingWithdrawal = false;
+        resupply = fetch = wantFood = wantBlocks = wantPickaxe = pendingWithdrawal = false;
+        fetchTargets = Map.of(); product = null;
         miningOutputs = null;
         tripRoot = null;
         depositDimension = returnDimension = null;

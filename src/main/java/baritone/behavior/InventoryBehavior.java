@@ -62,7 +62,9 @@ public final class InventoryBehavior extends Behavior implements Helper {
             return;
         }
         if (baritone.getMineProcess().isCleaningWaste() || baritone.getDepositProcess().isActive()
-                || baritone.getSurvivalProcess().isActive() || baritone.getConflictProcess().isActive()) {
+                || baritone.getSurvivalProcess().isActive() || baritone.getConflictProcess().isActive()
+                || baritone.getCompanionProcess().isActive() || baritone.getWorkstationProcess().isActive()
+                || baritone.getRepairProcess().isActive()) {
             // Cleanup and storage confirmation track exact source slots; don't swap those slots underneath them.
             return;
         }

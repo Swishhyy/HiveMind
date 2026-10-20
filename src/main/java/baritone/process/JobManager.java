@@ -63,6 +63,7 @@ public final class JobManager extends BaritoneProcessHelper implements IBehavior
         paused = !queue.isEmpty(); completedMining = false;
         reason = queue.isEmpty() ? "No jobs" : "Saved jobs are paused; use job resume";
     }
+    public UUID requestOwner() { return requestOwner; }
     public void withOwner(UUID owner, Runnable task) {
         UUID old = requestOwner; requestOwner = owner;
         try { task.run(); } finally { requestOwner = old; }

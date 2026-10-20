@@ -78,6 +78,9 @@ public class Baritone implements IBaritone {
     private final ConflictProcess conflictProcess;
     private final SculkProcess sculkProcess;
     private final SurvivalProcess survivalProcess;
+    private final CompanionProcess companionProcess;
+    private final WorkstationProcess workstationProcess;
+    private final RepairProcess repairProcess;
     private final JobManager jobManager;
     private final BotControlBehavior botControl;
     private final StalkProcess stalkProcess;
@@ -130,6 +133,9 @@ public class Baritone implements IBaritone {
             this.stalkProcess            = this.registerProcess(StalkProcess::new);
             this.sculkProcess            = this.registerProcess(SculkProcess::new);
             this.survivalProcess         = this.registerProcess(SurvivalProcess::new);
+            this.companionProcess        = this.registerProcess(CompanionProcess::new);
+            this.workstationProcess      = this.registerProcess(WorkstationProcess::new);
+            this.repairProcess           = this.registerProcess(RepairProcess::new);
             this.jobManager              = this.registerProcess(JobManager::new);
             this.customGoalProcess       = this.registerProcess(CustomGoalProcess::new); // very high iq
             this.getToBlockProcess       = this.registerProcess(GetToBlockProcess::new);
@@ -150,6 +156,7 @@ public class Baritone implements IBaritone {
         this.registerBehavior(this.stalkProcess);
         this.registerBehavior(this.sculkProcess);
         this.registerBehavior(this.survivalProcess);
+        this.registerBehavior(this.companionProcess);
         this.registerBehavior(this.jobManager);
         this.registerBehavior(this.botControl);
     }
@@ -236,6 +243,9 @@ public class Baritone implements IBaritone {
 
     public SculkProcess getSculkProcess() { return this.sculkProcess; }
     public SurvivalProcess getSurvivalProcess() { return this.survivalProcess; }
+    public CompanionProcess getCompanionProcess() { return this.companionProcess; }
+    public WorkstationProcess getWorkstationProcess() { return this.workstationProcess; }
+    public RepairProcess getRepairProcess() { return this.repairProcess; }
     public JobManager getJobManager() { return this.jobManager; }
     public BotControlBehavior getBotControl() { return this.botControl; }
 

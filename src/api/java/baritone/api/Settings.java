@@ -356,6 +356,20 @@ public final class Settings {
     /** FLEE is the default. DEFEND permits short, close retaliation only against a confirmed attacker. */
     public final Setting<String> botConflictMode = new Setting<>("flee");
 
+    /** Companion commands use normal movement and only positions received by this client. */
+    public final Setting<Integer> recoveryMaxAttempts = new Setting<>(3);
+    public final Setting<Integer> recoverySearchRadius = new Setting<>(16);
+    public final Setting<Long> companionTaskTimeoutMS = new Setting<>(1800000L);
+    public final Setting<Boolean> deliveryRequireHandoff = new Setting<>(true);
+    public final Setting<Integer> deliveryApproachDistance = new Setting<>(3);
+    public final Setting<Integer> escortDistance = new Setting<>(5);
+    public final Setting<Boolean> escortDefendOwner = new Setting<>(true);
+    public final Setting<Boolean> repairToolsBeforeReplace = new Setting<>(true);
+    public final Setting<Integer> repairAtDurability = new Setting<>(64);
+    public final Setting<Integer> repairTargetPercent = new Setting<>(90);
+    public final Setting<Long> repairNoProgressTimeoutMS = new Setting<>(120000L);
+    public final Setting<Integer> gatherMaxActions = new Setting<>(4096);
+
     /** Approximate horizontal observation distance for stalk; bounded to 16-128 blocks, with four blocks of tolerance. */
     public final Setting<Integer> stalkDistance = new Setting<>(40);
 

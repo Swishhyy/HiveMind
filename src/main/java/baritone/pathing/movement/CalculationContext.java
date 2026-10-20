@@ -19,6 +19,8 @@ package baritone.pathing.movement;
 
 import baritone.Baritone;
 import baritone.utils.bot.SculkPolicy;
+import baritone.utils.bot.MiningZone;
+import baritone.utils.mining.MiningRouteAccess;
 import baritone.api.IBaritone;
 import baritone.api.pathing.movement.ActionCosts;
 import baritone.cache.WorldData;
@@ -92,6 +94,9 @@ public class CalculationContext {
     public final PrecomputedData precomputedData;
     private final List<ConstructionPolicy.Area> protectedAreas;
     private final boolean avoidSculk;
+    private final boolean miningBoundary;
+    private final MiningZone miningZone;
+    private final String miningWorld;
     private final SculkPolicy.Snapshot sculk;
     private final double sculkPenalty;
     private final boolean preferAvoidConstruction;
@@ -110,6 +115,10 @@ public class CalculationContext {
         LocalPlayer player = baritone.getPlayerContext().player();
         this.world = baritone.getPlayerContext().world();
         this.worldData = (WorldData) baritone.getPlayerContext().worldData();
+        this.miningWorld = MiningRouteAccess.dimension(baritone.getPlayerContext());
+        var locations = MiningRouteAccess.locations(baritone.getPlayerContext());
+        this.miningBoundary = baritone.getMineProcess().isActive() && locations.zonesEnabled();
+        this.miningZone = miningBoundary ? locations.zone(miningWorld) : null;
         this.avoidSculk = Baritone.settings().mineAvoidSculk.value;
         this.sculk = ((Baritone) baritone).getSculkProcess().snapshot();
         double sculkCost = Baritone.settings().sculkPathPenalty.value;
@@ -224,6 +233,7 @@ public class CalculationContext {
     }
 
     public double breakCostMultiplierAt(int x, int y, int z, BlockState current) {
+        if (!insideMiningBoundary(x,y,z)) return COST_INF;
         if (sculkProtected(x, y, z, current)) return COST_INF;
         if (!allowBreak && !allowBreakAnyway.contains(current.getBlock())) {
             return COST_INF;
@@ -236,6 +246,8 @@ public class CalculationContext {
         }
         return 1;
     }
+
+    public boolean insideMiningBoundary(int x,int y,int z) { return !miningBoundary || (miningZone != null && miningZone.contains(miningWorld,x,y,z)); }
 
     public double sculkPathPenalty(int x, int y, int z) { return avoidSculk ? sculk.penalty(x, y, z) * sculkPenalty : 0; }
     private boolean sculkProtected(int x, int y, int z, BlockState state) {
