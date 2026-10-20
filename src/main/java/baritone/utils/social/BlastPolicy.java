@@ -27,6 +27,11 @@ public final class BlastPolicy {
         double impact=(1-distance/radius)*Math.max(0,Math.min(1,exposure));
         return Math.floor((impact*impact+impact)*0.5*7*radius+1);
     }
+    /** Explosions scale with difficulty for every player: none on peaceful, halved plus one on easy, half again on hard. */
+    public static double difficultyScaled(double raw,int difficulty) {
+        if(!Double.isFinite(raw))return Double.POSITIVE_INFINITY;
+        return switch(difficulty) { case 0 -> 0; case 1 -> Math.min(raw/2+1,raw); case 3 -> raw*1.5; default -> raw; };
+    }
     public static double afterArmor(double raw,double armor,double toughness,int protection) {
         if(!Double.isFinite(raw)||!Double.isFinite(armor)||!Double.isFinite(toughness)||raw<0)return Double.POSITIVE_INFINITY;
         double reduction=Math.min(20,Math.max(Math.max(0,armor)*0.2,armor-raw/(2+Math.max(0,toughness)/4)));

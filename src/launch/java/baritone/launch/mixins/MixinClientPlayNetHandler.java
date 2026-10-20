@@ -221,7 +221,7 @@ public abstract class MixinClientPlayNetHandler extends ClientCommonPacketListen
             if (packet.entityId() == bot.getPlayerContext().player().getId()) bot.getConflictProcess().onDamage(packet.getSource(bot.getPlayerContext().world()));
             else {
                 bot.getConflictProcess().onProtectedDamage(packet.entityId(), packet.getSource(bot.getPlayerContext().world()));
-                bot.getStalkProcess().onEntityDamaged(packet.entityId());
+                bot.getStalkProcess().onEntityDamaged(packet.entityId(), packet.getSource(bot.getPlayerContext().world()));
             }
         }
     }

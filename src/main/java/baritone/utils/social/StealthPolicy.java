@@ -42,11 +42,12 @@ public final class StealthPolicy {
      * Crouching only matters where someone could perceive the bot: footsteps inside hearing range, or a name tag or
      * body inside that player's possible field of view. The sight-line check is lazy because it costs a ray trace.
      */
-    public static boolean mayBeNoticed(double distance, double facingDot, boolean hidden, int hearingRange, int viewHalfAngle, BooleanSupplier sight) {
+    public static boolean mayBeNoticed(double distance, double facingDot, boolean invisible, boolean hidden, int hearingRange, int viewHalfAngle, BooleanSupplier sight) {
         if (!Double.isFinite(distance)) return false;
         if (distance <= bounded(hearingRange,4,48)) return true;
         if (hidden || !Double.isFinite(facingDot) || facingDot < Math.cos(Math.toRadians(bounded(viewHalfAngle,30,90)))) return false;
-        return distance <= NAME_TAG_RANGE || sight.getAsBoolean();
+        // Invisible players have no name tag; worn armor and held items only show along a real sight line.
+        return !invisible && distance <= NAME_TAG_RANGE || sight.getAsBoolean();
     }
     public static boolean readyToAmbush(int quietTicks, int requiredQuiet, double facingDot, double maximumFacing, boolean visible,
                                         boolean alone, boolean equipped, float health, int hunger, int minimumHealth) {

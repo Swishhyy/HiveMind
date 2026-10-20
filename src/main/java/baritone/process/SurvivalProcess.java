@@ -166,7 +166,7 @@ public final class SurvivalProcess extends BaritoneProcessHelper implements IBeh
         if (event.getType() == TickEvent.Type.OUT || ctx.player() == null || ctx.world() == null) { releaseFood(); return; }
         if (ownsUse && !controlled()) releaseFood();
         if (!isActive() && BotWork.active(baritone) && !baritone.getDepositProcess().isActive() && !baritone.getConflictProcess().isActive() && !baritone.getWorkstationProcess().isActive()
-                && !baritone.getStalkProcess().committedCombat()) beforeMining();
+                && !baritone.getStalkProcess().suppressesCare()) beforeMining();
     }
     @Override public void onLostControl() { releaseFood(); stage = Stage.IDLE; reason = "Ready"; ticks = swapDelay = careTicks = 0; }
     @Override public void onPlayerDeath() { onLostControl(); }
