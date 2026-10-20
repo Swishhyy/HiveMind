@@ -26,7 +26,7 @@ import java.util.*;
 /** Checks gaze geometry, ambush eligibility, and persistent evidence without a running game. */
 public final class StealthChecks {
     public static void main(String[] args) throws Exception {
-        runAll();System.out.println("Stealth checks passed: gaze, scatter thresholds, ambush gates, sightings, base inference, server isolation");
+        runAll();System.out.println("Stealth/combat checks passed: gaze, ambush gates, memory, server isolation, crystal/anchor damage, cover, dimension limits");
     }
     public static void runAll() throws Exception {
         check(StealthPolicy.gazeDot(0,0,1,0,0,40)==1,"Normalize the target's facing vector");
@@ -55,6 +55,25 @@ public final class StealthChecks {
         check(StealthPolicy.shouldReport(121000,1000,4096,120000),"A sufficiently moved player can be reported after the cooldown");
         check(TrustedControl.command("#kill Target")!=null,"Allowlisted whisper controls include the explicit kill command");
         check(TrustedControl.command("#stalk sightings Target")!=null,"Sighting queries retain the explicit command prefix");
+
+
+        check(CombatStyle.parse("CRYSTAL")==CombatStyle.CRYSTAL&&CombatStyle.parse("anchor")==CombatStyle.ANCHOR,"Combat style names are case insensitive");
+        expect(()->CombatStyle.parse("admin"),"Unknown combat styles cannot become commands");
+        check(BlastPolicy.anchorDimension(WorldRoutes.OVERWORLD)&&BlastPolicy.anchorDimension("minecraft:the_end"),"Anchors can be considered in vanilla explosive dimensions");
+        check(!BlastPolicy.anchorDimension(WorldRoutes.NETHER)&&!BlastPolicy.anchorDimension("mod:unknown"),"Nether and unknown anchor rules fail closed");
+        check(BlastPolicy.rawDamage(6,0,1)==85&&BlastPolicy.rawDamage(5,0,1)==71,"Crystal/anchor power uses the vanilla explosion curve");
+        check(BlastPolicy.rawDamage(6,12.01,1)==0&&BlastPolicy.rawDamage(6,4,0.4)<BlastPolicy.rawDamage(6,4,1),"Distance and cover lower predicted damage");
+        check(BlastPolicy.afterArmor(40,20,12,16)<BlastPolicy.afterArmor(40,20,12,0)&&BlastPolicy.afterArmor(40,0,0,0)==40,"Armor and bounded protection reduce the estimate");
+        check(BlastPolicy.blockedByCube(0,0,0,-1,0.5,0.5,2,0.5,0.5),"Planned cover blocks rays through its interior");
+        check(!BlastPolicy.blockedByCube(0,0,0,-1,2,0.5,2,2,0.5),"Cover does not block rays over its roof");
+        check(!BlastPolicy.blockedByCube(0,0,0,-2,1.5,0.5,0.5,1,0.5),"A crystal on the top face does not hide every ray at the endpoint");
+        check(BlastPolicy.blockedByCube(0,0,0,-2,0.2,0.5,0.5,1,0.5),"An obsidian base protects lower body rays");
+        check(BlastPolicy.mayBlast(4,12,20,0,20,10,4,6,false,false),"A favorable blast with health reserve is eligible");
+        check(!BlastPolicy.mayBlast(11,12,20,0,20,10,4,6,false,false),"Maximum self damage applies before detonation");
+        check(!BlastPolicy.mayBlast(9,12,14,0,20,10,4,6,false,false),"Blast cannot consume the reserved health");
+        check(!BlastPolicy.mayBlast(2,3,20,0,20,10,4,6,false,false),"Negligible target damage is rejected");
+        check(!BlastPolicy.mayBlast(4,12,20,0,20,10,4,6,true,false)&&!BlastPolicy.mayBlast(4,12,20,0,20,10,4,6,false,true),"Bystanders and protected areas prevent explosives");
+        check(!BlastPolicy.mayBlast(Double.NaN,12,20,0,20,10,4,6,false,false),"An invalid estimate cannot authorize detonation");
 
         Path root=Files.createTempDirectory("baritone-stealth-checks-");
         try {

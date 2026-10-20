@@ -26,6 +26,7 @@ import baritone.api.command.exception.CommandException;
 import baritone.api.command.exception.CommandInvalidStateException;
 import baritone.api.command.helpers.TabCompleteHelper;
 import baritone.process.StalkProcess;
+import baritone.utils.social.CombatStyle;
 import net.minecraft.core.BlockPos;
 import java.util.*;
 import java.util.stream.Stream;
@@ -46,7 +47,7 @@ public final class StalkCommand extends Command {
             String first=args.hasAny()?args.getString():"random";String action=first.toLowerCase(Locale.ROOT);
             if(action.equals("status")) { args.requireMax(0);report(process.status());return; }
             if(action.equals("stop")) { args.requireMax(0);process.onLostControl();bot().getPathingBehavior().softCancelIfSafe();report("Tracking and ambush stopped");return; }
-            if(kill) { args.requireMax(0);process.startHunt(first);return; }
+            if(kill) { CombatStyle style=CombatStyle.parse(args.hasAny()?args.getString():Baritone.settings().killCombatStyle.value);args.requireMax(0);process.startHunt(first,style);return; }
             switch(action) {
                 case "sightings","history" -> {
                     String name=args.hasAny()?args.getString():null;args.requireMax(0);
@@ -78,7 +79,9 @@ public final class StalkCommand extends Command {
         } catch(IllegalArgumentException|IllegalStateException error) { throw new CommandInvalidStateException(error.getMessage()); }
     }
     @Override public Stream<String> tabComplete(String label,IArgConsumer args) throws CommandException {
-        if(!args.hasAtMostOne()||ctx.minecraft().getConnection()==null)return Stream.empty();
+        if(ctx.minecraft().getConnection()==null)return Stream.empty();
+        if(label.equalsIgnoreCase("kill")&&args.hasExactly(2)) { args.getString();return new TabCompleteHelper().append("auto","melee","crystal","anchor").filterPrefix(args.getString()).stream(); }
+        if(!args.hasAtMostOne())return Stream.empty();
         var choices=new TabCompleteHelper().append("status","stop");
         if(!label.equalsIgnoreCase("kill"))choices.append("random","sightings","history","check","base","forget","report");
         return choices.append(ctx.minecraft().getConnection().getOnlinePlayers().stream().map(info->info.getProfile().name()))
@@ -92,7 +95,9 @@ public final class StalkCommand extends Command {
                 "stalk check <player> - Check saved places, including when that player is offline; no global coordinates are revealed.",
                 "stalk base <player> [x y z] - Locally confirm a base at supplied or previously observed coordinates.",
                 "stalk forget <player|all>; stalk report <trusted-player|off|status> - Local memory/report configuration.",
-                "kill <player> - Stalk, wait for an isolated player looking away, approach from behind, and use ordinary melee.",
+                "kill <player> [auto|melee|crystal|anchor] - Stalk, approach an isolated player looking away, and engage using carried supplies.",
+                "Crystal uses obsidian/bedrock bases and real end crystals; anchor places, charges, and detonates outside respawn dimensions.",
+                "Explosive combat can leave craters/obsidian and uses blast-exposure, health, bystander, and protected-area checks.",
                 "kill status/stop; stalk status/stop - Inspect or cancel. Global pause/stop still apply.",
                 "Hunts have health, weapon, approach, combat, and attempt limits. Trusted controllers are protected by default.",
                 "Only observations from this client are remembered. Possible bases are inferences; they do not establish ownership.");

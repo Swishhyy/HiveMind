@@ -26,6 +26,8 @@ fi
     src/main/java/baritone/utils/mining/WastePolicy.java \
     src/main/java/baritone/utils/social/SocialPolicy.java \
     src/main/java/baritone/utils/social/StealthPolicy.java \
+    src/main/java/baritone/utils/social/CombatStyle.java \
+    src/main/java/baritone/utils/social/BlastPolicy.java \
     src/main/java/baritone/utils/social/PlayerMemory.java \
     src/test/java/baritone/utils/social/StealthChecks.java \
     src/test/java/baritone/utils/mining/MiningPolicyChecks.java \

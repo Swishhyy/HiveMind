@@ -399,6 +399,12 @@ public final class Settings {
     public final Setting<Long> killWatchMaximumMS = new Setting<>(30000L);
     public final Setting<Long> killAttackTimeoutMS = new Setting<>(15000L);
     public final Setting<Long> killTimeoutMS = new Setting<>(600000L);
+    public final Setting<String> killCombatStyle = new Setting<>("auto");
+    public final Setting<Integer> killMaximumSelfDamage = new Setting<>(10);
+    public final Setting<Integer> killMinimumBlastDamage = new Setting<>(4);
+    public final Setting<Integer> killBlastHealthReserve = new Setting<>(6);
+    public final Setting<Integer> killExplosiveDelayTicks = new Setting<>(4);
+    public final Setting<Boolean> killUseBlastCover = new Setting<>(true);
 
 
     /**
