@@ -36,7 +36,7 @@ public final class StalkCommand extends Command {
         StalkProcess process = ((Baritone) baritone).getStalkProcess();
         if (target.equalsIgnoreCase("stop")) {
             process.onLostControl();
-            baritone.getPathingBehavior().softCancelIfSafe();
+            ((Baritone) baritone).getPathingBehavior().softCancelIfSafe();
             logDirect("Stalking stopped");
         } else if (target.equalsIgnoreCase("status")) logDirect(process.status());
         else try { process.start(target); }

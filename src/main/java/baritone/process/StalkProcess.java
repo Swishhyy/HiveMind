@@ -32,7 +32,7 @@ import baritone.pathing.movement.MovementHelper;
 import baritone.utils.BaritoneProcessHelper;
 import baritone.utils.social.GoalStandoff;
 import baritone.utils.social.SocialPolicy;
-import net.minecraft.client.multiplayer.ClientLevel;
+import net.minecraft.world.level.Level;
 import net.minecraft.client.multiplayer.PlayerInfo;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.entity.player.Player;
@@ -53,7 +53,7 @@ public final class StalkProcess extends BaritoneProcessHelper implements IBehavi
     private record Seen(BlockPos position, long time) {}
     private final Map<UUID, Seen> seen = new HashMap<>();
     private final Set<BlockPos> failedVantages = new HashSet<>();
-    private ClientLevel observedWorld;
+    private Level observedWorld;
     private UUID targetId;
     private String targetName;
     private BlockPos searchAnchor;

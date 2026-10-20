@@ -25,11 +25,11 @@ import baritone.api.process.PathingCommandType;
 import baritone.utils.BaritoneProcessHelper;
 import baritone.utils.social.GoalRetreat;
 import baritone.utils.social.SocialPolicy;
-import net.minecraft.client.multiplayer.ClientLevel;
+import net.minecraft.world.level.Level;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.MobCategory;
 import java.util.ArrayList;
@@ -42,7 +42,7 @@ import java.util.UUID;
 public final class ConflictProcess extends BaritoneProcessHelper implements IBehavior {
     private record Threat(BlockPos position, int distance, long expires) {}
     private final Map<UUID, Threat> threats = new LinkedHashMap<>();
-    private ClientLevel observedWorld;
+    private Level observedWorld;
     private boolean active;
     private int quietTicks;
     private int failedPaths;
@@ -63,6 +63,7 @@ public final class ConflictProcess extends BaritoneProcessHelper implements IBeh
     public void onDamage(DamageSource source) {
         if (!Baritone.settings().fleeConflicts.value || ctx.player() == null || ctx.world() == null || !hasWork()) return;
         Entity attacker = source.getEntity();
+        if (attacker == null) attacker = source.getDirectEntity();
         if (attacker == null || attacker == ctx.player()) return; // Environmental damage is not evidence that a bystander attacked.
         if (observedWorld != ctx.world()) { onLostControl(); observedWorld = ctx.world(); }
         quietTicks = 0;
@@ -72,7 +73,7 @@ public final class ConflictProcess extends BaritoneProcessHelper implements IBeh
 
     private void remember(Entity entity) {
         if (threats.size() >= 32 && !threats.containsKey(entity.getUUID())) threats.remove(threats.keySet().iterator().next());
-        int distance = SocialPolicy.fleeDistance(Baritone.settings().conflictFleeDistance.value, entity.getType() == EntityType.WARDEN);
+        int distance = SocialPolicy.fleeDistance(Baritone.settings().conflictFleeDistance.value, isType(entity, "warden"));
         threats.put(entity.getUUID(), new Threat(entity.blockPosition().immutable(), distance, System.currentTimeMillis() + 15000));
     }
 
@@ -117,8 +118,7 @@ public final class ConflictProcess extends BaritoneProcessHelper implements IBeh
         int radius = Math.max(4, Math.min(32, Baritone.settings().conflictMobRadius.value));
         for (Entity entity : loaded.values()) {
             if (!(entity instanceof Mob mob) || entity.distanceToSqr(ctx.player()) > radius * radius) continue;
-            boolean neutral = entity.getType() == EntityType.ENDERMAN || entity.getType() == EntityType.ZOMBIFIED_PIGLIN
-                    || entity.getType() == EntityType.PIGLIN;
+            boolean neutral = isType(entity, "enderman") || isType(entity, "zombified_piglin") || isType(entity, "piglin");
             if ((entity.getType().getCategory() == MobCategory.MONSTER && !neutral) || mob.getTarget() == ctx.player()) remember(entity);
         }
         if (!threats.isEmpty()) begin();
@@ -165,6 +165,10 @@ public final class ConflictProcess extends BaritoneProcessHelper implements IBeh
         baritone.getFarmProcess().onLostControl();
         baritone.getGetToBlockProcess().onLostControl();
         baritone.getPortalTravelProcess().onLostControl();
+    }
+    private static boolean isType(Entity entity, String path) {
+        var id = BuiltInRegistries.ENTITY_TYPE.getKey(entity.getType());
+        return id != null && id.getNamespace().equals("minecraft") && id.getPath().equals(path);
     }
     @Override public void onLostControl() { active = false; quietTicks = failedPaths = 0; threats.clear(); }
     @Override public void onPlayerDeath() { onLostControl(); }

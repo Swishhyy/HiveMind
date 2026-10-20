@@ -165,6 +165,10 @@ public final class WorldRoutes {
         Properties updated = new Properties();
         updated.putAll(properties);
         for (Storage storage : deposits()) putEndpoint(updated, "storage." + storage.id(), storage.endpoint());
+        long next = 1L + deposits().stream().mapToInt(Storage::id).max().orElse(0);
+        try { next = Math.max(next, Long.parseLong(properties.getProperty("storage.nextId", "1"))); }
+        catch (NumberFormatException ignored) {}
+        updated.setProperty("storage.nextId", Long.toString(Math.min(Integer.MAX_VALUE, next)));
         putEndpoint(updated, "deposit", null);
         updated.setProperty("storage.format", "1");
         return updated;

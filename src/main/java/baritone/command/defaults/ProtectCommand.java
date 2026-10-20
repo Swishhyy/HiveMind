@@ -43,7 +43,7 @@ public final class ProtectCommand extends Command {
             logDirect("Manual protected areas cleared in this dimension; the deposit chest remains protected");
         } else if (args.hasAny() && args.peekString().equalsIgnoreCase("list")) {
             args.getString();
-            logDirect("Protected areas (including the deposit chest): " + MiningWaypoints.protection(ctx.worldData()));
+            logDirect("Protected areas (including storage chests): " + MiningWaypoints.protection(ctx));
             return;
         } else {
             int radius = args.hasAny() ? args.getAs(Integer.class) : 16;

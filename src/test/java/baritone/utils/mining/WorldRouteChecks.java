@@ -85,6 +85,13 @@ public final class WorldRouteChecks {
             legacy.removeDeposit(1);
             check(new WorldRoutes(legacyServer).deposits().size() == 1, "Removed legacy storage stays removed");
 
+            Path removedLegacyServer = temporary.resolve("removed-legacy");
+            Files.createDirectories(removedLegacyServer);
+            Files.writeString(removedLegacyServer.resolve("mining-routes.properties"), "deposit.dimension=minecraft:overworld\ndeposit.x=5\ndeposit.y=64\ndeposit.z=6\n");
+            WorldRoutes removedLegacy = new WorldRoutes(removedLegacyServer);
+            removedLegacy.removeDeposit(1);
+            check(new WorldRoutes(removedLegacyServer).addDeposit(chest).id() == 2, "Removing a legacy chest before adding another cannot reuse its ID");
+
             check(WorldRoutes.connects(WorldRoutes.OVERWORLD, WorldRoutes.NETHER), "Route into Nether");
             check(WorldRoutes.connects(WorldRoutes.NETHER, WorldRoutes.OVERWORLD), "Route back to Overworld");
             check(!WorldRoutes.connects(WorldRoutes.OVERWORLD, "minecraft:the_end"), "Reject unsupported portal type");
