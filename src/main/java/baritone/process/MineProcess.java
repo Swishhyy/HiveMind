@@ -83,16 +83,20 @@ public final class MineProcess extends BaritoneProcessHelper implements IMinePro
 
     @Override
     public PathingCommand onTick(boolean calcFailed, boolean isSafeToCancel) {
+        baritone.getSculkProcess().refresh();
+        if (baritone.getSculkProcess().isActive()) return new PathingCommand(null, PathingCommandType.REQUEST_PAUSE);
         if (desiredQuantity > 0) {
             int curr = ctx.player().getInventory().getNonEquipmentItems().stream()
                     .filter(stack -> filter.has(stack))
                     .mapToInt(ItemStack::getCount).sum();
             if ((long) curr + depositedQuantity >= desiredQuantity) {
+                baritone.getJobManager().miningFinished();
                 logDirect("Have " + ((long) curr + depositedQuantity) + " valid items including confirmed deposits");
                 if (Baritone.settings().mineAutoDeposit.value) {
                     try {
                         if (MiningRouteAccess.deposit(ctx) != null) baritone.getDepositProcess().startFinalDeposit();
                     } catch (IllegalStateException e) {
+                        baritone.getJobManager().fail("Final deposit could not start: " + e.getMessage());
                         logDirect("Mining complete; final deposit could not start: " + e.getMessage());
                     }
                 }
@@ -101,6 +105,7 @@ public final class MineProcess extends BaritoneProcessHelper implements IMinePro
                         ? new PathingCommand(null, PathingCommandType.REQUEST_PAUSE) : null;
             }
         }
+        if (baritone.getSurvivalProcess().beforeMining()) return new PathingCommand(null, PathingCommandType.REQUEST_PAUSE);
         if (!MiningRouteAccess.dimension(ctx).equals(miningDimension)) {
             try {
                 if (!Baritone.settings().mineTravelBetweenDimensions.value) throw new IllegalStateException("dimension travel is disabled");
@@ -611,10 +616,18 @@ public final class MineProcess extends BaritoneProcessHelper implements IMinePro
     public void recordDeposit(ItemStack stack, int count) {
         if (isActive() && filter.has(stack)) {
             depositedQuantity = (int) Math.min(Integer.MAX_VALUE, (long) depositedQuantity + count);
+            baritone.getJobManager().recordDeposit(depositedQuantity);
         }
     }
 
-    BlockOptionalMetaLookup depositTargets() {
+    public boolean targetsAncientDebris() { return filter != null && filter.has(Blocks.ANCIENT_DEBRIS); }
+    public void restoreDepositCredit(int count) { depositedQuantity = Math.max(0, count); }
+    public int jobProgress() {
+        return depositedQuantity + (filter == null || ctx.player() == null ? 0 : ctx.player().getInventory().getNonEquipmentItems().stream()
+                .filter(filter::has).mapToInt(ItemStack::getCount).sum());
+    }
+
+    public BlockOptionalMetaLookup depositTargets() {
         return filter;
     }
 

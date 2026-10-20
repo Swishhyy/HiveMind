@@ -90,7 +90,7 @@ public final class DepositCommand extends Command {
                     if (saved.isEmpty()) logDirect("No storage chests saved for this server/save");
                     for (WorldRoutes.Storage storage : saved) {
                         WorldRoutes.Endpoint point = storage.endpoint();
-                        logDirect("#" + storage.id() + " " + point.dimension() + " " + point.x() + " " + point.y() + " " + point.z());
+                        logDirect("#" + storage.id() + " " + storage.rule().label() + " [" + storage.rule().kind().name().toLowerCase(Locale.ROOT) + "] " + point.dimension() + " " + point.x() + " " + point.y() + " " + point.z());
                     }
                     if (process.isActive()) logDirect(process.displayName());
                     break;

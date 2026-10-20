@@ -45,6 +45,12 @@ public class BlockPlaceHelper {
         if (!rightClickRequested || ctx.player().isHandsBusy() || mouseOver == null || mouseOver.getType() != HitResult.Type.BLOCK) {
             return;
         }
+        if (Baritone.settings().mineAvoidSculk.value && baritone.api.BaritoneAPI.getProvider().getBaritoneForPlayer(ctx.player()) instanceof Baritone bot) {
+            var target = ((BlockHitResult) mouseOver).getBlockPos();
+            var placed = target.relative(((BlockHitResult) mouseOver).getDirection());
+            if (bot.getSculkProcess().snapshot().contains(target.getX(), target.getY(), target.getZ())
+                    || bot.getSculkProcess().snapshot().contains(placed.getX(), placed.getY(), placed.getZ())) return;
+        }
         rightClickTimer = Baritone.settings().rightClickSpeed.value - BASE_PLACE_DELAY;
         for (InteractionHand hand : InteractionHand.values()) {
             if (ctx.playerController().processRightClickBlock(ctx.player(), ctx.world(), hand, (BlockHitResult) mouseOver) == InteractionResult.SUCCESS) {

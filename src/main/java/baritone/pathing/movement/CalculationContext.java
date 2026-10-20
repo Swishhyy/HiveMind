@@ -18,6 +18,7 @@
 package baritone.pathing.movement;
 
 import baritone.Baritone;
+import baritone.utils.bot.SculkPolicy;
 import baritone.api.IBaritone;
 import baritone.api.pathing.movement.ActionCosts;
 import baritone.cache.WorldData;
@@ -90,6 +91,9 @@ public class CalculationContext {
 
     public final PrecomputedData precomputedData;
     private final List<ConstructionPolicy.Area> protectedAreas;
+    private final boolean avoidSculk;
+    private final SculkPolicy.Snapshot sculk;
+    private final double sculkPenalty;
     private final boolean preferAvoidConstruction;
     private final boolean protectContainers;
     private final double constructionBreakPenalty;
@@ -106,6 +110,10 @@ public class CalculationContext {
         LocalPlayer player = baritone.getPlayerContext().player();
         this.world = baritone.getPlayerContext().world();
         this.worldData = (WorldData) baritone.getPlayerContext().worldData();
+        this.avoidSculk = Baritone.settings().mineAvoidSculk.value;
+        this.sculk = ((Baritone) baritone).getSculkProcess().snapshot();
+        double sculkCost = Baritone.settings().sculkPathPenalty.value;
+        this.sculkPenalty = Double.isFinite(sculkCost) ? Math.max(0, sculkCost) : 5000;
         this.protectedAreas = MiningWaypoints.protection(baritone.getPlayerContext());
         this.preferAvoidConstruction = Baritone.settings().preferAvoidConstruction.value;
         this.protectContainers = Baritone.settings().protectContainers.value;
@@ -116,7 +124,7 @@ public class CalculationContext {
         this.toolSet = new ToolSet(player);
         this.hasThrowaway = Baritone.settings().allowPlace.value && ((Baritone) baritone).getInventoryBehavior().hasGenericThrowaway();
         this.hasWaterBucket = Baritone.settings().allowWaterBucketFall.value && Inventory.isHotbarSlot(player.getInventory().findSlotMatchingItem(STACK_BUCKET_WATER)) && world.dimension() != Level.NETHER;
-        this.canSprint = Baritone.settings().allowSprint.value && player.getFoodData().getFoodLevel() > 6;
+        this.canSprint = !((Baritone) baritone).getSculkProcess().quiet() && Baritone.settings().allowSprint.value && player.getFoodData().getFoodLevel() > 6;
         this.placeBlockCost = Baritone.settings().blockPlacementPenalty.value;
         this.allowBreak = Baritone.settings().allowBreak.value;
         this.allowBreakAnyway = new ArrayList<>(Baritone.settings().allowBreakAnyway.value);
@@ -196,6 +204,7 @@ public class CalculationContext {
     }
 
     public double costOfPlacingAt(int x, int y, int z, BlockState current) {
+        if (sculkProtected(x, y, z, current)) return COST_INF;
         if (!hasThrowaway) { // only true if allowPlace is true, see constructor
             return COST_INF;
         }
@@ -215,6 +224,7 @@ public class CalculationContext {
     }
 
     public double breakCostMultiplierAt(int x, int y, int z, BlockState current) {
+        if (sculkProtected(x, y, z, current)) return COST_INF;
         if (!allowBreak && !allowBreakAnyway.contains(current.getBlock())) {
             return COST_INF;
         }
@@ -225,6 +235,11 @@ public class CalculationContext {
             return COST_INF;
         }
         return 1;
+    }
+
+    public double sculkPathPenalty(int x, int y, int z) { return avoidSculk ? sculk.penalty(x, y, z) * sculkPenalty : 0; }
+    private boolean sculkProtected(int x, int y, int z, BlockState state) {
+        return avoidSculk && (sculk.contains(x, y, z) || SculkPolicy.sculk(BuiltInRegistries.BLOCK.getKey(state.getBlock()).getPath()));
     }
 
     public double constructionPenalty(BlockState state) {

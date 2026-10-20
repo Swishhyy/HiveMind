@@ -333,6 +333,29 @@ public final class Settings {
     /** Desired separation during retreat; wardens require at least 64 blocks. */
     public final Setting<Integer> conflictFleeDistance = new Setting<>(32);
 
+    /** Prefer paths outside sensor/shrieker zones; prohibit automated breaking and placing near them. */
+    public final Setting<Boolean> mineAvoidSculk = new Setting<>(true);
+    public final Setting<Integer> sculkAvoidRadius = new Setting<>(12);
+    public final Setting<Double> sculkPathPenalty = new Setting<>(5000D);
+
+    /** Pause mining for food, health, tool durability, inventory space, and building supplies. */
+    public final Setting<Boolean> botSurvival = new Setting<>(true);
+    public final Setting<Boolean> botAutoResupply = new Setting<>(true);
+    public final Setting<Integer> botMinimumHealth = new Setting<>(12);
+    public final Setting<Integer> botEatAtHunger = new Setting<>(16);
+    public final Setting<Integer> botMinimumFood = new Setting<>(4);
+    public final Setting<Integer> botRestockFood = new Setting<>(16);
+    public final Setting<Integer> botMinimumBlocks = new Setting<>(16);
+    public final Setting<Integer> botRestockBlocks = new Setting<>(128);
+    public final Setting<Integer> botToolReserve = new Setting<>(32);
+    /** Only these foods may be automatically eaten or withdrawn. */
+    public final Setting<List<Item>> botFoodItems = new Setting<>(new ArrayList<>(List.of(
+            Items.COOKED_BEEF, Items.COOKED_PORKCHOP, Items.COOKED_CHICKEN, Items.COOKED_MUTTON,
+            Items.COOKED_RABBIT, Items.COOKED_COD, Items.COOKED_SALMON, Items.BREAD,
+            Items.BAKED_POTATO, Items.CARROT, Items.GOLDEN_CARROT, Items.APPLE)));
+    /** FLEE is the default. DEFEND permits short, close retaliation only against a confirmed attacker. */
+    public final Setting<String> botConflictMode = new Setting<>("flee");
+
     /** Approximate horizontal observation distance for stalk; bounded to 16-128 blocks, with four blocks of tolerance. */
     public final Setting<Integer> stalkDistance = new Setting<>(40);
 

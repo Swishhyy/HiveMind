@@ -8,6 +8,8 @@
     "defaultRequire": 1
   },
   "client": [
+    "MixinBotUseKey",
+    "MixinBotChatListener",
     "MixinChunkArray",
     "MixinClientChunkProvider",
     "MixinClientPlayerEntity",

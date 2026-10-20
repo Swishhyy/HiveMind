@@ -61,7 +61,8 @@ public final class InventoryBehavior extends Behavior implements Helper {
         if (event.getType() == TickEvent.Type.OUT) {
             return;
         }
-        if (baritone.getMineProcess().isCleaningWaste() || baritone.getDepositProcess().isActive()) {
+        if (baritone.getMineProcess().isCleaningWaste() || baritone.getDepositProcess().isActive()
+                || baritone.getSurvivalProcess().isActive() || baritone.getConflictProcess().isActive()) {
             // Cleanup and storage confirmation track exact source slots; don't swap those slots underneath them.
             return;
         }

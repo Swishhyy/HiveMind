@@ -10,6 +10,13 @@ fi
 "${task_javac[@]}" -d "$task_classes" \
     src/main/java/baritone/utils/mining/ConstructionPolicy.java \
     src/main/java/baritone/utils/mining/DepositPolicy.java \
+    src/main/java/baritone/utils/bot/StorageRule.java \
+    src/main/java/baritone/utils/bot/AtomicProperties.java \
+    src/main/java/baritone/utils/bot/TrustedControl.java \
+    src/main/java/baritone/utils/bot/JobStore.java \
+    src/main/java/baritone/utils/bot/SurvivalPolicy.java \
+    src/main/java/baritone/utils/bot/SculkPolicy.java \
+    src/test/java/baritone/utils/bot/BotPolicyChecks.java \
     src/main/java/baritone/utils/mining/WorldRoutes.java \
     src/main/java/baritone/utils/mining/WastePolicy.java \
     src/main/java/baritone/utils/social/SocialPolicy.java \
@@ -21,3 +28,5 @@ java -cp "$task_classes" baritone.utils.mining.MiningPolicyChecks
 java -cp "$task_classes" baritone.utils.mining.WorldRouteChecks
 java -cp "$task_classes" baritone.utils.mining.WastePolicyChecks
 java -cp "$task_classes" baritone.utils.social.SocialPolicyChecks
+
+java -cp "$task_classes" baritone.utils.bot.BotPolicyChecks

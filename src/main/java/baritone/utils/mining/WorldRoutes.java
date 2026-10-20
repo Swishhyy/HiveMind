@@ -17,6 +17,10 @@
 
 package baritone.utils.mining;
 
+import baritone.utils.bot.StorageRule;
+import java.util.Set;
+import java.util.Arrays;
+import java.util.stream.Collectors;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -46,7 +50,9 @@ public final class WorldRoutes {
         }
     }
 
-    public record Storage(int id, Endpoint endpoint) {}
+    public record Storage(int id, Endpoint endpoint, StorageRule rule) {
+        public Storage(int id, Endpoint endpoint) { this(id, endpoint, StorageRule.DEFAULT); }
+    }
 
     public WorldRoutes(Path worldRoot) {
         file = worldRoot.resolve("mining-routes.properties");
@@ -74,7 +80,7 @@ public final class WorldRoutes {
             try {
                 int id = Integer.parseInt(key.substring(8, key.length() - 10));
                 Endpoint endpoint = read("storage." + id);
-                if (endpoint != null) result.add(new Storage(id, endpoint));
+                if (endpoint != null) result.add(new Storage(id, endpoint, readRule(id)));
             } catch (IllegalArgumentException ignored) {}
         }
         result.sort(Comparator.comparingInt(Storage::id));
@@ -106,15 +112,44 @@ public final class WorldRoutes {
     public synchronized boolean removeDeposit(int id) {
         if (deposits().stream().noneMatch(storage -> storage.id() == id)) return false;
         Properties updated = storageUpdate();
-        putEndpoint(updated, "storage." + id, null);
+        removeStorage(updated, id);
         save(updated);
         return true;
     }
 
     public synchronized void clearDeposits() {
         Properties updated = storageUpdate();
-        for (Storage storage : deposits()) putEndpoint(updated, "storage." + storage.id(), null);
+        for (Storage storage : deposits()) removeStorage(updated, storage.id());
         save(updated);
+    }
+
+    public synchronized void configureStorage(int id, StorageRule rule) {
+        if (deposits().stream().noneMatch(storage -> storage.id() == id)) throw new IllegalArgumentException("Unknown storage #" + id);
+        Properties updated = storageUpdate();
+        String prefix = "storage." + id;
+        updated.setProperty(prefix + ".label", rule.label());
+        updated.setProperty(prefix + ".kind", rule.kind().name());
+        updated.setProperty(prefix + ".items", String.join(",", new java.util.TreeSet<>(rule.items())));
+        updated.setProperty(prefix + ".priority", Integer.toString(rule.priority()));
+        save(updated);
+    }
+
+    private StorageRule readRule(int id) {
+        String prefix = "storage." + id;
+        try {
+            String items = properties.getProperty(prefix + ".items", "");
+            return new StorageRule(properties.getProperty(prefix + ".label", ""),
+                    StorageRule.parse(properties.getProperty(prefix + ".kind", "ANY")),
+                    items.isBlank() ? Set.of() : Arrays.stream(items.split(",")).collect(Collectors.toSet()),
+                    Integer.parseInt(properties.getProperty(prefix + ".priority", "0")));
+        } catch (IllegalArgumentException e) {
+            return new StorageRule("Invalid rule", StorageRule.Kind.DISABLED, Set.of(), 0);
+        }
+    }
+
+    private static void removeStorage(Properties updated, int id) {
+        String prefix = "storage." + id + ".";
+        updated.stringPropertyNames().stream().filter(key -> key.startsWith(prefix)).toList().forEach(updated::remove);
     }
 
     /** Prefer nearby storage in this dimension before a supported dimension crossing. */
@@ -137,7 +172,7 @@ public final class WorldRoutes {
     public synchronized void clearDeposit(String dimension) {
         Properties updated = storageUpdate();
         for (Storage storage : deposits()) if (storage.endpoint().dimension().equals(dimension)) {
-            putEndpoint(updated, "storage." + storage.id(), null);
+            removeStorage(updated, storage.id());
         }
         save(updated);
     }

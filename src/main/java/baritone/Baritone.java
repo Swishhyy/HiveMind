@@ -76,6 +76,10 @@ public class Baritone implements IBaritone {
     private final DepositProcess depositProcess;
     private final PortalTravelProcess portalTravelProcess;
     private final ConflictProcess conflictProcess;
+    private final SculkProcess sculkProcess;
+    private final SurvivalProcess survivalProcess;
+    private final JobManager jobManager;
+    private final BotControlBehavior botControl;
     private final StalkProcess stalkProcess;
     private final GetToBlockProcess getToBlockProcess;
     private final CustomGoalProcess customGoalProcess;
@@ -124,6 +128,9 @@ public class Baritone implements IBaritone {
             this.portalTravelProcess     = this.registerProcess(PortalTravelProcess::new);
             this.conflictProcess         = this.registerProcess(ConflictProcess::new);
             this.stalkProcess            = this.registerProcess(StalkProcess::new);
+            this.sculkProcess            = this.registerProcess(SculkProcess::new);
+            this.survivalProcess         = this.registerProcess(SurvivalProcess::new);
+            this.jobManager              = this.registerProcess(JobManager::new);
             this.customGoalProcess       = this.registerProcess(CustomGoalProcess::new); // very high iq
             this.getToBlockProcess       = this.registerProcess(GetToBlockProcess::new);
             this.builderProcess          = this.registerProcess(BuilderProcess::new);
@@ -136,10 +143,15 @@ public class Baritone implements IBaritone {
 
         this.worldProvider = new WorldProvider(this);
         this.selectionManager = new SelectionManager(this);
+        this.botControl = new BotControlBehavior(this);
         this.commandManager = new CommandManager(this);
         this.registerBehavior(this.portalTravelProcess);
         this.registerBehavior(this.conflictProcess);
         this.registerBehavior(this.stalkProcess);
+        this.registerBehavior(this.sculkProcess);
+        this.registerBehavior(this.survivalProcess);
+        this.registerBehavior(this.jobManager);
+        this.registerBehavior(this.botControl);
     }
 
     public void registerBehavior(IBehavior behavior) {
@@ -221,6 +233,11 @@ public class Baritone implements IBaritone {
     }
 
     public ConflictProcess getConflictProcess() { return this.conflictProcess; }
+
+    public SculkProcess getSculkProcess() { return this.sculkProcess; }
+    public SurvivalProcess getSurvivalProcess() { return this.survivalProcess; }
+    public JobManager getJobManager() { return this.jobManager; }
+    public BotControlBehavior getBotControl() { return this.botControl; }
 
     public StalkProcess getStalkProcess() { return this.stalkProcess; }
 

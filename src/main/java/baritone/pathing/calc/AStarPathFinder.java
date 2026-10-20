@@ -118,7 +118,7 @@ public final class AStarPathFinder extends AbstractNodeCostSearch {
                 res.reset();
                 moves.apply(calcContext, currentNode.x, currentNode.y, currentNode.z, res);
                 numMovementsConsidered++;
-                double actionCost = res.cost;
+                double actionCost = res.cost + calcContext.sculkPathPenalty(res.x, res.y, res.z);
                 if (actionCost >= ActionCosts.COST_INF) {
                     continue;
                 }

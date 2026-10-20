@@ -35,6 +35,11 @@ public final class MiningPoliciesTest {
         WastePolicyChecks.runAll();
     }
     @Test
+    public void botTrustStorageJobsAndSurvivalPreserveBoundaries() throws Exception {
+        baritone.utils.bot.BotPolicyChecks.runAll();
+    }
+
+    @Test
     public void standOffAndRetreatRespectDistanceAndSearchLimits() {
         baritone.utils.social.SocialPolicyChecks.runAll();
     }
