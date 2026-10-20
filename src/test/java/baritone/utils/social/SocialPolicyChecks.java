@@ -43,6 +43,9 @@ public final class SocialPolicyChecks {
         check(Double.isFinite(SocialPolicy.bandPenalty(60000000, 2048, -60000000, 40)), "World-edge coordinates do not overflow");
         check(SocialPolicy.stalkDistance(Integer.MIN_VALUE) == 16 && SocialPolicy.stalkDistance(Integer.MAX_VALUE) == 128, "Bound custom stand-off distances");
         check(SocialPolicy.fleeDistance(1, false) == 16 && SocialPolicy.fleeDistance(32, true) == 64, "Retreat preserves extra separation from a warden");
+        check(SocialPolicy.attackedDistance(32, 40) == 56, "A ranged attack beyond the current escape distance requires moving farther away");
+        check(SocialPolicy.attackedDistance(64, 2) == 64, "An additional attack cannot shorten an existing retreat");
+        check(SocialPolicy.attackedDistance(128, 60000000) == 128, "Repeated long-range attacks keep the retreat target bounded");
         check(!SocialPolicy.resumeAfterThreat(false, 1000), "Elapsed time cannot resume a task while a threat is still close");
         check(!SocialPolicy.resumeAfterThreat(true, 99) && SocialPolicy.resumeAfterThreat(true, 100), "Require the whole quiet period before resuming work");
         for (int radius : new int[]{1, 32, 64, 100, 256, 1000000}) {

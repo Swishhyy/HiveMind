@@ -67,13 +67,17 @@ public final class ConflictProcess extends BaritoneProcessHelper implements IBeh
         if (attacker == null || attacker == ctx.player()) return; // Environmental damage is not evidence that a bystander attacked.
         if (observedWorld != ctx.world()) { onLostControl(); observedWorld = ctx.world(); }
         quietTicks = 0;
-        remember(attacker);
+        remember(attacker, true);
         begin();
     }
 
-    private void remember(Entity entity) {
+    private void remember(Entity entity, boolean attacked) {
         if (threats.size() >= 32 && !threats.containsKey(entity.getUUID())) threats.remove(threats.keySet().iterator().next());
         int distance = SocialPolicy.fleeDistance(Baritone.settings().conflictFleeDistance.value, isType(entity, "warden"));
+        Threat previous = threats.get(entity.getUUID());
+        if (previous != null) distance = Math.max(distance, previous.distance());
+        if (attacked) distance = SocialPolicy.attackedDistance(distance,
+                Math.hypot(entity.getX() - ctx.player().getX(), entity.getZ() - ctx.player().getZ()));
         threats.put(entity.getUUID(), new Threat(entity.blockPosition().immutable(), distance, System.currentTimeMillis() + 15000));
     }
 
@@ -119,7 +123,7 @@ public final class ConflictProcess extends BaritoneProcessHelper implements IBeh
         for (Entity entity : loaded.values()) {
             if (!(entity instanceof Mob mob) || entity.distanceToSqr(ctx.player()) > radius * radius) continue;
             boolean neutral = isType(entity, "enderman") || isType(entity, "zombified_piglin") || isType(entity, "piglin");
-            if ((entity.getType().getCategory() == MobCategory.MONSTER && !neutral) || mob.getTarget() == ctx.player()) remember(entity);
+            if ((entity.getType().getCategory() == MobCategory.MONSTER && !neutral) || mob.getTarget() == ctx.player()) remember(entity, false);
         }
         if (!threats.isEmpty()) begin();
     }

@@ -224,7 +224,7 @@ public abstract class MixinClientPlayNetHandler extends ClientCommonPacketListen
     @Inject(method = "handleContainerContent", at = @At("RETURN"))
     private void onBotContainerContents(ClientboundContainerSetContentPacket packet, CallbackInfo ci) {
         IBaritone instance = BaritoneAPI.getProvider().getBaritoneForConnection((ClientPacketListener) (Object) this);
-        if (instance instanceof Baritone bot) bot.getDepositProcess().onContainerContents(packet.getContainerId());
+        if (instance instanceof Baritone bot) bot.getDepositProcess().onContainerContents(packet.containerId());
     }
 
     /*

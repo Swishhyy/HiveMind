@@ -22,6 +22,9 @@ public final class SocialPolicy {
     private SocialPolicy() {}
     public static int stalkDistance(int value) { return Math.max(16, Math.min(128, value)); }
     public static int fleeDistance(int value, boolean warden) { return Math.max(warden ? 64 : 16, Math.min(128, value)); }
+    public static int attackedDistance(int previous, double separation) {
+        return Math.min(128, Math.max(previous, (int) Math.min(128, Math.ceil(separation) + 16)));
+    }
     public static int searchRadius(int value) { return Math.max(32, Math.min(512, value)); }
     public static double horizontal(double x, double z) { return Math.hypot(x, z); }
     public static boolean inBand(double x, double y, double z, int distance) {
