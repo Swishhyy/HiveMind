@@ -24,10 +24,13 @@ import baritone.cache.WorldData;
 import baritone.pathing.precompute.PrecomputedData;
 import baritone.utils.BlockStateInterface;
 import baritone.utils.ToolSet;
+import baritone.utils.mining.ConstructionPolicy;
+import baritone.utils.mining.MiningWaypoints;
 import baritone.utils.pathing.BetterWorldBorder;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.player.Inventory;
@@ -86,6 +89,11 @@ public class CalculationContext {
     public final BetterWorldBorder worldBorder;
 
     public final PrecomputedData precomputedData;
+    private final List<ConstructionPolicy.Area> protectedAreas;
+    private final boolean preferAvoidConstruction;
+    private final boolean protectContainers;
+    private final double constructionBreakPenalty;
+    private final List<Block> additionalConstructionBlocks;
 
     public CalculationContext(IBaritone baritone) {
         this(baritone, false);
@@ -98,6 +106,12 @@ public class CalculationContext {
         LocalPlayer player = baritone.getPlayerContext().player();
         this.world = baritone.getPlayerContext().world();
         this.worldData = (WorldData) baritone.getPlayerContext().worldData();
+        this.protectedAreas = MiningWaypoints.protection(this.worldData);
+        this.preferAvoidConstruction = Baritone.settings().preferAvoidConstruction.value;
+        this.protectContainers = Baritone.settings().protectContainers.value;
+        double penalty = Baritone.settings().constructionBreakPenalty.value;
+        this.constructionBreakPenalty = Double.isFinite(penalty) ? Math.max(0, penalty) : 1000D;
+        this.additionalConstructionBlocks = new ArrayList<>(Baritone.settings().additionalConstructionBlocks.value);
         this.bsi = new BlockStateInterface(baritone.getPlayerContext(), forUseOnAnotherThread);
         this.toolSet = new ToolSet(player);
         this.hasThrowaway = Baritone.settings().allowPlace.value && ((Baritone) baritone).getInventoryBehavior().hasGenericThrowaway();
@@ -207,7 +221,16 @@ public class CalculationContext {
         if (isPossiblyProtected(x, y, z)) {
             return COST_INF;
         }
+        if (protectContainers && ConstructionPolicy.isContainer(BuiltInRegistries.BLOCK.getKey(current.getBlock()).getPath())) {
+            return COST_INF;
+        }
         return 1;
+    }
+
+    public double constructionPenalty(BlockState state) {
+        return preferAvoidConstruction && (additionalConstructionBlocks.contains(state.getBlock())
+                || ConstructionPolicy.isConstruction(BuiltInRegistries.BLOCK.getKey(state.getBlock()).getPath()))
+                ? constructionBreakPenalty : 0;
     }
 
     public double placeBucketCost() {
@@ -215,7 +238,11 @@ public class CalculationContext {
     }
 
     public boolean isPossiblyProtected(int x, int y, int z) {
-        // TODO more protection logic here; see #220
+        for (ConstructionPolicy.Area area : protectedAreas) {
+            if (area.contains(x, y, z)) {
+                return true;
+            }
+        }
         return false;
     }
 }

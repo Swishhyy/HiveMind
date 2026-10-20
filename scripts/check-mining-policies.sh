@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+set -euo pipefail
+cd "$(dirname "$0")/.."
+task_classes=$(mktemp -d)
+trap 'rm -rf "$task_classes"' EXIT
+task_javac=(javac)
+if ! command -v javac >/dev/null 2>&1; then
+    task_javac=(java -m jdk.compiler/com.sun.tools.javac.Main)
+fi
+"${task_javac[@]}" -d "$task_classes" \
+    src/main/java/baritone/utils/mining/ConstructionPolicy.java \
+    src/main/java/baritone/utils/mining/DepositPolicy.java \
+    src/test/java/baritone/utils/mining/MiningPolicyChecks.java
+java -cp "$task_classes" baritone.utils.mining.MiningPolicyChecks

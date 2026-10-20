@@ -623,6 +623,7 @@ public interface MovementHelper extends ActionCosts, Helper {
             }
             double result = 1 / strVsBlock;
             result += context.breakBlockAdditionalCost;
+            result += context.constructionPenalty(state);
             result *= mult;
             if (includeFalling) {
                 BlockState above = context.get(x, y + 1, z);

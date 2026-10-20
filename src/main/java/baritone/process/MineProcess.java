@@ -61,6 +61,7 @@ public final class MineProcess extends BaritoneProcessHelper implements IMinePro
     private GoalRunAway branchPointRunaway;
     private int desiredQuantity;
     private int tickCount;
+    private int depositedQuantity;
 
     public MineProcess(Baritone baritone) {
         super(baritone);
@@ -77,11 +78,21 @@ public final class MineProcess extends BaritoneProcessHelper implements IMinePro
             int curr = ctx.player().getInventory().getNonEquipmentItems().stream()
                     .filter(stack -> filter.has(stack))
                     .mapToInt(ItemStack::getCount).sum();
-            if (curr >= desiredQuantity) {
-                logDirect("Have " + curr + " valid items");
+            if ((long) curr + depositedQuantity >= desiredQuantity) {
+                logDirect("Have " + ((long) curr + depositedQuantity) + " valid items including confirmed deposits");
                 cancel();
                 return null;
             }
+        }
+        if (baritone.getDepositProcess().shouldStartAutomatic()) {
+            try {
+                baritone.getDepositProcess().start(false);
+            } catch (IllegalStateException e) {
+                logDirect("Cannot start automatic deposit: " + e.getMessage());
+                cancel();
+                return null;
+            }
+            return new PathingCommand(null, PathingCommandType.REQUEST_PAUSE);
         }
         if (calcFailed) {
             if (!knownOreLocations.isEmpty() && Baritone.settings().blacklistClosestOnFailure.value) {
@@ -122,8 +133,7 @@ public final class MineProcess extends BaritoneProcessHelper implements IMinePro
         baritone.getInputOverrideHandler().clearAllKeys();
         if (shaft.isPresent() && ctx.player().onGround()) {
             BlockPos pos = shaft.get();
-            BlockState state = baritone.bsi.get0(pos);
-            if (!MovementHelper.avoidBreaking(baritone.bsi, pos.getX(), pos.getY(), pos.getZ(), state)) {
+            if (plausibleToBreak(new CalculationContext(baritone), pos)) {
                 Optional<Rotation> rot = RotationUtils.reachable(ctx, pos);
                 if (rot.isPresent() && isSafeToCancel) {
                     baritone.getLookBehavior().updateTarget(rot.get(), true);
@@ -486,6 +496,9 @@ public final class MineProcess extends BaritoneProcessHelper implements IMinePro
 
     public static boolean plausibleToBreak(CalculationContext ctx, BlockPos pos) {
         BlockState state = ctx.bsi.get0(pos);
+        if (ctx.breakCostMultiplierAt(pos.getX(), pos.getY(), pos.getZ(), state) >= COST_INF) {
+            return false;
+        }
         if (MovementHelper.getMiningDurationTicks(ctx, pos.getX(), pos.getY(), pos.getZ(), state, true) >= COST_INF) {
             return false;
         }
@@ -509,6 +522,7 @@ public final class MineProcess extends BaritoneProcessHelper implements IMinePro
             this.filter = null;
         }
         this.desiredQuantity = quantity;
+        this.depositedQuantity = 0;
         this.knownOreLocations = new ArrayList<>();
         this.blacklist = new ArrayList<>();
         this.branchPoint = null;
@@ -535,5 +549,12 @@ public final class MineProcess extends BaritoneProcessHelper implements IMinePro
             return f;
         }
         return filter;
+    }
+
+    /** Count only transfers confirmed by the server, preserving quantity goals across chest trips. */
+    public void recordDeposit(ItemStack stack, int count) {
+        if (isActive() && filter.has(stack)) {
+            depositedQuantity = (int) Math.min(Integer.MAX_VALUE, (long) depositedQuantity + count);
+        }
     }
 }

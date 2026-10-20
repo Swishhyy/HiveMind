@@ -27,6 +27,7 @@ import net.minecraft.client.multiplayer.chat.GuiMessageTag;
 import net.minecraft.core.Vec3i;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.item.Item;
+import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.Mirror;
@@ -262,6 +263,38 @@ public final class Settings {
      * this multiplies the break speed, if set above 1 it's "encourage breaking" instead
      */
     public final Setting<Double> avoidBreakingMultiplier = new Setting<>(.1);
+
+    /** Prefer a detour over breaking blocks commonly used in player buildings. This is a heuristic, not placement history. */
+    public final Setting<Boolean> preferAvoidConstruction = new Setting<>(true);
+
+    /** Extra path cost, in ticks, for each suspected construction block that would be broken. */
+    public final Setting<Double> constructionBreakPenalty = new Setting<>(1000D);
+
+    /** Additional blocks to treat as construction, including blocks added by other mods. */
+    public final Setting<List<Block>> additionalConstructionBlocks = new Setting<>(new ArrayList<>());
+
+    /** Never break storage containers for a shortcut, even when a construction detour is expensive. */
+    public final Setting<Boolean> protectContainers = new Setting<>(true);
+
+    /** Return to the saved deposit chest when the mining inventory is nearly full. */
+    public final Setting<Boolean> mineAutoDeposit = new Setting<>(true);
+
+    /** Start a mining deposit trip when at most this many main-inventory slots are empty. */
+    public final Setting<Integer> mineDepositFreeSlots = new Setting<>(2);
+
+    /** Keep hotbar items during ordinary deposits; deposit all explicitly overrides this. */
+    public final Setting<Boolean> depositKeepHotbar = new Setting<>(true);
+
+    /** Keep damageable equipment, food, and equippable items during ordinary deposits. */
+    public final Setting<Boolean> depositKeepSupplies = new Setting<>(true);
+
+    /** Extra supplies to retain during ordinary deposits. Worn equipment is never transferred. */
+    public final Setting<List<Item>> depositKeepItems = new Setting<>(new ArrayList<>(List.of(
+            Items.TORCH, Items.WATER_BUCKET, Items.BUCKET, Items.SHIELD
+    )));
+
+    /** Block-breaking protection around a saved deposit chest. Does not prevent walking through the area. */
+    public final Setting<Integer> depositProtectionRadius = new Setting<>(3);
 
     /**
      * A list of blocks to be treated as if they're air.

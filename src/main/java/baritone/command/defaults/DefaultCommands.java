@@ -61,6 +61,8 @@ public final class DefaultCommands {
                 new BlacklistCommand(baritone),
                 new FindCommand(baritone),
                 new MineCommand(baritone),
+                new DepositCommand(baritone),
+                new ProtectCommand(baritone),
                 new ClickCommand(baritone),
                 new SurfaceCommand(baritone),
                 new ThisWayCommand(baritone),

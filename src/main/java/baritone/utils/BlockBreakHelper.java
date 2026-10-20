@@ -20,6 +20,10 @@ package baritone.utils;
 import baritone.api.BaritoneAPI;
 import baritone.api.utils.IPlayerContext;
 import baritone.utils.accessor.IPlayerControllerMP;
+import baritone.utils.mining.ConstructionPolicy;
+import baritone.utils.mining.MiningWaypoints;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.item.component.SwingAnimation;
 import net.minecraft.world.phys.BlockHitResult;
@@ -59,6 +63,15 @@ public final class BlockBreakHelper {
         boolean isBlockTrace = trace != null && trace.getType() == HitResult.Type.BLOCK;
 
         if (isLeftClick && isBlockTrace) {
+            BlockPos target = ((BlockHitResult) trace).getBlockPos();
+            boolean protectedArea = MiningWaypoints.protection(ctx.worldData()).stream()
+                    .anyMatch(area -> area.contains(target.getX(), target.getY(), target.getZ()));
+            boolean protectedContainer = BaritoneAPI.getSettings().protectContainers.value
+                    && ConstructionPolicy.isContainer(BuiltInRegistries.BLOCK.getKey(ctx.world().getBlockState(target).getBlock()).getPath());
+            if (protectedArea || protectedContainer) {
+                stopBreakingBlock();
+                return;
+            }
             ctx.playerController().setHittingBlock(wasHitting);
             if (ctx.playerController().hasBrokenBlock()) {
                 ctx.playerController().syncHeldItem();
