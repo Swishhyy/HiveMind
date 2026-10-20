@@ -66,7 +66,7 @@ public final class MiningWasteCleanup {
     public boolean tick(boolean safeToCancel, BlockOptionalMetaLookup targets) {
         if (!Baritone.settings().mineDiscardWaste.value || !Baritone.settings().allowInventory.value
                 || targets == null || ctx.player() == null || ctx.world() == null
-                || ctx.minecraft().screen != null || ctx.player().containerMenu != ctx.player().inventoryMenu
+                || ctx.minecraft().gui.screen() != null || ctx.player().containerMenu != ctx.player().inventoryMenu
                 || !ctx.player().inventoryMenu.getCarried().isEmpty()) {
             reset();
             return false;
