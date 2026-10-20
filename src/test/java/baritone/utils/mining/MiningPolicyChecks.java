@@ -65,7 +65,9 @@ public final class MiningPolicyChecks {
         for (String block : new String[]{"stone", "deepslate", "dirt", "granite", "diamond_ore", "redstone_ore", "oak_log"}) {
             check(!ConstructionPolicy.isConstruction(block), "Do not treat common natural terrain as known construction: " + block);
         }
-        for (String block : new String[]{"chest", "barrel", "furnace", "hopper", "red_shulker_box"}) {
+        for (String block : new String[]{"chest", "barrel", "furnace", "hopper", "red_shulker_box",
+                "copper_chest", "exposed_copper_chest", "weathered_copper_chest", "oxidized_copper_chest",
+                "waxed_copper_chest", "waxed_exposed_copper_chest", "waxed_weathered_copper_chest", "waxed_oxidized_copper_chest"}) {
             check(ConstructionPolicy.isContainer(block), "Protect storage: " + block);
         }
         ConstructionPolicy.Area base = new ConstructionPolicy.Area(-100, -40, 100, 16);

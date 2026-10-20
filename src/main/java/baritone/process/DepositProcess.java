@@ -28,6 +28,7 @@ import baritone.api.utils.BlockOptionalMetaLookup;
 import baritone.utils.BaritoneProcessHelper;
 import baritone.utils.mining.DepositPolicy;
 import baritone.utils.mining.MiningRouteAccess;
+import baritone.utils.mining.MiningWasteCleanup;
 import baritone.utils.mining.WorldRoutes;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -293,13 +294,15 @@ public final class DepositProcess extends BaritoneProcessHelper {
     }
 
     private Optional<Integer> firstTransferable(boolean skipRefused) {
+        BlockOptionalMetaLookup outputs = miningOutputs == null ? baritone.getMineProcess().depositTargets() : miningOutputs;
+        Set<Integer> buildingSlots = MiningWasteCleanup.reservedBuildingSlots(ctx, outputs);
         for (int i = 0; i < 36; i++) {
             ItemStack stack = ctx.player().getInventory().getItem(i);
             if (stack.isEmpty() || (skipRefused && refusedSlots.contains(i))) {
                 continue;
             }
             boolean supply = stack.isDamageableItem() || stack.has(DataComponents.FOOD) || stack.has(DataComponents.EQUIPPABLE);
-            BlockOptionalMetaLookup outputs = miningOutputs == null ? baritone.getMineProcess().depositTargets() : miningOutputs;
+            if (!depositAll && buildingSlots.contains(i)) continue;
             if (!DepositPolicy.retain(i, depositAll, Baritone.settings().depositKeepHotbar.value,
                     Baritone.settings().depositKeepSupplies.value, supply,
                     Baritone.settings().depositKeepItems.value.contains(stack.getItem()), outputs != null && outputs.has(stack))) {

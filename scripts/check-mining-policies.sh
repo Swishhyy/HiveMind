@@ -11,7 +11,10 @@ fi
     src/main/java/baritone/utils/mining/ConstructionPolicy.java \
     src/main/java/baritone/utils/mining/DepositPolicy.java \
     src/main/java/baritone/utils/mining/WorldRoutes.java \
+    src/main/java/baritone/utils/mining/WastePolicy.java \
     src/test/java/baritone/utils/mining/MiningPolicyChecks.java \
-    src/test/java/baritone/utils/mining/WorldRouteChecks.java
+    src/test/java/baritone/utils/mining/WorldRouteChecks.java \
+    src/test/java/baritone/utils/mining/WastePolicyChecks.java
 java -cp "$task_classes" baritone.utils.mining.MiningPolicyChecks
 java -cp "$task_classes" baritone.utils.mining.WorldRouteChecks
+java -cp "$task_classes" baritone.utils.mining.WastePolicyChecks

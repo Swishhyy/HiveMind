@@ -29,4 +29,9 @@ public final class MiningPoliciesTest {
     public void routesPersistWithoutCrossingServerOrDimensionBoundaries() throws java.io.IOException {
         WorldRouteChecks.runAll();
     }
+
+    @Test
+    public void wasteDisposalPreservesResourcesAndBuildingStacks() {
+        WastePolicyChecks.runAll();
+    }
 }

@@ -232,7 +232,13 @@ public final class Settings {
             Blocks.DIRT.asItem(),
             Blocks.COBBLESTONE.asItem(),
             Blocks.NETHERRACK.asItem(),
-            Blocks.STONE.asItem()
+            Blocks.STONE.asItem(),
+            Blocks.COBBLED_DEEPSLATE.asItem(),
+            Blocks.DEEPSLATE.asItem(),
+            Blocks.GRANITE.asItem(),
+            Blocks.DIORITE.asItem(),
+            Blocks.ANDESITE.asItem(),
+            Blocks.TUFF.asItem()
     )));
 
     /**
@@ -281,6 +287,19 @@ public final class Settings {
 
     /** Start a mining deposit trip when at most this many main-inventory slots are empty. */
     public final Setting<Integer> mineDepositFreeSlots = new Setting<>(2);
+
+    /** Drop excess ordinary waste blocks when mining inventory space runs low. Disabled until explicitly enabled. */
+    public final Setting<Boolean> mineDiscardWaste = new Setting<>(false);
+
+    /** Number of building stacks to retain across the inventory and hotbar, not per block type. */
+    public final Setting<Integer> mineWasteKeepStacks = new Setting<>(2);
+
+    /** Only these block items may be discarded; mining targets, named/custom items, and reserved supplies are always kept. */
+    public final Setting<List<Item>> mineWasteItems = new Setting<>(new ArrayList<>(List.of(
+            Blocks.COBBLESTONE.asItem(), Blocks.COBBLED_DEEPSLATE.asItem(), Blocks.DEEPSLATE.asItem(),
+            Blocks.DIRT.asItem(), Blocks.STONE.asItem(), Blocks.NETHERRACK.asItem(),
+            Blocks.GRANITE.asItem(), Blocks.DIORITE.asItem(), Blocks.ANDESITE.asItem(), Blocks.TUFF.asItem()
+    )));
 
     /** Keep hotbar items during ordinary deposits; deposit all explicitly overrides this. */
     public final Setting<Boolean> depositKeepHotbar = new Setting<>(true);

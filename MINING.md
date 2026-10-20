@@ -28,7 +28,17 @@ Ordinary deposits retain hotbar supplies, damageable equipment, food, equippable
 - `depositKeepItems`: extra retained items; defaults to torches, water buckets, empty buckets, and shields.
 - `depositProtectionRadius` (default `3`): protected cube around the saved chest.
 
-The bot only counts server-confirmed inventory changes as deposits. A full, blocked, missing, inaccessible, or unreachable container stops mining and reports the problem. Items are never intentionally dropped to make room. An expected portal transition preserves the job; unexpected dimension changes, disconnects, death, and `#stop` cancel it. Fix the problem and restart the mining command. Numeric mining goals retain credit for confirmed deposits across return trips; completing a quantity goal makes a final deposit without returning to the mining site.
+The bot only counts server-confirmed inventory changes as deposits. A full, blocked, missing, inaccessible, or unreachable container stops mining and reports the problem. Deposit trips do not drop items. An expected portal transition preserves the job; unexpected dimension changes, disconnects, death, and `#stop` cancel it. Fix the problem and restart the mining command. Numeric mining goals retain credit for confirmed deposits across return trips; completing a quantity goal makes a final deposit without returning to the mining site.
+
+## Optional waste cleanup
+
+Enable with `#set mineDiscardWaste true`; disable with `#set mineDiscardWaste false`. It is off by default. While mining, the bot tries cleanup when empty slots reach `mineDepositFreeSlots`, before deciding whether it still needs a deposit trip. It works without a saved chest or with automatic deposits disabled.
+
+- `mineWasteKeepStacks` defaults to `2`: keep the two fullest ordinary building stacks **total**, across the hotbar and main inventory. These may be different block types. Partial stacks count as stacks; an equally full hotbar stack takes priority. Ordinary deposits also retain these stacks; `#deposit all` still empties everything.
+- `mineWasteItems` is a separate configurable allowlist: cobblestone, cobbled deepslate, deepslate, dirt, stone, netherrack, granite, diorite, andesite, and tuff by default. The building-block defaults also allow these materials to be placed for bridging and pillaring.
+- Mining targets, `depositKeepItems`, equipment, food, and items with custom component changes (including names) are protected from disposal. This protection overrides the waste allowlist, even if you deliberately mine cobblestone or another listed waste block. Ordinary ores and valuables are absent from the default allowlist.
+
+Cleanup pauses at a safe stopping point and throws whole excess stacks into a clear tunnel behind the bot or to its side. It never clicks armor, offhand, crafting, or cursor slots, and does not run with a screen/container open or items on the cursor. Inventory swaps pause during cleanup; each drop is planned again from the live inventory and paced. Each slot is attempted at most once per pass, and cleanup has a timeout and cooldown. If there is no clear throwing direction, it falls back to the normal deposit decision. Waste drops never count toward mining quantity goals. Drops are ordinary world items and can be picked up again if the bot later returns through them.
 
 ## Ancient debris and travel between dimensions
 
@@ -69,6 +79,8 @@ Run `bash scripts/check-mining-policies.sh` for dependency-free inventory and co
 In-game checks before relying on unattended mining:
 
 - Fill a single chest and a double chest partially; confirm main-inventory and hotbar transfers go into storage rather than back into the inventory.
+- Repeat deposits with waxed/unwaxed copper chests at each oxidation stage, including a double copper chest and a saved chest whose wax or oxidation changes.
+- Enable waste cleanup, fill the inventory with mixed waste and valuable drops, and confirm the two fullest building stacks survive cleanup and ordinary deposits. Check a waste block that is itself the mining target, named blocks, explicit reserves, a blocked throwing direction, an open menu/cursor, and `#stop` during cleanup.
 - Fill or obstruct the destination, remove it while traveling, and deny access with a server protection plugin; confirm mining stops and reports the problem.
 - Interrupt a trip with pause, stop, death, disconnect, and an unexpected dimension change.
 - Start `#mine 32 netherite` in the Overworld. Verify entry into the Nether, debris mining, deposit trips, return to the original mining site, and a final deposit when the goal is complete.

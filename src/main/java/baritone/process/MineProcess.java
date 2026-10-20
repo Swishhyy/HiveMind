@@ -31,6 +31,7 @@ import baritone.pathing.movement.MovementHelper;
 import baritone.utils.BaritoneProcessHelper;
 import baritone.utils.BlockStateInterface;
 import baritone.utils.mining.MiningRouteAccess;
+import baritone.utils.mining.MiningWasteCleanup;
 import baritone.utils.mining.WorldRoutes;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.core.BlockPos;
@@ -68,9 +69,11 @@ public final class MineProcess extends BaritoneProcessHelper implements IMinePro
     private volatile long jobEpoch;
     private boolean needsRescan;
     private volatile boolean scanFailed;
+    private final MiningWasteCleanup wasteCleanup;
 
     public MineProcess(Baritone baritone) {
         super(baritone);
+        this.wasteCleanup = new MiningWasteCleanup(baritone);
     }
 
     @Override
@@ -120,6 +123,9 @@ public final class MineProcess extends BaritoneProcessHelper implements IMinePro
             return null;
         }
         try {
+            if (wasteCleanup.tick(isSafeToCancel, filter)) {
+                return new PathingCommand(null, PathingCommandType.REQUEST_PAUSE);
+            }
             if (baritone.getDepositProcess().shouldStartAutomatic()) {
                 baritone.getDepositProcess().start(false);
                 return new PathingCommand(null, PathingCommandType.REQUEST_PAUSE);
@@ -571,6 +577,7 @@ public final class MineProcess extends BaritoneProcessHelper implements IMinePro
 
     /** Preserve the resource request and quantity credit, but discard every position from the previous world. */
     public synchronized void invalidateWorldTargets() {
+        wasteCleanup.reset();
         jobEpoch++;
         needsRescan = filter != null;
         scanFailed = false;
@@ -609,5 +616,9 @@ public final class MineProcess extends BaritoneProcessHelper implements IMinePro
 
     BlockOptionalMetaLookup depositTargets() {
         return filter;
+    }
+
+    public boolean isCleaningWaste() {
+        return wasteCleanup.isActive();
     }
 }
