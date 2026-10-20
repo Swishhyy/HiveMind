@@ -25,5 +25,5 @@ jobs:
       run: bash scripts/check-mining-policies.sh
 
     - name: Executing tests
-      run: ./gradlew test
+      run: ./gradlew botApiSnapshot test
 
