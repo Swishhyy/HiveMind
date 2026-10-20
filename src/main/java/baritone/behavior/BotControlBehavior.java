@@ -108,9 +108,11 @@ public final class BotControlBehavior extends Behavior {
             return;
         }
         if (replies.isEmpty() || System.currentTimeMillis() < nextReply || ctx.minecraft().getConnection() == null) return;
-        Reply reply = replies.removeFirst();
         try {
-            if (!config().trusted(reply.player())) return;
+            config();
+            if (replies.isEmpty()) return;
+            Reply reply = replies.removeFirst();
+            if (!config.trusted(reply.player())) return;
             var info = ctx.minecraft().getConnection().getPlayerInfo(reply.player());
             if (info == null || !info.getProfile().name().matches("[A-Za-z0-9_]{1,16}")) return;
             ctx.minecraft().getConnection().sendCommand("msg " + info.getProfile().name() + " [Bot] " + reply.message());

@@ -75,7 +75,7 @@ public final class ConflictProcess extends BaritoneProcessHelper implements IBeh
         if (attacker == null || attacker == ctx.player()) return; // Environmental damage is not evidence that a bystander attacked.
         if (observedWorld != ctx.world()) { onLostControl(); observedWorld = ctx.world(); }
         quietTicks = 0;
-        attackerId = attacker.getUUID(); defendUntil = System.currentTimeMillis() + 10000;
+        if (!attacker.getUUID().equals(attackerId)) { attackerId = attacker.getUUID(); defendUntil = System.currentTimeMillis() + 10000; }
         remember(attacker, true);
         begin();
     }
@@ -194,7 +194,7 @@ public final class ConflictProcess extends BaritoneProcessHelper implements IBeh
         baritone.getLookBehavior().updateTarget(RotationUtils.calcRotationFromVec3d(ctx.playerHead(), target.getEyePosition(), ctx.playerRotations()), true);
         if (attackDelay > 0) attackDelay--;
         if (attackDelay == 0 && ctx.player().getAttackStrengthScale(0) >= 0.95f) {
-            releaseShield();
+            stopShieldUse();
             ctx.player().getInventory().setSelectedSlot(weapon); ctx.playerController().syncHeldItem();
             ctx.minecraft().gameMode.attack(ctx.player(), target);
             ctx.player().swing(InteractionHand.MAIN_HAND, SwingAnimation.DEFAULT, false); attackDelay = 10;
@@ -204,11 +204,14 @@ public final class ConflictProcess extends BaritoneProcessHelper implements IBeh
         }
         return true;
     }
-    private void releaseShield() {
+    private void stopShieldUse() {
         boolean release = ownsShield; ownsShield = false;
+        if (release && ctx.player() != null && ctx.player().isUsingItem() && ctx.minecraft().gameMode != null) ctx.minecraft().gameMode.releaseUsingItem(ctx.player());
+    }
+    private void releaseShield() {
+        stopShieldUse();
         if (ctx.player() != null) {
-            if (release && ctx.player().isUsingItem() && ctx.minecraft().gameMode != null) ctx.minecraft().gameMode.releaseUsingItem(ctx.player());
-            if (previousSlot >= 0) { ctx.player().getInventory().setSelectedSlot(previousSlot); ctx.playerController().syncHeldItem(); }
+            if (previousSlot >= 0) { ctx.player().getInventory().setSelectedSlot(previousSlot); if (ctx.minecraft().gameMode != null) ctx.playerController().syncHeldItem(); }
         }
         previousSlot = -1;
     }

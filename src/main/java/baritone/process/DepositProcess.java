@@ -207,6 +207,9 @@ public final class DepositProcess extends BaritoneProcessHelper {
             baritone.getPortalTravelProcess().start(requiredDimension);
             return pause();
         }
+        if (stage != Stage.RETURN && Baritone.settings().mineAvoidSculk.value
+                && baritone.getSculkProcess().snapshot().contains(chest.getX(), chest.getY(), chest.getZ()))
+            return tryNextStorage("storage #" + storageId + " is inside a known sculk hazard zone");
         if (stage != Stage.RETURN && ctx.world().hasChunkAt(chest)
                 && !supports(ctx.world().getBlockState(chest).getBlock())) {
             return tryNextStorage("storage #" + storageId + " is missing or was replaced");
@@ -385,7 +388,8 @@ public final class DepositProcess extends BaritoneProcessHelper {
 
     private Optional<Integer> firstTransferable(boolean skipRefused, StorageRule rule) {
         BlockOptionalMetaLookup outputs = miningOutputs == null ? baritone.getMineProcess().depositTargets() : miningOutputs;
-        Set<Integer> buildingSlots = MiningWasteCleanup.reservedBuildingSlots(ctx, outputs);
+        Set<Integer> buildingSlots = new HashSet<>(MiningWasteCleanup.reservedBuildingSlots(ctx, outputs));
+        if (Baritone.settings().botSurvival.value) buildingSlots.addAll(BotInventory.buildingReserves(ctx, outputs));
         for (int i = 0; i < 36; i++) {
             ItemStack stack = ctx.player().getInventory().getItem(i);
             if (stack.isEmpty() || (skipRefused && refusedSlots.contains(i))) {
@@ -406,7 +410,7 @@ public final class DepositProcess extends BaritoneProcessHelper {
     public static boolean accepts(StorageRule rule, ItemStack stack) {
         return rule.accepts(BuiltInRegistries.ITEM.getKey(stack.getItem()).toString(), stack.getItem() instanceof BlockItem,
                 Baritone.settings().mineWasteItems.value.contains(stack.getItem()),
-                stack.isDamageableItem() || stack.has(DataComponents.FOOD) || stack.has(DataComponents.EQUIPPABLE)
+                stack.isDamageableItem() || stack.has(DataComponents.FOOD) || stack.has(DataComponents.EQUIPPABLE) || BotInventory.building(stack)
                         || Baritone.settings().depositKeepItems.value.contains(stack.getItem()));
     }
 
@@ -417,7 +421,7 @@ public final class DepositProcess extends BaritoneProcessHelper {
             baritone.getMineProcess().cancel();
         }
         onLostControl();
-        logDirect("Deposit stopped: " + reason + ". Mining stopped; no items were dropped.");
+        logDirect("Storage trip stopped: " + reason + ". Bot work requires attention; no items were dropped.");
         return new PathingCommand(null, PathingCommandType.CANCEL_AND_SET_GOAL);
     }
 

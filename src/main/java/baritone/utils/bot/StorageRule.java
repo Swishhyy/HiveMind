@@ -37,7 +37,7 @@ public record StorageRule(String label, Kind kind, Set<String> items, int priori
         return switch (kind) {
             case ANY -> true;
             case ITEMS -> items.contains(item);
-            case BUILDING -> building;
+            case BUILDING -> building && !ore(item);
             case JUNK -> waste;
             case SUPPLIES -> supply;
             case ORES -> ore(item);

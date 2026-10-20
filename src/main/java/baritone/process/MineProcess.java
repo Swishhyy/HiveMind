@@ -105,6 +105,7 @@ public final class MineProcess extends BaritoneProcessHelper implements IMinePro
                         ? new PathingCommand(null, PathingCommandType.REQUEST_PAUSE) : null;
             }
         }
+        if (wasteCleanup.tick(isSafeToCancel, filter)) return new PathingCommand(null, PathingCommandType.REQUEST_PAUSE);
         if (baritone.getSurvivalProcess().beforeMining()) return new PathingCommand(null, PathingCommandType.REQUEST_PAUSE);
         if (!MiningRouteAccess.dimension(ctx).equals(miningDimension)) {
             try {
@@ -112,6 +113,7 @@ public final class MineProcess extends BaritoneProcessHelper implements IMinePro
                 baritone.getPortalTravelProcess().start(miningDimension);
                 return new PathingCommand(null, PathingCommandType.REQUEST_PAUSE);
             } catch (IllegalStateException e) {
+                baritone.getJobManager().fail("Mining: " + e.getMessage());
                 logDirect("Mining stopped: " + e.getMessage());
                 cancel();
                 return null;
@@ -123,19 +125,18 @@ public final class MineProcess extends BaritoneProcessHelper implements IMinePro
                     new ArrayList<>(blacklist), droppedItemsScan());
         }
         if (scanFailed) {
+            baritone.getJobManager().fail("No known targets and mining exploration is disabled");
             logDirect("No known locations for " + filter + "; exploration is disabled");
             cancel();
             return null;
         }
         try {
-            if (wasteCleanup.tick(isSafeToCancel, filter)) {
-                return new PathingCommand(null, PathingCommandType.REQUEST_PAUSE);
-            }
             if (baritone.getDepositProcess().shouldStartAutomatic()) {
                 baritone.getDepositProcess().start(false);
                 return new PathingCommand(null, PathingCommandType.REQUEST_PAUSE);
             }
         } catch (IllegalStateException e) {
+            baritone.getJobManager().fail("Automatic deposit: " + e.getMessage());
             logDirect("Cannot start automatic deposit: " + e.getMessage());
             cancel();
             return null;
@@ -149,6 +150,7 @@ public final class MineProcess extends BaritoneProcessHelper implements IMinePro
                 knownOreLocations.stream().min(Comparator.comparingDouble(ctx.playerFeet()::distSqr)).ifPresent(blacklist::add);
                 knownOreLocations.removeIf(blacklist::contains);
             } else {
+                baritone.getJobManager().fail("No usable path to the requested mining targets");
                 logDirect("Unable to find any path to " + filter + ", canceling mine");
                 if (Baritone.settings().notificationOnMineFail.value) {
                     logNotification("Unable to find any path to " + filter + ", canceling mine", true);
@@ -171,6 +173,7 @@ public final class MineProcess extends BaritoneProcessHelper implements IMinePro
         }
         if (Baritone.settings().legitMine.value) {
             if (!addNearby()) {
+                baritone.getJobManager().fail("No reachable local mining targets in legitMine mode");
                 cancel();
                 return null;
             }
@@ -197,6 +200,7 @@ public final class MineProcess extends BaritoneProcessHelper implements IMinePro
         }
         PathingCommand command = updateGoal();
         if (command == null) {
+            baritone.getJobManager().fail("No remaining mining targets or exploration goal");
             // none in range
             // maybe say something in chat? (ahem impact)
             cancel();

@@ -25,6 +25,10 @@ import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.FallingBlock;
 import java.util.function.Predicate;
+import baritone.api.utils.BlockOptionalMetaLookup;
+import baritone.utils.mining.WastePolicy;
+import java.util.ArrayList;
+import java.util.Set;
 
 public final class BotInventory {
     private BotInventory() {}
@@ -40,6 +44,14 @@ public final class BotInventory {
         return !stack.isEmpty() && id.endsWith("_pickaxe") && stack.isDamageableItem()
                 && SurvivalPolicy.usableTool(stack.getMaxDamage() - stack.getDamageValue(), Baritone.settings().botToolReserve.value)
                 && (!debris || id.equals("minecraft:diamond_pickaxe") || id.equals("minecraft:netherite_pickaxe"));
+    }
+    public static Set<Integer> buildingReserves(IPlayerContext ctx, BlockOptionalMetaLookup targets) {
+        var stacks = new ArrayList<WastePolicy.Stack>();
+        for (int slot = 0; slot < 36; slot++) {
+            ItemStack stack = ctx.player().getInventory().getItem(slot);
+            if (building(stack)) stacks.add(new WastePolicy.Stack(slot, stack.getCount(), true, targets != null && targets.has(stack)));
+        }
+        return WastePolicy.buildingSlots(stacks, Math.max(1, Baritone.settings().mineWasteKeepStacks.value));
     }
     public static int count(IPlayerContext ctx, Predicate<ItemStack> filter) {
         int total = 0;

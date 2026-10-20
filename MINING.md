@@ -6,9 +6,9 @@ This fork builds Fabric by default (`available_loaders=fabric`). Use Java 25 and
 
 1. Look at a chest, trapped chest, copper chest, or barrel and run `#deposit add`. Repeat for each storage chest. `#deposit set` is an alias for adding. All copper chest oxidation stages are supported, both waxed and unwaxed, as single or double chests. You can also use `#deposit set x y z` while that container is loaded. A saved copper chest remains valid if it oxidizes or its wax is changed.
 2. Run your usual mining command, for example `#mine diamond_ore deepslate_diamond_ore`.
-3. When two or fewer main-inventory slots are empty, mining pauses, visits the nearest usable saved container, unloads resources, returns to the mining position, and resumes the same job.
+3. When two or fewer main-inventory slots are empty, mining pauses, visits a matching saved container, unloads resources, returns to the mining position, and resumes the same job.
 
-The numbered storage list is saved per server/save, with a dimension for each entry. IDs remain stable after entries are removed. An older single chest point is imported automatically. It never chooses an unsaved nearby chest. Local chests are preferred before a supported portal trip; full, missing, blocked, or unreachable chests are skipped for the next saved entry. A trip can use several chests before returning to the mining site. Double chests are supported. Worn armor and offhand equipment are not transferred.
+The numbered storage list is saved per server/save, with a dimension for each entry. IDs remain stable after entries are removed. An older single chest point is imported automatically. It never chooses an unsaved nearby chest. Specific matching item rules and configured priorities take precedence, then local chests and distance; full, missing, blocked, or unreachable chests are skipped for the next saved entry. A trip can use several chests before returning to the mining site. Double chests are supported. Worn armor and offhand equipment are not transferred.
 
 | Command | Action |
 | --- | --- |
@@ -30,7 +30,7 @@ Ordinary deposits retain hotbar supplies, damageable equipment, food, equippable
 - `depositKeepItems`: extra retained items; defaults to torches, water buckets, empty buckets, and shields.
 - `depositProtectionRadius` (default `3`): protected cube around the saved chest.
 
-The bot only counts server-confirmed inventory changes as deposits. It reopens storage as needed to obtain authoritative contents when a correctly predicted transfer produces no server slot update. If every saved container is full, blocked, missing, inaccessible, or unreachable, mining stops and reports the problem. An unconfirmed transfer also stops the trip. Deposit trips do not drop items. An expected portal transition preserves the job; unexpected dimension changes, disconnects, death, and `#stop` cancel it. Fix the problem and restart the mining command. Numeric mining goals retain credit for confirmed deposits across return trips; completing a quantity goal makes a final deposit without returning to the mining site.
+The bot only counts server-confirmed inventory changes as deposits. It reopens storage as needed to obtain authoritative contents when a correctly predicted transfer produces no server slot update. If every saved container is full, blocked, missing, inaccessible, or unreachable, mining stops and reports the problem. An unconfirmed transfer also stops the trip. Deposit trips do not drop items. An expected portal transition preserves the job; unexpected dimension changes, disconnects, death, and `#stop` cancel it. Fix the problem and restart a direct mining command, or use `#job resume` for a queued job. Numeric mining goals retain credit for confirmed deposits across return trips; completing a quantity goal makes a final deposit without returning to the mining site.
 
 ## Optional waste cleanup
 
@@ -62,7 +62,7 @@ Old-world ore scans are invalidated after a dimension change. Stop, death, disco
 
 `fleeConflicts` defaults to `true`. While a bot task is active, nearby hostile mobs or a server damage event identifying an attacker trigger a temporary retreat. Player attackers are tracked by UUID; ordinary bystanders and environmental damage are not treated as attacks. Known neutral endermen/piglins require detected aggression or an actual attack. This does not automatically take over normal manual gameplay when no bot task is running.
 
-The bot closes an open container, interrupts depositing/mining/watching, and paths away using ordinary movement safety settings. `conflictMobRadius` defaults to 12 (bounded to 4–32); `conflictFleeDistance` defaults to 32 (bounded to 16–128), with at least 64 for wardens. Further attacks extend separation beyond the current attack distance, up to 128 blocks, so repeated ranged hits keep the bot moving. Once safely separated for five seconds, the interrupted job resumes. Repeated escape-path failures stop bot work and report the problem. This behavior retreats; it does not fight back or guarantee an escape from every terrain layout.
+The bot closes an open container, interrupts depositing/mining/watching, and paths away using ordinary movement safety settings. `conflictMobRadius` defaults to 12 (bounded to 4–32); `conflictFleeDistance` defaults to 32 (bounded to 16–128), with at least 64 for wardens. Further attacks extend separation beyond the current attack distance, up to 128 blocks, so repeated ranged hits keep the bot moving. Once safely separated for five seconds, the interrupted job resumes. Repeated escape-path failures stop bot work and report the problem. Retreat is the default. Optional defensive retaliation is described below; neither mode guarantees escape from every terrain layout.
 
 Use `#set fleeConflicts false` to disable it. `#pause` and `#stop` retain priority. Death, disconnects, and world changes clear remembered threats.
 
@@ -86,11 +86,108 @@ Storage containers are protected against breaking by default (`protectContainers
 
 For a base that must never be used as a mining shortcut, stand near its center and run `#protect 32` (choose a radius covering the build). This saves a cube extending 32 blocks in every direction. Pathfinding can walk through existing entrances but cannot plan block breaking or placement inside it. `#protect list` lists protection areas and `#protect clear` removes manual areas in this dimension. Each saved storage chest has automatic protection; removing its entry removes that automatic area. Manual protection areas are separate.
 
-Protected areas also prevent explicitly selecting those blocks as mining targets. Protection markers are persistent user waypoints with reserved names; do not rename them manually. These features do not implement historical player-placement detection, private-message authorization, or combat.
+Protected areas also prevent explicitly selecting those blocks as mining targets. Protection markers are persistent user waypoints with reserved names; do not rename them manually. Historical player-placement detection is unavailable to a normal client. Whisper authorization and optional defense are separate behaviors described below.
+
+## Trusted whisper control
+
+On the bot's own client, run `#trust add YourPlayerName` while that player is online. This saves the exact player UUID for this server/save, rather than trusting a nickname or a rendered chat prefix. Use `#trust list`, `#trust remove <name-or-UUID>`, and `#trust reload` to inspect, revoke, or reload access. UUIDs can be entered directly for offline players.
+
+From that player's account, send `/msg BotAccount #mine 32 netherite`. The bot queues the job and sends private acknowledgements, start/completion notices, and interruption reasons. Commands require the `#` prefix. The accepted remote commands are:
+
+| Whisper body | Action |
+| --- | --- |
+| `#mine 32 netherite` | Queue a finite mining job; a positive quantity is required remotely |
+| `#job mine 64 diamond_ore deepslate_diamond_ore` | Queue another mining request |
+| `#job status` / `#status` | Current task, queue size, progress, health, hunger, and waiting reason |
+| `#job list`, `pause`, `resume`, `remove <id>`, `cancel` | Manage the job queue |
+| `#pause` / `#resume` / `#stop` | Normal global task controls |
+| `#deposit now` / `all` / `status` / `list` | Deposit or query storage; configuration edits remain local |
+| `#stalk PlayerName` / `random` / `status` / `stop` | Distant watching using client-known positions |
+
+By default only signed, client-validated private chat with the incoming whisper chat type is accepted. Public chat, unsigned display overrides, untrusted senders, and arbitrary administrative commands cannot control the bot. Trust, settings, and chest-rule edits are local operations. Incoming commands and outgoing replies are paced and bounded; revoked/offline controllers do not receive queued replies.
+
+`bot-control.properties` is stored beside `mining-routes.properties` in the server/save's Baritone cache directory. It contains `trusted` (comma-separated UUIDs), `whisperTypes` (default `minecraft:msg_command_incoming`), `allowUnsignedServerWhispers=false`, and `unsignedWhisperFormat=`. Custom authenticated whisper chat types can be added to `whisperTypes`.
+
+Some server plugins replace whispers with unsigned system text. An explicit fallback is available by setting `allowUnsignedServerWhispers=true` and an exact format such as `unsignedWhisperFormat=[{sender} -> me] {command}`, then running `#trust reload`. Placeholders must appear once each in that order; the sender must resolve to a currently online profile whose UUID is trusted. The parser matches the whole message. This fallback trusts the server/plugin to prevent players from forging that format; it cannot authenticate arbitrary displayed text. Keep it disabled when the server preserves signed whispers. Profileless disguised-chat packets are not used as an authenticated source.
+
+## Jobs and interruptions
+
+Use `#job mine <quantity> <blocks...>` to queue a finite mining request. For example:
+
+```text
+#job mine 32 netherite
+#job mine 64 diamond_ore deepslate_diamond_ore
+#job status
+#job list
+```
+
+A maximum of 64 jobs is saved per server/save in `bot-jobs.properties`. New jobs wait for existing bot work and run in order. Mining quantity follows Baritone's existing semantics: matching carried items plus credited deposits, rather than a count of newly broken blocks. The same request survives normal storage, portal, survival, and conflict interruptions. A quantity already achieved remains credited if the client stops during its final deposit.
+
+`#job pause` holds the active job; `#job resume` retries its survival/sculk checks and continues the queue. `#job remove <id>` removes one request; `#job cancel` clears the queue and stops its active work. `#stop` stops current work and leaves saved requests paused. Starting another direct task also leaves queued work paused rather than allowing it to restart behind that command. If `#pause` was used, `#resume` is still needed to release that separate global pause.
+
+On client restart, death, disconnect, or an unexpected world change, saved requests require `#job resume`. They do not automatically start on reconnect. Status includes the actual controlling process, including a portal/deposit/retreat interruption. Failures pause the queue for inspection rather than silently skipping to the next job. Jobs submitted by a trusted controller send that controller concise private notifications.
+
+## Storage labels, rules, and supplies
+
+Containers are still registered with `#deposit add` and removed with `#deposit remove <id>`. Use the returned IDs to configure their purpose:
+
+```text
+#storage label 1 Ores
+#storage rule 1 ores
+#storage label 2 Supplies
+#storage rule 2 supplies
+#storage priority 1 10
+#storage list
+```
+
+| Rule | Accepted deposits |
+| --- | --- |
+| `any` | General fallback, the default for existing/new entries |
+| `ores` | Vanilla ores, raw metals, ingots/nuggets, and common mineral drops including ancient debris |
+| `building` | Block items outside the ore category |
+| `junk` | Items in `mineWasteItems` |
+| `supplies` | Food, equipment, explicitly reserved items, and usable building blocks |
+| `items diamond ancient_debris` | Exact item allowlist; namespace IDs support modded items |
+| `disabled` | No automated storage use |
+
+Syntax is `#storage rule <id> <rule> [items...]`, `#storage label <id> <name...>`, or `#storage priority <id> <-100..100>`. Specific matching categories precede `any` fallback chests. Higher priority wins before dimension/distance ordering within that group; overlapping categories can be resolved using priorities. Chest labels do not affect matching. A full/rejected chest is skipped for another matching registered chest. Rules also apply to `#deposit all`; that command overrides item reserves, not destination filters. Rule edits are blocked during a storage trip. Corrupt rules disable that entry until corrected.
+
+Resupply checks registered storage only, preferring the `supplies` role, then other enabled compatible storage. Ore-only and disabled entries are not supply sources. It withdraws only currently needed allowed food, usable replacement pickaxes, and safe building blocks, using whole-stack transfers and fresh server contents. It does not equip worn armor, use crafting/armor/offhand slots, or take unrelated resources. A restock target may be exceeded by part of one stack. Once minimum supplies are available, it returns to the saved work position. Missing, empty, protected, or unreachable supplies pause work with a reason.
+
+## Survival checks
+
+Survival is enabled by default (`botSurvival=true`). Before mining and during other active bot work, the bot checks food and health. Mining also requires a usable pickaxe, building reserves when placement is enabled, and an inventory-space/deposit plan. Ancient debris requires a diamond or netherite pickaxe. Near-broken tools are excluded from automatic tool selection and replacement selection. An available replacement is moved to the hotbar while stationary.
+
+The bot pauses to eat allowed food and recover low health. It never assumes eating or regeneration succeeded: the player's updated hunger/health drives the next decision. If supplies are low, `botAutoResupply=true` uses the saved supply route, including supported portal travel. Full inventories are unloaded first when possible. An inventory full of retained items, unavailable supplies, stalled food use, or absent regeneration pauses for attention. Use `#survival status` and `#survival retry` after fixing a direct task, or `#job resume` for a paused queued task.
+
+| Setting | Default |
+| --- | --- |
+| `botMinimumHealth` | 12 health points (6 hearts) |
+| `botEatAtHunger` | 16/20; food is also used for recovery below full health when hunger permits |
+| `botMinimumFood` / `botRestockFood` | 4 / 16 allowed food items |
+| `botMinimumBlocks` / `botRestockBlocks` | 16 / 128 building blocks; the minimum is skipped if placement is disabled |
+| `botToolReserve` | 32 durability remaining |
+| `botFoodItems` | Cooked meats/fish, bread, baked potatoes, carrots, golden carrots, and apples |
+
+Supply thresholds and timeouts are bounded in code. Food use keeps vanilla item-use held only while the care process controls the bot; pause, stop, conflict, and death release it. Ordinary deposits retain the fullest building stacks (using `mineWasteKeepStacks`, default two) while survival checks are enabled, including blocks restocked into the main inventory. Mining targets and `deposit all` keep their existing output/unload rules. The bot does not craft replacement equipment, farm food, or repair tools automatically.
+
+## Sculk-aware paths
+
+`mineAvoidSculk=true` is enabled by default. Loaded surroundings are scanned for ordinary/calibrated sensors and shriekers, with bounded same-world memory. Path calculations use an immutable hazard snapshot and add `sculkPathPenalty` (default 5000, increasing nearer a trigger). Automated block breaking/placement in those zones, and breaking sculk blocks themselves, is prohibited. Execution checks also protect against a previously planned breaking/placement action after discovery.
+
+`sculkAvoidRadius` defaults to 12 blocks and is bounded to 4–24. Calibrated sensors have at least a 20-block buffer. Encountering a nearby trigger or active shrieker interrupts work, closes the owned container, and selects a quiet exit. The bot crouches and disables sprint during the exit, waits briefly outside the zone, then resumes. Combat retreat can take priority while retaining the quiet movement preference. Repeated quiet-path failures pause work; `#stop` releases the task for manual movement, and `#job resume` retries a queued job after the route is fixed. Storage points inside a known sculk zone are skipped.
+
+The client cannot inspect unloaded terrain or prevent every server vibration. Crouching does not silence every action. This is conservative avoidance and an escape attempt, not a guarantee that a Warden can never spawn. Disabling sculk avoidance explicitly permits mining/placing in those areas again.
+
+## Optional defensive retaliation
+
+`#defense flee` is the default; `#defense defend` enables limited retaliation. `#defense status` reports the mode. The existing `fleeConflicts` switch controls conflict monitoring in either mode.
+
+Defend requires a confirmed, living attacker within close melee range, line of sight, more than 12 health, sufficient hunger, one nearby threat, and a usable sword/axe already on the hotbar. It uses normal attack cooldowns and an equipped offhand shield between attacks when available. It does not pursue targets or attack a trusted controller, and it never chooses melee against a Warden/creeper. Low health, multiple nearby threats, sculk escape, missing equipment, loss of range/sight, or the ten-second defense limit return to retreat. Food/recovery can run after separation. This is basic defensive behavior, not a full PvP combat system.
 
 ## Validation
 
-Run `bash scripts/check-mining-policies.sh` for dependency-free inventory, storage migration, construction, and observation/retreat policy checks (JDK 17 or later). Full Fabric validation requires Java 25 and the Gradle/Minecraft dependencies:
+Run `bash scripts/check-mining-policies.sh` for dependency-free inventory, storage migration/rules, trust, job persistence, survival, sculk, construction, and observation/retreat policy checks (JDK 17 or later). Full Fabric validation requires Java 25 and the Gradle/Minecraft dependencies:
 
 ```sh
 ./gradlew test :fabric:remapJar
@@ -114,3 +211,12 @@ Additional gameplay checks for multiple storage and passive behavior:
 - Add three chests, partially fill the nearest one, and confirm unloading continues into another. Block/remove a chest and confirm it is skipped. Remove an entry by ID, restart, and confirm its ID/location stays removed while remaining IDs do not change.
 - Trigger a hostile mob and a player attack during mining, during a chest transfer, and while watching. Confirm retreat closes the menu, reaches separation, and resumes the interrupted task after the quiet period. Test pause, stop, death, and disconnect during retreat.
 - Stalk a named visible player and a random player; check backing away, following, crouching, facing, obstructed sight, and a lost target. Confirm unloaded players use the bounded local search and that stop releases crouch and movement.
+
+Additional gameplay checks for control, jobs, supplies, and defense:
+
+- Trust one account, verify private commands work, and verify public chat, a different UUID, and a removed controller do not control the bot. Check the optional unsigned format only on a server whose plugin controls it.
+- Queue two finite jobs; interrupt with pause, storage, portals, low supplies, retreat, and death. Restart during the final deposit, verify the completed quantity remains credited, and confirm reconnect requires an explicit resume.
+- Assign ores/building/supplies/custom filters. Verify mixed inventory routes to matching chests, overlapping priorities are honored, and deposit all still obeys filters.
+- Run low on food, building blocks, and tool durability. Check successful restocking and an empty/protected/missing supply chest, including a full reserved inventory. Verify failed resupply does not discard equipment or take unrelated items.
+- Enter sensor/shrieker areas, including calibrated sensors, and compare a safe detour with a short noisy route. Check discovery during an existing path, blocked quiet exits, storage in hazard zones, and that stop releases crouch.
+- Compare flee and defend with one attacker, low health, multiple threats, a trusted controller, a ranged attacker, a creeper, and a Warden. Verify the time limit, attack cooldown, shield release, and no pursuit.

@@ -58,7 +58,7 @@ public final class SurvivalProcess extends BaritoneProcessHelper implements IBeh
                 return baritone.getMineProcess().targetsAncientDebris() ? "Need a diamond/netherite pickaxe with usable durability" : "Need a pickaxe with usable durability";
             if (BotInventory.needsBlocks(ctx)) return "Need building blocks (minimum " + SurvivalPolicy.bounded(Baritone.settings().botMinimumBlocks.value, 0, 128) + ")";
             boolean full = BotInventory.slot(ctx, ItemStack::isEmpty) < 0;
-            if (full && (!Baritone.settings().mineAutoDeposit.value || MiningRouteAccess.deposits(ctx).isEmpty())) return "Inventory full; enable deposits and register storage or free inventory space";
+            if (full && !baritone.getMineProcess().isCleaningWaste() && (!Baritone.settings().mineAutoDeposit.value || MiningRouteAccess.deposits(ctx).isEmpty())) return "Inventory full; enable deposits and register storage or free inventory space";
         }
         return null;
     }
@@ -112,7 +112,9 @@ public final class SurvivalProcess extends BaritoneProcessHelper implements IBeh
             if (!Baritone.settings().botAutoResupply.value) { waitForHelp(missing + "; automatic resupply is disabled"); return pause(); }
             if (BotInventory.slot(ctx, ItemStack::isEmpty) < 0) {
                 if (Baritone.settings().mineAutoDeposit.value && baritone.getMineProcess().isActive()) {
-                    try { baritone.getDepositProcess().start(false); stage = Stage.SUPPLY; return pause(); }
+                    try { baritone.getDepositProcess().start(false);
+                        if (!baritone.getDepositProcess().isActive()) { waitForHelp("Inventory is full of retained supplies; free a slot for resupply"); return pause(); }
+                        stage = Stage.SUPPLY; return pause(); }
                     catch (RuntimeException e) { waitForHelp(missing + "; no room to restock: " + e.getMessage()); return pause(); }
                 }
                 waitForHelp(missing + "; free an inventory slot to restock"); return pause();
@@ -151,7 +153,7 @@ public final class SurvivalProcess extends BaritoneProcessHelper implements IBeh
         boolean release = ownsUse; ownsUse = false;
         if (ctx.player() != null) {
             if (release && ctx.player().isUsingItem() && ctx.minecraft().gameMode != null) ctx.minecraft().gameMode.releaseUsingItem(ctx.player());
-            if (previousSlot >= 0) { ctx.player().getInventory().setSelectedSlot(previousSlot); ctx.playerController().syncHeldItem(); }
+            if (previousSlot >= 0) { ctx.player().getInventory().setSelectedSlot(previousSlot); if (ctx.minecraft().gameMode != null) ctx.playerController().syncHeldItem(); }
         }
         previousSlot = -1;
     }

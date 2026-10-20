@@ -23,7 +23,7 @@ import java.util.*;
 public final class SculkPolicy {
     private SculkPolicy() {}
     public record Zone(int x, int y, int z, int radius) {
-        public Zone { radius = SurvivalPolicy.bounded(radius, 4, 16); }
+        public Zone { radius = SurvivalPolicy.bounded(radius, 4, 24); }
         public double distanceSquared(int px, int py, int pz) {
             return Math.pow((double) px - x, 2) + Math.pow((double) py - y, 2) + Math.pow((double) pz - z, 2);
         }

@@ -45,10 +45,11 @@ public final class SculkProcess extends BaritoneProcessHelper implements IBehavi
     private int quietTicks, failures;
     private List<GoalRetreat.Threat> exitZones = List.of();
     public SculkProcess(Baritone bot) { super(bot); }
-    public SculkPolicy.Snapshot snapshot() { return snapshot; }
+    public SculkPolicy.Snapshot snapshot() { return observed == ctx.world() ? snapshot : SculkPolicy.Snapshot.EMPTY; }
     @Override public boolean isActive() { return active; }
     @Override public boolean isTemporary() { return true; }
     @Override public double priority() { return -0.15; }
+    public void retry() { blocked = false; failures = 0; }
     public boolean quiet() {
         return active && (baritone.getPathingControlManager().mostRecentInControl().orElse(null) == this
                 || baritone.getPathingControlManager().mostRecentInControl().orElse(null) == baritone.getConflictProcess());
@@ -63,7 +64,7 @@ public final class SculkProcess extends BaritoneProcessHelper implements IBehavi
         if (now - lastScan < 500 && scanOrigin != null && scanOrigin.distSqr(ctx.playerFeet()) < 16) return;
         lastScan = now; scanOrigin = ctx.playerFeet().immutable();
         boolean discovered = false, alarm = false;
-        int radius = Math.max(4, Math.min(16, Baritone.settings().sculkAvoidRadius.value));
+        int radius = Math.max(4, Math.min(24, Baritone.settings().sculkAvoidRadius.value));
         BlockPos.MutableBlockPos cursor = new BlockPos.MutableBlockPos();
         for (int dx = -24; dx <= 24; dx++) for (int dz = -24; dz <= 24; dz++) {
             int x = scanOrigin.getX() + dx, z = scanOrigin.getZ() + dz;
@@ -76,8 +77,8 @@ public final class SculkProcess extends BaritoneProcessHelper implements IBehavi
                 if (trigger) {
                     BlockPos key = cursor.immutable();
                     if (!known.containsKey(key)) discovered = true;
-                    known.put(key, new SculkPolicy.Zone(x, cursor.getY(), z, radius));
-                    if (state.hasProperty(BlockStateProperties.SHRIEKING) && state.getValue(BlockStateProperties.SHRIEKING)) alarm = true;
+                    known.put(key, new SculkPolicy.Zone(x, cursor.getY(), z, id.equals("calibrated_sculk_sensor") ? Math.max(20, radius) : radius));
+                    if (cursor.distSqr(scanOrigin) <= 24 * 24 && state.hasProperty(BlockStateProperties.SHRIEKING) && state.getValue(BlockStateProperties.SHRIEKING)) alarm = true;
                 } else known.remove(cursor);
             }
         }
@@ -94,6 +95,7 @@ public final class SculkProcess extends BaritoneProcessHelper implements IBehavi
             if (!active) {
                 active = true; quietTicks = failures = 0;
                 baritone.getDepositProcess().suspendForConflict();
+                if (ctx.player().containerMenu != ctx.player().inventoryMenu) ctx.player().closeContainer();
                 baritone.getInputOverrideHandler().clearAllKeys(); ctx.playerController().resetBlockRemoving();
                 baritone.getPathingBehavior().softCancelIfSafe();
                 logDirect("Sculk detected nearby; leaving quietly before resuming");

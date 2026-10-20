@@ -77,9 +77,11 @@ public final class JobManager extends BaritoneProcessHelper implements IBehavior
             return net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(block.getBlock()).toString();
         }).toList();
         JobStore.Job job = new JobStore.Job(nextId++, quantity, blocks, 0, requestOwner);
+        List<JobStore.Job> updated = new ArrayList<>(queue); updated.add(job);
+        store.write(updated);
         boolean empty = queue.isEmpty(); queue.add(job);
         if (empty) { paused = false; reason = "Waiting for current bot work to finish"; }
-        save(); return job.id();
+        return job.id();
     }
     public void pauseJobs() {
         ensureLoaded(); paused = true; reason = "Paused by controller"; save();
@@ -87,7 +89,7 @@ public final class JobManager extends BaritoneProcessHelper implements IBehavior
     }
     public void resumeJobs() {
         ensureLoaded(); if (queue.isEmpty()) throw new IllegalStateException("No queued jobs");
-        baritone.getSurvivalProcess().retry(); paused = false; reason = "Ready to resume"; save();
+        save(); baritone.getSurvivalProcess().retry(); baritone.getSculkProcess().retry(); paused = false; reason = "Ready to resume";
     }
     public void cancelJobs() {
         ensureLoaded(); stopOwnedWork(); queue.clear(); current = null; paused = true; completedMining = false;
@@ -109,7 +111,7 @@ public final class JobManager extends BaritoneProcessHelper implements IBehavior
         ensureLoaded();
         String task = baritone.getPathingControlManager().mostRecentInControl().map(p -> p.displayName()).orElse("Idle");
         String result = (queue.isEmpty() ? "Idle" : (paused ? "Paused" : "Running")) + "; " + queue.size() + " job(s); " + reason + "; " + task;
-        if (current != null) result += "; job #" + current.id() + " " + (completedMining ? current.quantity() : baritone.getMineProcess().jobProgress()) + "/" + current.quantity();
+        if (current != null) result += "; job #" + current.id() + " " + (completedMining ? current.quantity() : Math.max(current.deposited(), baritone.getMineProcess().jobProgress())) + "/" + current.quantity();
         if (ctx.player() != null) result += "; health " + Math.round(ctx.player().getHealth()) + "/" + Math.round(ctx.player().getMaxHealth())
                 + "; hunger " + ctx.player().getFoodData().getFoodLevel() + "/20";
         return result;

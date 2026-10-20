@@ -78,6 +78,7 @@ public final class BotPolicyChecks {
             var zone = new SculkPolicy.Zone(-32, 64, -32, 12);
             var snapshot = new SculkPolicy.Snapshot(List.of(zone));
             check(snapshot.contains(-20, 64, -32) && !snapshot.contains(-19, 64, -32), "Hazard index respects exact radius across negative cell boundaries");
+            check(new SculkPolicy.Snapshot(List.of(new SculkPolicy.Zone(31, 64, 31, 20))).contains(51, 64, 31), "Calibrated sensor buffer spans index cells");
             check(!snapshot.contains(-32, 77, -32), "Vertical separation is included");
             check(snapshot.penalty(-32, 64, -32) > snapshot.penalty(-21, 64, -32), "Path costs prefer leaving the sensor zone");
             check(SculkPolicy.sculk("calibrated_sculk_sensor") && SculkPolicy.sculk("sculk_vein") && !SculkPolicy.sculk("stone"), "Protect all sculk blocks, including calibrated sensors");
