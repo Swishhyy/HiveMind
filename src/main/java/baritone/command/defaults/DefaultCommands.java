@@ -62,6 +62,7 @@ public final class DefaultCommands {
                 new FindCommand(baritone),
                 new MineCommand(baritone),
                 new DepositCommand(baritone),
+                new PortalCommand(baritone),
                 new ProtectCommand(baritone),
                 new ClickCommand(baritone),
                 new SurfaceCommand(baritone),

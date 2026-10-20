@@ -74,6 +74,7 @@ public class Baritone implements IBaritone {
     private final FollowProcess followProcess;
     private final MineProcess mineProcess;
     private final DepositProcess depositProcess;
+    private final PortalTravelProcess portalTravelProcess;
     private final GetToBlockProcess getToBlockProcess;
     private final CustomGoalProcess customGoalProcess;
     private final BuilderProcess builderProcess;
@@ -118,6 +119,7 @@ public class Baritone implements IBaritone {
             this.followProcess           = this.registerProcess(FollowProcess::new);
             this.mineProcess             = this.registerProcess(MineProcess::new);
             this.depositProcess          = this.registerProcess(DepositProcess::new);
+            this.portalTravelProcess     = this.registerProcess(PortalTravelProcess::new);
             this.customGoalProcess       = this.registerProcess(CustomGoalProcess::new); // very high iq
             this.getToBlockProcess       = this.registerProcess(GetToBlockProcess::new);
             this.builderProcess          = this.registerProcess(BuilderProcess::new);
@@ -131,6 +133,7 @@ public class Baritone implements IBaritone {
         this.worldProvider = new WorldProvider(this);
         this.selectionManager = new SelectionManager(this);
         this.commandManager = new CommandManager(this);
+        this.registerBehavior(this.portalTravelProcess);
     }
 
     public void registerBehavior(IBehavior behavior) {
@@ -205,6 +208,10 @@ public class Baritone implements IBaritone {
 
     public DepositProcess getDepositProcess() {
         return this.depositProcess;
+    }
+
+    public PortalTravelProcess getPortalTravelProcess() {
+        return this.portalTravelProcess;
     }
 
     @Override

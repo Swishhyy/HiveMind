@@ -296,6 +296,15 @@ public final class Settings {
     /** Block-breaking protection around a saved deposit chest. Does not prevent walking through the area. */
     public final Setting<Integer> depositProtectionRadius = new Setting<>(3);
 
+    /** Route ancient debris mining through a known Nether portal when started in the Overworld. */
+    public final Setting<Boolean> mineTravelBetweenDimensions = new Setting<>(true);
+
+    /** Exploration height for ancient debris when no known debris targets are available. */
+    public final Setting<Integer> ancientDebrisYLevel = new Setting<>(15);
+
+    /** Maximum time to wait inside a Nether portal for the server to change dimensions. */
+    public final Setting<Long> miningPortalTimeoutMS = new Setting<>(45000L);
+
     /**
      * A list of blocks to be treated as if they're air.
      * <p>

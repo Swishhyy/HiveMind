@@ -137,6 +137,14 @@ public final class GameEventHandler implements IEventBus, Helper {
     public final void onWorldEvent(WorldEvent event) {
         WorldProvider cache = baritone.getWorldProvider();
 
+        if (event.getState() == EventState.PRE) {
+            // Never carry a path segment or forced inputs into a different dimension.
+            boolean preserve = baritone.getPortalTravelProcess().canPreserveTransition(event);
+            baritone.getPathingBehavior().secretInternalSegmentCancel();
+            baritone.getInputOverrideHandler().clearAllKeys();
+            baritone.getPathingControlManager().cancelEverything(preserve);
+        }
+
         if (event.getState() == EventState.POST) {
             cache.closeWorld();
             if (event.getWorld() != null) {

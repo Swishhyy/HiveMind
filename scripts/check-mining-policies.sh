@@ -10,5 +10,8 @@ fi
 "${task_javac[@]}" -d "$task_classes" \
     src/main/java/baritone/utils/mining/ConstructionPolicy.java \
     src/main/java/baritone/utils/mining/DepositPolicy.java \
-    src/test/java/baritone/utils/mining/MiningPolicyChecks.java
+    src/main/java/baritone/utils/mining/WorldRoutes.java \
+    src/test/java/baritone/utils/mining/MiningPolicyChecks.java \
+    src/test/java/baritone/utils/mining/WorldRouteChecks.java
 java -cp "$task_classes" baritone.utils.mining.MiningPolicyChecks
+java -cp "$task_classes" baritone.utils.mining.WorldRouteChecks

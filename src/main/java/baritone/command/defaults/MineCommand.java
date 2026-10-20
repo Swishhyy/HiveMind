@@ -24,6 +24,7 @@ import baritone.api.command.argument.IArgConsumer;
 import baritone.api.command.datatypes.ForBlockOptionalMeta;
 import baritone.api.command.exception.CommandException;
 import baritone.api.utils.BlockOptionalMeta;
+import net.minecraft.world.level.block.Blocks;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -42,8 +43,9 @@ public class MineCommand extends Command {
         args.requireMin(1);
         List<BlockOptionalMeta> boms = new ArrayList<>();
         while (args.hasAny()) {
-            boms.add(args.getDatatypeFor(ForBlockOptionalMeta.INSTANCE));
+            boms.add(consumeTarget(args));
         }
+        baritone.getPathingBehavior().cancelEverything();
         BaritoneAPI.getProvider().getWorldScanner().repack(ctx);
         logDirect(String.format("Mining %s", boms.toString()));
         baritone.getMineProcess().mine(quantity, boms.toArray(new BlockOptionalMeta[0]));
@@ -53,9 +55,19 @@ public class MineCommand extends Command {
     public Stream<String> tabComplete(String label, IArgConsumer args) throws CommandException {
         args.getAsOrDefault(Integer.class, 0);
         while (args.has(2)) {
-            args.getDatatypeFor(ForBlockOptionalMeta.INSTANCE);
+            consumeTarget(args);
         }
-        return args.tabCompleteDatatype(ForBlockOptionalMeta.INSTANCE);
+        String prefix = args.peekString().toLowerCase(java.util.Locale.ROOT);
+        return Stream.concat(args.tabCompleteDatatype(ForBlockOptionalMeta.INSTANCE),
+                "netherite".startsWith(prefix) ? Stream.of("netherite") : Stream.empty());
+    }
+
+    private BlockOptionalMeta consumeTarget(IArgConsumer args) throws CommandException {
+        if (args.peekString().equalsIgnoreCase("netherite") || args.peekString().equalsIgnoreCase("minecraft:netherite")) {
+            args.getString();
+            return new BlockOptionalMeta(Blocks.ANCIENT_DEBRIS);
+        }
+        return args.getDatatypeFor(ForBlockOptionalMeta.INSTANCE);
     }
 
     @Override
@@ -73,7 +85,9 @@ public class MineCommand extends Command {
                 "Also see the legitMine settings (see #set l legitMine).",
                 "",
                 "Usage:",
-                "> mine diamond_ore - Mines all diamonds it can find."
+                "> mine diamond_ore - Mines all diamonds it can find.",
+                "> mine 32 netherite - Travels to the Nether and mines 32 ancient debris.",
+                "Save an active Nether portal with portal set; a saved deposit chest can be in the Overworld."
         );
     }
 }

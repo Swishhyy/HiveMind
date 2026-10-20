@@ -18,7 +18,6 @@
 package baritone.process;
 
 import baritone.Baritone;
-import baritone.api.cache.IWorldData;
 import baritone.api.pathing.goals.GoalGetToBlock;
 import baritone.api.pathing.goals.GoalNear;
 import baritone.api.process.PathingCommand;
@@ -27,7 +26,8 @@ import baritone.api.utils.Rotation;
 import baritone.api.utils.RotationUtils;
 import baritone.utils.BaritoneProcessHelper;
 import baritone.utils.mining.DepositPolicy;
-import baritone.utils.mining.MiningWaypoints;
+import baritone.utils.mining.MiningRouteAccess;
+import baritone.utils.mining.WorldRoutes;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.component.DataComponents;
@@ -44,13 +44,16 @@ import net.minecraft.world.phys.Vec3;
 import java.util.HashSet;
 import java.util.Optional;
 import java.util.Set;
+import java.nio.file.Path;
 
 /** A temporary mining interruption. It never drops items or transfers worn equipment. */
 public final class DepositProcess extends BaritoneProcessHelper {
     private enum Stage { IDLE, TRAVEL, OPEN, TRANSFER, RETURN }
 
     private Stage stage = Stage.IDLE;
-    private IWorldData tripWorld;
+    private Path tripRoot;
+    private String depositDimension;
+    private String returnDimension;
     private BlockPos chest;
     private BlockPos returnTo;
     private boolean depositAll;
@@ -73,28 +76,32 @@ public final class DepositProcess extends BaritoneProcessHelper {
     }
 
     public boolean shouldStartAutomatic() {
-        if (isActive() || !Baritone.settings().mineAutoDeposit.value || ctx.player() == null
-                || MiningWaypoints.deposit(ctx.worldData()) == null) {
+        if (isActive() || !Baritone.settings().mineAutoDeposit.value || ctx.player() == null) {
             return false;
         }
         long empty = ctx.player().getInventory().getNonEquipmentItems().stream().limit(36).filter(ItemStack::isEmpty).count();
         int threshold = Math.max(0, Math.min(35, Baritone.settings().mineDepositFreeSlots.value));
-        return empty <= threshold && firstTransferable(false).isPresent();
+        return empty <= threshold && MiningRouteAccess.deposit(ctx) != null && firstTransferable(false).isPresent();
     }
 
     public void start(boolean all) {
         if (isActive()) {
             throw new IllegalStateException("A deposit trip is already running");
         }
-        BlockPos saved = MiningWaypoints.deposit(ctx.worldData());
+        WorldRoutes.Endpoint saved = MiningRouteAccess.deposit(ctx);
         if (saved == null) {
             throw new IllegalStateException("Look at a chest and run deposit set first");
         }
         if (ctx.player().containerMenu != ctx.player().inventoryMenu) {
             throw new IllegalStateException("Close the current container before starting a deposit trip");
         }
-        chest = saved.immutable();
-        tripWorld = ctx.worldData();
+        if (!saved.dimension().equals(MiningRouteAccess.dimension(ctx)) && !Baritone.settings().mineTravelBetweenDimensions.value) {
+            throw new IllegalStateException("The deposit chest is in another dimension and dimension travel is disabled");
+        }
+        chest = MiningRouteAccess.position(saved);
+        tripRoot = MiningRouteAccess.root(ctx);
+        depositDimension = saved.dimension();
+        returnDimension = MiningRouteAccess.dimension(ctx);
         if (all) {
             baritone.getMineProcess().cancel();
         }
@@ -104,6 +111,12 @@ public final class DepositProcess extends BaritoneProcessHelper {
         refusedSlots.clear();
         transition(Stage.TRAVEL);
         logDirect("Returning to the deposit chest" + (all ? " (empty main inventory)" : " (keep supplies)"));
+    }
+
+    public void startFinalDeposit() {
+        start(false);
+        returnTo = null;
+        returnDimension = null;
     }
 
     @Override
@@ -123,14 +136,29 @@ public final class DepositProcess extends BaritoneProcessHelper {
 
     @Override
     public PathingCommand onTick(boolean calcFailed, boolean isSafeToCancel) {
-        if (ctx.player() == null || ctx.world() == null || tripWorld != ctx.worldData()) {
-            return fail("world or dimension changed");
+        try {
+            return depositTick(calcFailed, isSafeToCancel);
+        } catch (IllegalStateException e) {
+            return fail(e.getMessage());
+        }
+    }
+
+    private PathingCommand depositTick(boolean calcFailed, boolean isSafeToCancel) {
+        if (ctx.player() == null || ctx.world() == null || !tripRoot.equals(MiningRouteAccess.root(ctx))) {
+            return fail("the server or save changed");
         }
         if (calcFailed) {
             return fail("no usable route to " + (stage == Stage.RETURN ? "the mining site" : "the deposit chest"));
         }
         if (++stageTicks > ((stage == Stage.TRAVEL || stage == Stage.RETURN) ? 12000 : 1800)) {
             return fail("deposit trip timed out");
+        }
+        String currentDimension = MiningRouteAccess.dimension(ctx);
+        String requiredDimension = stage == Stage.RETURN ? returnDimension : depositDimension;
+        if (!currentDimension.equals(requiredDimension)) {
+            if (!Baritone.settings().mineTravelBetweenDimensions.value) return fail("dimension travel is disabled");
+            baritone.getPortalTravelProcess().start(requiredDimension);
+            return pause();
         }
         if (stage != Stage.RETURN && ctx.world().hasChunkAt(chest)
                 && !supports(ctx.world().getBlockState(chest).getBlock())) {
@@ -308,7 +336,8 @@ public final class DepositProcess extends BaritoneProcessHelper {
         pendingStack = null;
         openRequested = false;
         depositAll = false;
-        tripWorld = null;
+        tripRoot = null;
+        depositDimension = returnDimension = null;
         returnTo = null;
         refusedSlots.clear();
     }

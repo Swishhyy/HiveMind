@@ -27,6 +27,8 @@ import baritone.api.command.exception.CommandInvalidStateException;
 import baritone.api.command.helpers.TabCompleteHelper;
 import baritone.process.DepositProcess;
 import baritone.utils.mining.MiningWaypoints;
+import baritone.utils.mining.MiningRouteAccess;
+import baritone.utils.mining.WorldRoutes;
 import net.minecraft.core.BlockPos;
 
 import java.util.List;
@@ -54,6 +56,7 @@ public final class DepositCommand extends Command {
                 throw new CommandInvalidStateException("The selected position must be a loaded chest, trapped chest, or barrel");
             }
             MiningWaypoints.setDeposit(ctx.worldData(), pos);
+            MiningRouteAccess.store(ctx).setDeposit(MiningRouteAccess.endpoint(ctx, pos));
             instance.getPathingBehavior().softCancelIfSafe();
             logDirect("Deposit chest saved at " + pos + " for this world and dimension");
         } else {
@@ -64,11 +67,12 @@ public final class DepositCommand extends Command {
                         throw new CommandInvalidStateException("Stop the deposit trip before clearing its destination");
                     }
                     MiningWaypoints.clearDeposit(ctx.worldData());
+                    MiningRouteAccess.store(ctx).clearDeposit(MiningRouteAccess.dimension(ctx));
                     logDirect("Deposit chest cleared");
                     break;
                 case "status":
-                    BlockPos pos = MiningWaypoints.deposit(ctx.worldData());
-                    logDirect(pos == null ? "No deposit chest saved in this dimension" : "Deposit chest: " + pos);
+                    WorldRoutes.Endpoint saved = MiningRouteAccess.deposit(ctx);
+                    logDirect(saved == null ? "No deposit chest saved for this server/save" : "Deposit chest: " + saved);
                     if (process.isActive()) logDirect(process.displayName());
                     break;
                 case "now":

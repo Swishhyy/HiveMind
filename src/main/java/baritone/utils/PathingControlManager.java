@@ -61,11 +61,20 @@ public class PathingControlManager implements IPathingControlManager {
     }
 
     public void cancelEverything() { // called by PathingBehavior on TickEvent Type OUT
+        cancelEverything(false);
+    }
+
+    /** Preserve only mining work during a bounded, connected, expected portal transfer. User stop never uses this. */
+    public void cancelEverything(boolean preservePortalWork) {
         inControlLastTick = null;
         inControlThisTick = null;
         command = null;
         active.clear();
         for (IBaritoneProcess proc : processes) {
+            if (preservePortalWork && (proc == baritone.getMineProcess() || proc == baritone.getDepositProcess()
+                    || proc == baritone.getPortalTravelProcess())) {
+                continue;
+            }
             proc.onLostControl();
             if (proc.isActive() && !proc.isTemporary()) { // it's okay only for a temporary thing (like combat pause) to maintain control even if you say to cancel
                 throw new IllegalStateException(proc.displayName() + " stayed active after being cancelled");

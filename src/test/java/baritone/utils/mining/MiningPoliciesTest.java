@@ -24,4 +24,9 @@ public final class MiningPoliciesTest {
     public void miningPoliciesPreserveSuppliesAndContainerBoundaries() {
         MiningPolicyChecks.runAll();
     }
+
+    @Test
+    public void routesPersistWithoutCrossingServerOrDimensionBoundaries() throws java.io.IOException {
+        WorldRouteChecks.runAll();
+    }
 }
