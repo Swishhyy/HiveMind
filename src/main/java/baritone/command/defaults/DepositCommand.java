@@ -53,7 +53,7 @@ public final class DepositCommand extends Command {
                 throw new CommandInvalidStateException("Stop the deposit trip before changing its destination");
             }
             if (!ctx.world().hasChunkAt(pos) || !DepositProcess.supports(ctx.world().getBlockState(pos).getBlock())) {
-                throw new CommandInvalidStateException("The selected position must be a loaded chest, trapped chest, or barrel");
+                throw new CommandInvalidStateException("The selected position must be a loaded chest, trapped chest, copper chest (any oxidation or wax state), or barrel");
             }
             MiningWaypoints.setDeposit(ctx.worldData(), pos);
             MiningRouteAccess.store(ctx).setDeposit(MiningRouteAccess.endpoint(ctx, pos));
@@ -103,6 +103,7 @@ public final class DepositCommand extends Command {
     @Override
     public List<String> getLongDesc() {
         return List.of("deposit set [x y z] - Save the chest you are looking at, or an exact chest position.",
+                "Supports regular and trapped chests, barrels, and all waxed/unwaxed copper chest variants.",
                 "deposit [now] - Unload resources, including mining output in the hotbar; keep reserved supplies.",
                 "deposit all - Stop mining and empty the main inventory and hotbar; worn equipment stays equipped.",
                 "deposit status / clear - Show or forget the saved chest.",

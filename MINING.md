@@ -4,7 +4,7 @@ This fork builds Fabric by default (`available_loaders=fabric`). Use Java 25 and
 
 ## Deposit chest
 
-1. Look at a chest, trapped chest, or barrel and run `#deposit set`. You can also use `#deposit set x y z` while that container is loaded.
+1. Look at a chest, trapped chest, copper chest, or barrel and run `#deposit set`. All copper chest oxidation stages are supported, both waxed and unwaxed, as single or double chests. You can also use `#deposit set x y z` while that container is loaded. A saved copper chest remains valid if it oxidizes or its wax is changed.
 2. Run your usual mining command, for example `#mine diamond_ore deepslate_diamond_ore`.
 3. When two or fewer main-inventory slots are empty, mining pauses, returns to that exact container, unloads resources, returns to the mining position, and resumes the same job.
 
@@ -52,7 +52,7 @@ Minecraft clients do not receive historical ownership for ordinary blocks. A sto
 
 `preferAvoidConstruction=true` adds a large cost (default `constructionBreakPenalty=1000` ticks **per block**) for breaking likely construction: planks, stairs, slabs, bricks, glass, concrete, wool, doors, fences, redstone devices, and similar materials. `additionalConstructionBlocks` extends this to other blocks. This is a strong preference: it can still choose breaking when a detour is too costly or unavailable. Generated structures may contain the same materials and receive the same penalty.
 
-Storage containers are protected against breaking by default (`protectContainers=true`). This includes chests, barrels, shulker boxes, furnaces, hoppers, and similar storage. Turning off the construction preference does not turn off container or marked-area protection.
+Storage containers are protected against breaking by default (`protectContainers=true`). This includes chests (including every waxed and unwaxed copper variant), barrels, shulker boxes, furnaces, hoppers, and similar storage. Turning off the construction preference does not turn off container or marked-area protection.
 
 For a base that must never be used as a mining shortcut, stand near its center and run `#protect 32` (choose a radius covering the build). This saves a cube extending 32 blocks in every direction. Pathfinding can walk through existing entrances but cannot plan block breaking or placement inside it. `#protect list` lists protection areas and `#protect clear` removes manual areas in this dimension. The deposit chest's automatic protection remains.
 

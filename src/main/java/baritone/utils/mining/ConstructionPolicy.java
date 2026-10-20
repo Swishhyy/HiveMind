@@ -22,7 +22,7 @@ import java.util.Set;
 /** Pure material heuristics. Minecraft does not transmit a block's placement history. */
 public final class ConstructionPolicy {
     private static final Set<String> CONTAINERS = Set.of(
-            "chest", "trapped_chest", "ender_chest", "barrel", "hopper", "furnace",
+            "chest", "trapped_chest", "copper_chest", "ender_chest", "barrel", "hopper", "furnace",
             "blast_furnace", "smoker", "dispenser", "dropper", "brewing_stand", "shulker_box");
     private static final Set<String> MATERIALS = Set.of(
             "cobblestone", "mossy_cobblestone", "smooth_stone", "bricks", "stone_bricks",
@@ -40,7 +40,7 @@ public final class ConstructionPolicy {
     private ConstructionPolicy() {}
 
     public static boolean isContainer(String path) {
-        return CONTAINERS.contains(path) || path.endsWith("_shulker_box");
+        return CONTAINERS.contains(path) || path.endsWith("_shulker_box") || path.endsWith("_copper_chest");
     }
 
     public static boolean isConstruction(String path) {

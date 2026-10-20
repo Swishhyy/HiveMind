@@ -39,6 +39,7 @@ import net.minecraft.world.inventory.ContainerInput;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.CopperChestBlock;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.Vec3;
 
@@ -74,7 +75,8 @@ public final class DepositProcess extends BaritoneProcessHelper {
     }
 
     public static boolean supports(Block block) {
-        return block == Blocks.CHEST || block == Blocks.TRAPPED_CHEST || block == Blocks.BARREL;
+        return block == Blocks.CHEST || block == Blocks.TRAPPED_CHEST || block == Blocks.BARREL
+                || block instanceof CopperChestBlock;
     }
 
     public boolean shouldStartAutomatic() {
