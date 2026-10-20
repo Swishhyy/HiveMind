@@ -332,7 +332,11 @@ public final class StalkProcess extends BaritoneProcessHelper implements IBehavi
         }
         int tolerance=StealthPolicy.bounded(Baritone.settings().stalkPositionTolerance.value,4,32);
         if(vantageAnchor!=null&&vantageAnchor.distSqr(target.blockPosition())>tolerance*tolerance) {
-            vantage=null;failedVantages.clear();vantageAnchor=null;
+            // A moving target need not invalidate a destination that still offers the same useful view.
+            if(vantage==null||!WatchPolicy.inRange(Math.hypot(vantage.getX()+0.5-target.getX(),vantage.getZ()+0.5-target.getZ()),
+                    vantage.getY()-target.getY(),distance(),tolerance,Baritone.settings().stalkVerticalRange.value,true)
+                    ||!clearRay(new Vec3(vantage.getX()+0.5,vantage.getY()+1.27,vantage.getZ()+0.5),target.getEyePosition()))vantage=null;
+            failedVantages.clear();vantageAnchor=target.blockPosition().immutable();
         }
         // Keep the chosen destination while travelling. Re-scoring every second caused visible zigzags.
         if(vantage!=null) {
