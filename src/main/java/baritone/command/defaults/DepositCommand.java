@@ -103,7 +103,7 @@ public final class DepositCommand extends Command {
     @Override
     public List<String> getLongDesc() {
         return List.of("deposit set [x y z] - Save the chest you are looking at, or an exact chest position.",
-                "deposit [now] - Unload resources, retaining hotbar items, food, and equipment by default.",
+                "deposit [now] - Unload resources, including mining output in the hotbar; keep reserved supplies.",
                 "deposit all - Stop mining and empty the main inventory and hotbar; worn equipment stays equipped.",
                 "deposit status / clear - Show or forget the saved chest.",
                 "With mineAutoDeposit enabled, mining returns automatically when inventory space runs low.",

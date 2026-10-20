@@ -606,4 +606,8 @@ public final class MineProcess extends BaritoneProcessHelper implements IMinePro
             depositedQuantity = (int) Math.min(Integer.MAX_VALUE, (long) depositedQuantity + count);
         }
     }
+
+    BlockOptionalMetaLookup depositTargets() {
+        return filter;
+    }
 }

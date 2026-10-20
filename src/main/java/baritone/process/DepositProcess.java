@@ -24,6 +24,7 @@ import baritone.api.process.PathingCommand;
 import baritone.api.process.PathingCommandType;
 import baritone.api.utils.Rotation;
 import baritone.api.utils.RotationUtils;
+import baritone.api.utils.BlockOptionalMetaLookup;
 import baritone.utils.BaritoneProcessHelper;
 import baritone.utils.mining.DepositPolicy;
 import baritone.utils.mining.MiningRouteAccess;
@@ -57,6 +58,7 @@ public final class DepositProcess extends BaritoneProcessHelper {
     private BlockPos chest;
     private BlockPos returnTo;
     private boolean depositAll;
+    private BlockOptionalMetaLookup miningOutputs;
     private AbstractContainerMenu openedMenu;
     private boolean openRequested;
     private int stageTicks;
@@ -99,6 +101,7 @@ public final class DepositProcess extends BaritoneProcessHelper {
             throw new IllegalStateException("The deposit chest is in another dimension and dimension travel is disabled");
         }
         chest = MiningRouteAccess.position(saved);
+        miningOutputs = baritone.getMineProcess().depositTargets();
         tripRoot = MiningRouteAccess.root(ctx);
         depositDimension = saved.dimension();
         returnDimension = MiningRouteAccess.dimension(ctx);
@@ -294,9 +297,10 @@ public final class DepositProcess extends BaritoneProcessHelper {
                 continue;
             }
             boolean supply = stack.isDamageableItem() || stack.has(DataComponents.FOOD) || stack.has(DataComponents.EQUIPPABLE);
+            BlockOptionalMetaLookup outputs = miningOutputs == null ? baritone.getMineProcess().depositTargets() : miningOutputs;
             if (!DepositPolicy.retain(i, depositAll, Baritone.settings().depositKeepHotbar.value,
                     Baritone.settings().depositKeepSupplies.value, supply,
-                    Baritone.settings().depositKeepItems.value.contains(stack.getItem()))) {
+                    Baritone.settings().depositKeepItems.value.contains(stack.getItem()), outputs != null && outputs.has(stack))) {
                 return Optional.of(i);
             }
         }
@@ -336,6 +340,7 @@ public final class DepositProcess extends BaritoneProcessHelper {
         pendingStack = null;
         openRequested = false;
         depositAll = false;
+        miningOutputs = null;
         tripRoot = null;
         depositDimension = returnDimension = null;
         returnTo = null;

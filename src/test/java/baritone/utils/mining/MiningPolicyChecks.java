@@ -35,6 +35,9 @@ public final class MiningPolicyChecks {
         check(DepositPolicy.retain(30, false, false, false, false, true), "Keep explicitly reserved items");
         check(!DepositPolicy.retain(15, false, true, true, false, false), "Deposit ordinary mining output");
         check(!DepositPolicy.retain(0, true, true, true, true, true), "Explicit all overrides every main-inventory reserve");
+        check(!DepositPolicy.retain(3, false, true, true, false, false, true), "Mining output must unload even when picked up into the hotbar");
+        check(DepositPolicy.retain(3, false, true, true, false, true, true), "Explicitly reserved items still override mining-output unloading");
+        check(DepositPolicy.retain(0, false, true, true, true, false, true), "Tools and food remain reserved even if listed as a mining output");
         for (int storage : new int[]{27, 54}) {
             Set<Integer> mapped = new HashSet<>();
             for (int inventory = 0; inventory < 36; inventory++) {

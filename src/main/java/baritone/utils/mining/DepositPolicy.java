@@ -23,7 +23,12 @@ public final class DepositPolicy {
 
     public static boolean retain(int inventorySlot, boolean all, boolean keepHotbar,
                                  boolean keepSupplies, boolean supply, boolean explicitlyKept) {
-        return !all && ((keepHotbar && inventorySlot < 9) || (keepSupplies && supply) || explicitlyKept);
+        return retain(inventorySlot, all, keepHotbar, keepSupplies, supply, explicitlyKept, false);
+    }
+
+    public static boolean retain(int inventorySlot, boolean all, boolean keepHotbar,
+                                 boolean keepSupplies, boolean supply, boolean explicitlyKept, boolean miningOutput) {
+        return !all && ((keepHotbar && !miningOutput && inventorySlot < 9) || (keepSupplies && supply) || explicitlyKept);
     }
 
     /** Vanilla chest menus contain storage slots, then inventory slots 9..35, then hotbar slots 0..8. */

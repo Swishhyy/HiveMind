@@ -20,7 +20,7 @@ The destination is saved with its dimension and shared across dimensions of the 
 | `#pause` / `#resume` | Pause/resume the entire trip |
 | `#stop` | Cancel the trip and mining |
 
-Ordinary deposits retain hotbar items, damageable equipment, food, equippable items, and the items in `depositKeepItems`. Put a stack of building blocks in the hotbar to reserve it. Configurable settings:
+Ordinary deposits retain hotbar supplies, damageable equipment, food, equippable items, and the items in `depositKeepItems`. Output from the current mining job is unloaded even when Minecraft picked it up into a hotbar slot. Explicitly reserved items still stay with the bot. Put a stack of building blocks in the hotbar to reserve it unless that block is itself the current mining target. Configurable settings:
 
 - `mineAutoDeposit` (default `true`): automatic chest trips while mining, once a destination is saved.
 - `mineDepositFreeSlots` (default `2`): empty-slot threshold, clamped to 0–35.
