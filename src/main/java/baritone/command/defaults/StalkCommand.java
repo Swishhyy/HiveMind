@@ -21,41 +21,80 @@ import baritone.Baritone;
 import baritone.api.IBaritone;
 import baritone.api.command.Command;
 import baritone.api.command.argument.IArgConsumer;
+import baritone.api.command.datatypes.RelativeBlockPos;
 import baritone.api.command.exception.CommandException;
 import baritone.api.command.exception.CommandInvalidStateException;
 import baritone.api.command.helpers.TabCompleteHelper;
 import baritone.process.StalkProcess;
-import java.util.List;
+import net.minecraft.core.BlockPos;
+import java.util.*;
 import java.util.stream.Stream;
 
 public final class StalkCommand extends Command {
-    public StalkCommand(IBaritone baritone) { super(baritone, "stalk"); }
-    @Override public void execute(String label, IArgConsumer args) throws CommandException {
-        args.requireMax(1);
-        String target = args.hasAny() ? args.getString() : "random";
-        StalkProcess process = ((Baritone) baritone).getStalkProcess();
-        if (target.equalsIgnoreCase("stop")) {
-            process.onLostControl();
-            ((Baritone) baritone).getPathingBehavior().softCancelIfSafe();
-            logDirect("Stalking stopped");
-        } else if (target.equalsIgnoreCase("status")) logDirect(process.status());
-        else try { process.start(target); }
-        catch (IllegalStateException error) { throw new CommandInvalidStateException(error.getMessage()); }
+    public StalkCommand(IBaritone bot) { super(bot,"stalk","kill"); }
+    private Baritone bot() { return (Baritone)baritone; }
+    private void local() {
+        if(bot().getJobManager().requestOwner()!=null)throw new IllegalStateException("Sighting, base, and reporting configuration edits must be made locally");
     }
-    @Override public Stream<String> tabComplete(String label, IArgConsumer args) throws CommandException {
-        if (!args.hasAtMostOne() || ctx.minecraft().getConnection() == null) return Stream.empty();
-        return new TabCompleteHelper().append("random", "status", "stop")
-                .append(ctx.minecraft().getConnection().getOnlinePlayers().stream().map(info -> info.getProfile().name()))
+    private void report(String message) {
+        logDirect(message);UUID owner=bot().getJobManager().requestOwner();if(owner!=null)bot().getBotControl().reply(owner,message);
+    }
+    @Override public void execute(String label,IArgConsumer args) throws CommandException {
+        StalkProcess process=bot().getStalkProcess();boolean kill=label.equalsIgnoreCase("kill");
+        try {
+            if(kill&&!args.hasAny())throw new IllegalStateException("Use kill <player>, status, or stop");
+            String first=args.hasAny()?args.getString():"random";String action=first.toLowerCase(Locale.ROOT);
+            if(action.equals("status")) { args.requireMax(0);report(process.status());return; }
+            if(action.equals("stop")) { args.requireMax(0);process.onLostControl();bot().getPathingBehavior().softCancelIfSafe();report("Tracking and ambush stopped");return; }
+            if(kill) { args.requireMax(0);process.startHunt(first);return; }
+            switch(action) {
+                case "sightings","history" -> {
+                    String name=args.hasAny()?args.getString():null;args.requireMax(0);
+                    var saved=process.history(name);report(saved.isEmpty()?"No saved sightings":"Saved sightings (up to 12 places):");
+                    for(var place:saved)report(place.name()+" - "+place.label()+" at "+place.point().x()+" "+place.point().y()+" "+place.point().z()
+                            +" ("+place.point().dimension()+"); visits "+place.visits()+", observed "+place.observedSeconds()+"s");
+                }
+                case "check" -> { String name=args.getString();args.requireMax(0);process.checkPlaces(name); }
+                case "base" -> {
+                    local();String name=args.getString();BlockPos point=args.hasAny()?args.getDatatypePost(RelativeBlockPos.INSTANCE,ctx.playerFeet()):null;args.requireMax(0);
+                    process.confirmBase(name,point);report("Confirmed base saved for "+name);
+                }
+                case "forget" -> {
+                    local();String name=args.getString();args.requireMax(0);
+                    if(process.isActive())throw new IllegalStateException("Stop tracking before forgetting sightings");
+                    process.memory().forget(name.equalsIgnoreCase("all")?null:process.identity(name));report("Removed saved sightings for "+name);
+                }
+                case "report" -> {
+                    String recipient=args.hasAny()?args.getString():"status";args.requireMax(0);
+                    if(recipient.equalsIgnoreCase("status"))report("Private sighting recipient: "+process.memory().reportTo()+"; whisper-started tasks reply to their controller");
+                    else {
+                        local();UUID id=recipient.equalsIgnoreCase("off")?null:process.identity(recipient);
+                        if(id!=null&&!bot().getBotControl().isTrusted(id))throw new IllegalStateException("Sighting recipient must be a trusted controller");
+                        process.memory().reportTo(id);report(id==null?"Local sighting messages only for locally started tasks":"Private sighting reports configured for "+recipient);
+                    }
+                }
+                default -> { args.requireMax(0);process.start(first); }
+            }
+        } catch(IllegalArgumentException|IllegalStateException error) { throw new CommandInvalidStateException(error.getMessage()); }
+    }
+    @Override public Stream<String> tabComplete(String label,IArgConsumer args) throws CommandException {
+        if(!args.hasAtMostOne()||ctx.minecraft().getConnection()==null)return Stream.empty();
+        var choices=new TabCompleteHelper().append("status","stop");
+        if(!label.equalsIgnoreCase("kill"))choices.append("random","sightings","history","check","base","forget","report");
+        return choices.append(ctx.minecraft().getConnection().getOnlinePlayers().stream().map(info->info.getProfile().name()))
                 .filterPrefix(args.getString()).stream();
     }
-    @Override public String getShortDesc() { return "Follow a player from about 40 blocks and crouch while watching"; }
+    @Override public String getShortDesc() { return "Stealth stalking, private sighting memory, and an explicit named-player ambush"; }
     @Override public List<String> getLongDesc() {
-        return List.of("stalk <player> - Watch that online player from stalkDistance (default 40) blocks.",
-                "stalk [random] - Pick one player, preferring someone currently visible to the client.",
-                "stalk status / stop - Show the target or stop watching.",
-                "Crouches and faces the player while stopped; moves normally when repositioning.",
-                "Checks recent last-seen positions and searches locally when the target is outside view.",
-                "A client cannot know arbitrary player coordinates elsewhere on the server.",
-                "Conflict retreat takes priority. Pause/stop, death, disconnect, world changes, and the search limit cancel or pause watching.");
+        return List.of("stalk <player|random> - Observe from open line-of-sight positions about 40 blocks away.",
+                "Sustained player gaze causes a scatter and a new approach. Minimal-evidence mode avoids terrain edits and closed doors.",
+                "stalk sightings [player] - List saved observations and possible/confirmed bases for this server.",
+                "stalk check <player> - Check saved places, including when that player is offline; no global coordinates are revealed.",
+                "stalk base <player> [x y z] - Locally confirm a base at supplied or previously observed coordinates.",
+                "stalk forget <player|all>; stalk report <trusted-player|off|status> - Local memory/report configuration.",
+                "kill <player> - Stalk, wait for an isolated player looking away, approach from behind, and use ordinary melee.",
+                "kill status/stop; stalk status/stop - Inspect or cancel. Global pause/stop still apply.",
+                "Hunts have health, weapon, approach, combat, and attempt limits. Trusted controllers are protected by default.",
+                "Only observations from this client are remembered. Possible bases are inferences; they do not establish ownership.");
     }
 }

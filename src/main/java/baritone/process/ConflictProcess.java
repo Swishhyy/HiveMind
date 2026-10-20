@@ -75,6 +75,7 @@ public final class ConflictProcess extends BaritoneProcessHelper implements IBeh
         Entity attacker = source.getEntity();
         if (attacker == null) attacker = source.getDirectEntity();
         if (attacker == null || attacker == ctx.player()) return; // Environmental damage is not evidence that a bystander attacked.
+        if (baritone.getStalkProcess().handlesCombatAgainst(attacker)) return;
         if (observedWorld != ctx.world()) { onLostControl(); observedWorld = ctx.world(); }
         quietTicks = 0;
         protectingEscort = false;

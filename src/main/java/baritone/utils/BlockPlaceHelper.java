@@ -37,6 +37,7 @@ public class BlockPlaceHelper {
     }
 
     public void tick(boolean rightClickRequested) {
+        if (baritone.api.BaritoneAPI.getProvider().getBaritoneForPlayer(ctx.player()) instanceof Baritone bot && bot.getStalkProcess().terrainLocked()) return;
         if (rightClickTimer > 0) {
             rightClickTimer--;
             return;

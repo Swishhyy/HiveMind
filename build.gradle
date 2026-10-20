@@ -159,3 +159,25 @@ javadoc {
     source = sourceSets.api.allJava
     classpath += sourceSets.api.compileClasspath
 }
+
+// Temporary verification against the actual 26.3 game interfaces.
+tasks.register('combatApiSnapshot') {
+    doLast {
+        def javap = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(25) }.get().metadata.installationPath.file('bin/javap').asFile
+        project.exec {
+            executable javap
+            args '-classpath', sourceSets.main.compileClasspath.asPath, '-c',
+                'net.minecraft.world.item.EndCrystalItem',
+                'net.minecraft.world.level.block.RespawnAnchorBlock'
+        }
+        project.exec {
+            executable javap
+            args '-classpath', sourceSets.main.compileClasspath.asPath,
+                'net.minecraft.world.level.ServerExplosion',
+                'net.minecraft.world.damagesource.CombatRules',
+                'net.minecraft.world.level.dimension.DimensionType',
+                'net.minecraft.world.entity.LivingEntity',
+                'net.minecraft.world.entity.boss.enderdragon.EndCrystal'
+        }
+    }
+}

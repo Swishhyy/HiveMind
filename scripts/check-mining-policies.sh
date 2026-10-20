@@ -25,6 +25,9 @@ fi
     src/main/java/baritone/utils/mining/WorldRoutes.java \
     src/main/java/baritone/utils/mining/WastePolicy.java \
     src/main/java/baritone/utils/social/SocialPolicy.java \
+    src/main/java/baritone/utils/social/StealthPolicy.java \
+    src/main/java/baritone/utils/social/PlayerMemory.java \
+    src/test/java/baritone/utils/social/StealthChecks.java \
     src/test/java/baritone/utils/mining/MiningPolicyChecks.java \
     src/test/java/baritone/utils/mining/WorldRouteChecks.java \
     src/test/java/baritone/utils/mining/WastePolicyChecks.java \
@@ -36,3 +39,5 @@ java -cp "$task_classes" baritone.utils.social.SocialPolicyChecks
 
 java -cp "$task_classes" baritone.utils.bot.BotPolicyChecks
 java -cp "$task_classes" baritone.utils.bot.CompanionPolicyChecks
+
+java -cp "$task_classes" baritone.utils.social.StealthChecks

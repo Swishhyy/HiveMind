@@ -120,11 +120,13 @@ public interface MovementHelper extends ActionCosts, Helper {
     }
 
     static boolean canWalkThrough(CalculationContext context, int x, int y, int z, BlockState state) {
+        if (context.stealth && state.hasProperty(net.minecraft.world.level.block.state.properties.BlockStateProperties.OPEN)
+                && !state.getValue(net.minecraft.world.level.block.state.properties.BlockStateProperties.OPEN)) return false;
         return context.precomputedData.canWalkThrough(context.bsi, x, y, z, state);
     }
 
     static boolean canWalkThrough(CalculationContext context, int x, int y, int z) {
-        return context.precomputedData.canWalkThrough(context.bsi, x, y, z, context.get(x, y, z));
+        return canWalkThrough(context, x, y, z, context.get(x, y, z));
     }
 
     static boolean canWalkThrough(BlockStateInterface bsi, int x, int y, int z, BlockState state) {
@@ -473,6 +475,7 @@ public interface MovementHelper extends ActionCosts, Helper {
     }
 
     static boolean canWalkOn(CalculationContext context, int x, int y, int z, BlockState state) {
+        if (context.stealth && (state.is(Blocks.FARMLAND) || state.is(Blocks.TURTLE_EGG))) return false;
         return context.precomputedData.canWalkOn(context.bsi, x, y, z, state);
     }
 
@@ -503,6 +506,7 @@ public interface MovementHelper extends ActionCosts, Helper {
     }
 
     static boolean canUseFrostWalker(IPlayerContext ctx, BlockPos pos) {
+        if (BaritoneAPI.getProvider().getBaritoneForPlayer(ctx.player()) instanceof Baritone bot && bot.getStalkProcess().terrainLocked()) return false;
         boolean hasFrostWalker = false;
         OUTER: for (EquipmentSlot slot : EquipmentSlot.values()) {
             ItemEnchantments itemEnchantments = ctx

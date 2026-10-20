@@ -45,6 +45,11 @@ public final class MiningPoliciesTest {
     }
 
     @Test
+    public void stealthGazeAmbushAndSightingMemoryRespectLimits() throws Exception {
+        baritone.utils.social.StealthChecks.runAll();
+    }
+
+    @Test
     public void standOffAndRetreatRespectDistanceAndSearchLimits() {
         baritone.utils.social.SocialPolicyChecks.runAll();
     }

@@ -68,6 +68,7 @@ public class CalculationContext {
     public final boolean hasThrowaway;
     public final boolean canSprint;
     protected final double placeBlockCost; // protected because you should call the function instead
+    public final boolean stealth;
     public final boolean allowBreak;
     public final List<Block> allowBreakAnyway;
     public final boolean allowParkour;
@@ -131,16 +132,17 @@ public class CalculationContext {
         this.additionalConstructionBlocks = new ArrayList<>(Baritone.settings().additionalConstructionBlocks.value);
         this.bsi = new BlockStateInterface(baritone.getPlayerContext(), forUseOnAnotherThread);
         this.toolSet = new ToolSet(player);
-        this.hasThrowaway = Baritone.settings().allowPlace.value && ((Baritone) baritone).getInventoryBehavior().hasGenericThrowaway();
-        this.hasWaterBucket = Baritone.settings().allowWaterBucketFall.value && Inventory.isHotbarSlot(player.getInventory().findSlotMatchingItem(STACK_BUCKET_WATER)) && world.dimension() != Level.NETHER;
-        this.canSprint = !((Baritone) baritone).getSculkProcess().quiet() && Baritone.settings().allowSprint.value && player.getFoodData().getFoodLevel() > 6;
+        this.stealth = ((Baritone) baritone).getStalkProcess().terrainLocked();
+        this.hasThrowaway = !stealth && Baritone.settings().allowPlace.value && ((Baritone) baritone).getInventoryBehavior().hasGenericThrowaway();
+        this.hasWaterBucket = !stealth && Baritone.settings().allowWaterBucketFall.value && Inventory.isHotbarSlot(player.getInventory().findSlotMatchingItem(STACK_BUCKET_WATER)) && world.dimension() != Level.NETHER;
+        this.canSprint = !((Baritone) baritone).getStalkProcess().quietMovement() && !((Baritone) baritone).getSculkProcess().quiet() && Baritone.settings().allowSprint.value && player.getFoodData().getFoodLevel() > 6;
         this.placeBlockCost = Baritone.settings().blockPlacementPenalty.value;
-        this.allowBreak = Baritone.settings().allowBreak.value;
-        this.allowBreakAnyway = new ArrayList<>(Baritone.settings().allowBreakAnyway.value);
-        this.allowParkour = Baritone.settings().allowParkour.value;
-        this.allowParkourPlace = Baritone.settings().allowParkourPlace.value;
+        this.allowBreak = !stealth && Baritone.settings().allowBreak.value;
+        this.allowBreakAnyway = stealth ? List.of() : new ArrayList<>(Baritone.settings().allowBreakAnyway.value);
+        this.allowParkour = !stealth && Baritone.settings().allowParkour.value;
+        this.allowParkourPlace = !stealth && Baritone.settings().allowParkourPlace.value;
         this.allowJumpAtBuildLimit = Baritone.settings().allowJumpAtBuildLimit.value;
-        this.allowParkourAscend = Baritone.settings().allowParkourAscend.value;
+        this.allowParkourAscend = !stealth && Baritone.settings().allowParkourAscend.value;
         this.assumeWalkOnWater = Baritone.settings().assumeWalkOnWater.value;
         this.allowFallIntoLava = false; // Super secret internal setting for ElytraBehavior
         // todo: technically there can now be datapack enchants that replace blocks with any other at any range
@@ -156,12 +158,12 @@ public class CalculationContext {
                 }
             }
         }
-        this.frostWalker = frostWalkerLevel;
+        this.frostWalker = stealth ? 0 : frostWalkerLevel;
         this.allowDiagonalDescend = Baritone.settings().allowDiagonalDescend.value;
         this.allowDiagonalAscend = Baritone.settings().allowDiagonalAscend.value;
         this.allowDownward = Baritone.settings().allowDownward.value;
         this.minFallHeight = 3; // Minimum fall height used by MovementFall
-        this.maxFallHeightNoWater = Baritone.settings().maxFallHeightNoWater.value;
+        this.maxFallHeightNoWater = stealth ? Math.min(1, Baritone.settings().maxFallHeightNoWater.value) : Baritone.settings().maxFallHeightNoWater.value;
         this.maxFallHeightBucket = Baritone.settings().maxFallHeightBucket.value;
         float waterSpeedMultiplier = 1.0f;
         OUTER: for (EquipmentSlot slot : EquipmentSlot.values()) {
@@ -233,7 +235,7 @@ public class CalculationContext {
     }
 
     public double breakCostMultiplierAt(int x, int y, int z, BlockState current) {
-        if (!insideMiningBoundary(x,y,z)) return COST_INF;
+        if (stealth || !insideMiningBoundary(x,y,z)) return COST_INF;
         if (sculkProtected(x, y, z, current)) return COST_INF;
         if (!allowBreak && !allowBreakAnyway.contains(current.getBlock())) {
             return COST_INF;

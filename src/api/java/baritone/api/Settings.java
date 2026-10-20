@@ -379,6 +379,28 @@ public final class Settings {
     /** How long to search locally after losing a stalk target; bounded to 10-600 seconds. */
     public final Setting<Long> stalkSearchTimeoutMS = new Setting<>(120000L);
 
+    /** Stealth tracking does not alter terrain or operate closed doors. These restrictions are scoped to the task. */
+    public final Setting<Boolean> stalkMinimalEvidence = new Setting<>(true);
+    public final Setting<Boolean> stalkPreferOpenAir = new Setting<>(true);
+    public final Setting<Boolean> stalkSneakWhileMoving = new Setting<>(true);
+    public final Setting<Integer> stalkVerticalRange = new Setting<>(5);
+    public final Setting<Integer> stalkViewConeDegrees = new Setting<>(18);
+    public final Setting<Integer> stalkGazeTicks = new Setting<>(40);
+    public final Setting<Integer> stalkScatterTicks = new Setting<>(240);
+    public final Setting<Boolean> stalkReportSightings = new Setting<>(true);
+    public final Setting<Long> stalkReportIntervalMS = new Setting<>(120000L);
+    public final Setting<Integer> stalkMemoryDays = new Setting<>(30);
+
+    /** Explicit named-player ambush uses normal client attacks; all timers and attempts are bounded. */
+    public final Setting<Boolean> killAllowTrustedTargets = new Setting<>(false);
+    public final Setting<Integer> killMinimumHealth = new Setting<>(16);
+    public final Setting<Integer> killMaxAttempts = new Setting<>(3);
+    public final Setting<Long> killWatchMinimumMS = new Setting<>(12000L);
+    public final Setting<Long> killWatchMaximumMS = new Setting<>(30000L);
+    public final Setting<Long> killAttackTimeoutMS = new Setting<>(15000L);
+    public final Setting<Long> killTimeoutMS = new Setting<>(600000L);
+
+
     /**
      * A list of blocks to be treated as if they're air.
      * <p>

@@ -66,15 +66,41 @@ The bot returns any owned crafting cursor stack and closes an empty-cursor conta
 
 Use `#set fleeConflicts false` to disable it. `#pause` and `#stop` retain priority. Death, disconnects, and world changes clear remembered threats.
 
-## Distant player watching
+## Stealth stalking and player sightings
 
-- `#stalk <player>` watches that online player.
-- `#stalk` or `#stalk random` chooses one player, preferring someone already visible to the client. It keeps that target rather than switching every tick.
-- `#stalk status` shows the current target; `#stalk stop` ends watching. `#stop` cancels all bot work.
+`#stalk <player>` watches an online UUID; `#stalk` / `#stalk random` chooses one player, preferring a tracked nearby player. The viewing distance defaults to 40 blocks. The bot chooses loaded, walkable vantage points with a clear ray to the player's eyes, prefers the rear/side of their facing direction, and remains within `stalkVerticalRange` (default five blocks) vertically. `stalkPreferOpenAir=true` rejects enclosed roofs/hillside cavities while allowing leaf cover up to 12 blocks overhead. It does not tunnel into a mountain to see the player. If terrain offers no reachable open sight line, it repositions or stops with a reason.
 
-The bot follows a ring around the player at `stalkDistance` (default 40 horizontal blocks, with ±4 blocks of tolerance). It backs away if the player approaches, moves closer if they leave, and seeks a nearby visible vantage point when terrain blocks the view. While stopped it crouches and turns to watch the target; it moves normally while repositioning. Conflict retreat takes priority over watching. Starting this command replaces the current task; ending conflict retreat resumes watching.
+It crouches while watching and, by default, while moving quietly. Sprint is disabled during quiet tracking. Player head direction plus an unobstructed sight line estimates whether the bot is being watched: `stalkViewConeDegrees=18` is the half-angle, and `stalkGazeTicks=40` requires about two seconds. Looking away reduces suspicion. A sustained stare triggers a scatter, normal-speed escape to at least 64 blocks (more for a larger viewing distance), a quiet wait, and a new viewing approach. `stalkScatterTicks=240` means at least 12 seconds; a blocked/failed escape has a finite stop. These are estimates from server-sent head rotations, not proof that the human noticed the bot.
 
-A client receives positions only for players the server is currently tracking for it. The command checks recent last-seen positions and otherwise searches local waypoints, bounded by `stalkSearchRadius` (default 256, capped at 512) and `stalkSearchTimeoutMS` (default 120000, bounded to 10–600 seconds). It cannot reveal arbitrary coordinates across the server. Leaving the player list, a world change, death, disconnect, or exhaustion of the local search stops watching. A server companion would be needed for reliable global player finding.
+`stalkMinimalEvidence=true` is scoped to a running stalking/hunt task. Path calculations prohibit breaking, placing, bucket falls, closed-door operation, and parkour; avoid farmland/turtle eggs; and do not use Frost Walker. Live block-action guards also stop stale path actions. Start with Frost Walker gear removed. The bot does not place torches, dump waste, open a target's containers, or loot as part of stalking. It uses existing passages and stops when the terrain-preserving route is unavailable. Normal mining/settings return after tracking ends. Other survival work may still use the bot's registered supply chests.
+
+This minimizes world changes. Ordinary footsteps, item pickup by proximity, equipment effects, server logs, name tags, and vanilla kill messages cannot be made invisible by a client mod. Visible players and targets in unloaded terrain still follow the server's tracking limits.
+
+| Command | Behavior |
+| --- | --- |
+| `#stalk status` / `#stalk stop` | Inspect or stop tracking and ambush work |
+| `#stalk sightings [player]` / `history [player]` | Inspect the last 12 matching saved places |
+| `#stalk check <player>` | Visit saved places and look for the player, including when they are offline |
+| `#stalk base <player> [x y z]` | Locally confirm a base at supplied/currently tracked/previously observed coordinates |
+| `#stalk forget <player\|all>` | Locally remove stored observations while tracking is stopped |
+| `#stalk report <trusted-player>` | Locally choose who receives private reports from locally started tracking |
+| `#stalk report off` / `status` | Clear or inspect that optional recipient |
+
+Only an actual unobstructed player sighting records persistent observations. `player-sightings.properties` stores UUID/name, dimension, previously observed place coordinates, distinct visits, observed dwell, and last-seen time for this server/save. Places cluster within 32 blocks of a fixed observed anchor, with at most 12 places per UUID and 512 places total. Three separate visits plus three observed minutes mark a **frequent spot / possible base**. This is an inference; the client cannot prove block ownership. Explicitly confirmed bases are labelled separately.
+
+A newly seen target is reported as `Found PlayerName at x y z (dimension)`. Repeated coordinate reports require both the cooldown (`stalkReportIntervalMS=120000`) and at least 64 blocks of movement. Output is local client text plus a private message to the trusted controller who started the task, or the configured trusted report recipient for a local start. It never publishes sighting coordinates to public chat. Disable automatic coordinate messages with `stalkReportSightings=false`; history still records observations. `stalkMemoryDays=30` expires ordinary sightings (bounded 1–90 days); manually confirmed bases remain until forgotten. Reports to revoked/offline recipients are discarded by the existing reply handler.
+
+When a live player leaves client tracking, the bot checks a recent last-seen position, then saved bases/frequent spots/sightings in this dimension, then the existing bounded local search. `#stalk check` checks saved places only. The search remains bounded by `stalkSearchRadius` and `stalkSearchTimeoutMS`; it cannot discover arbitrary hidden coordinates. A normal target leaving the player list, death, disconnect, world changes, stop, or exhausted search ends the live task. Persistent sightings remain available for later commands.
+
+## Named-player ambush
+
+`#kill PlayerName` explicitly selects one online player, observes at the normal stalking distance, waits for an isolated player looking away, approaches from behind, and uses ordinary melee with a hotbar sword/axe. It does not use the server's administrative `/kill` command, spawn damage, or bypass PvP permissions. There is no random-target kill mode.
+
+The watch interval is randomized between `killWatchMinimumMS=12000` and `killWatchMaximumMS=30000`, followed by at least three seconds looking away. Approaching is limited to 45 seconds. If the target turns toward the approach, the bot scatters and can retry up to `killMaxAttempts=3`. More players within 12 blocks, low health/hunger, a near-broken/missing weapon, sculk escape, blocked paths, or an unfavorable fight cause withdrawal. `killMinimumHealth=16` defaults to eight hearts. Nearby hostile mobs retain normal conflict retreat.
+
+Actual attacks require normal close melee range, unobstructed sight, aim, and a charged vanilla attack cooldown. While engaged with that explicit target, suitable retaliation is handled by the hunt; unrelated threats still use conflict handling. `killAttackTimeoutMS=15000` limits combat, and `killTimeoutMS=600000` limits the whole hunt. Lack of observed health reduction stops an ineffective/protected fight. A death is reported only if the target is actually observed dead; disappearance or logout is not reported as a kill. It withdraws afterward and does not deliberately loot the drops. No bot can guarantee that a player is unsuspecting or that an ambush succeeds.
+
+Trusted controllers are protected by default. A local opt-in `#set killAllowTrustedTargets true` permits deliberate targeting of them. `#kill status`, `#kill stop`, and global pause/stop remain available. Trusted whisper controllers can issue `#kill PlayerName`; sighting/base/report configuration edits remain local. All new settings are in the existing **Mods > Baritone > Configure** form and the regular `#set` interface.
 
 ## Avoiding player builds
 
@@ -102,7 +128,9 @@ From that player's account, send `/msg BotAccount #mine 32 netherite`. The bot q
 | `#job list`, `pause`, `resume`, `remove <id>`, `cancel` | Manage the job queue |
 | `#pause` / `#resume` / `#stop` | Normal global task controls |
 | `#deposit now` / `all` / `status` / `list` | Deposit or query storage; configuration edits remain local |
-| `#stalk PlayerName` / `random` / `status` / `stop` | Distant watching using client-known positions |
+| `#stalk PlayerName` / `random` / `status` / `stop` | Stealth watching, gaze-triggered scatter, and saved sightings |
+| `#kill PlayerName` / `status` / `stop` | Explicit stalking and a bounded melee ambush |
+| `#stalk sightings [player]` / `check <player>` | Inspect or revisit saved places |
 | `#recover now` / `status` / `stop` | Recover the recorded dropped inventory after respawning |
 | `#deliver PlayerName diamond 32 [x y z]` / `handoff` / `status` / `stop` | Fetch and hand over items to one recipient |
 | `#escort PlayerName` / `status` / `stop` | Follow and optionally protect a visible player |
@@ -301,3 +329,4 @@ Additional gameplay checks for companion work and Mod Menu:
 - Gather glass, rails, and torches with partial existing stock, exact recipe batches, and alternate ingredients. Interrupt during a cursor transfer and furnace smelting; test occupied/protected stations, insufficient fuel/space, changed server recipes, final-storage filters/fullness, portal failure, and disconnect.
 
 Gameplay validation still needs a Minecraft 26.3 client and a test world/server; policy checks and a successful build do not simulate server inventories, combat, portals, or GUI rendering.
+\nGameplay checks for stealth and hunts:\n\n- Watch a player on open terrain, near trees, beside a hillside, and underground. Check actual crouched eye-level sight lines, close vertical range, and rejection of enclosed viewing sites.\n- Compare brief glances, blocked sight lines, and a sustained stare; verify scatter separation, normal-speed escape, quiet wait, re-approach, blocked escape, pause, and stop.\n- Put a closed door, a required tunnel/bridge, farmland, and a water gap on the route. Confirm no block actions/buckets/door operation and that original mining behavior resumes after stop.\n- Observe separate visits to a spot; verify dwell/visit requirements, possible-base labels, explicit confirmation, persistence, dimension/server isolation, forgetting, and private report cooldowns.\n- Issue a named hunt against a test account. Compare rear opportunity, target turning around, multiple players, health/hunger/tool failures, PvP protection, attack cooldowns, combat timeout, a real observed death, and target disappearance. Confirm no deliberate looting and no public coordinate reports.\n
