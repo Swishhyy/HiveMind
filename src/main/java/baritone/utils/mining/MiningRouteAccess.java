@@ -22,12 +22,13 @@ import baritone.cache.WorldData;
 import net.minecraft.core.BlockPos;
 
 import java.nio.file.Path;
-import java.util.HashMap;
 import java.util.Map;
+import java.util.List;
+import java.util.concurrent.ConcurrentHashMap;
 
 /** Client-thread adapter between Minecraft positions/worlds and the dependency-free route store. */
 public final class MiningRouteAccess {
-    private static final Map<Path, WorldRoutes> STORES = new HashMap<>();
+    private static final Map<Path, WorldRoutes> STORES = new ConcurrentHashMap<>();
     private MiningRouteAccess() {}
 
     public static Path root(IPlayerContext ctx) {
@@ -55,15 +56,17 @@ public final class MiningRouteAccess {
     }
 
     public static WorldRoutes.Endpoint deposit(IPlayerContext ctx) {
+        return deposits(ctx).stream().map(WorldRoutes.Storage::endpoint).findFirst().orElse(null);
+    }
+
+    public static List<WorldRoutes.Storage> deposits(IPlayerContext ctx) {
         WorldRoutes routes = store(ctx);
-        WorldRoutes.Endpoint saved = routes.deposit();
-        if (saved == null) {
+        if (!routes.storageConfigured()) {
             BlockPos legacy = MiningWaypoints.deposit(ctx.worldData());
             if (legacy != null) {
-                saved = endpoint(ctx, legacy);
-                routes.setDeposit(saved);
+                routes.addDeposit(endpoint(ctx, legacy));
             }
         }
-        return saved;
+        return routes.deposits();
     }
 }

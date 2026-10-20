@@ -34,4 +34,8 @@ public final class MiningPoliciesTest {
     public void wasteDisposalPreservesResourcesAndBuildingStacks() {
         WastePolicyChecks.runAll();
     }
+    @Test
+    public void standOffAndRetreatRespectDistanceAndSearchLimits() {
+        baritone.utils.social.SocialPolicyChecks.runAll();
+    }
 }

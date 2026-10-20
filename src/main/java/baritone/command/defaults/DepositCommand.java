@@ -45,7 +45,7 @@ public final class DepositCommand extends Command {
         String action = args.hasAny() ? args.getString().toLowerCase(Locale.ROOT) : "now";
         Baritone instance = (Baritone) baritone;
         DepositProcess process = instance.getDepositProcess();
-        if (action.equals("set")) {
+        if (action.equals("set") || action.equals("add")) {
             BlockPos pos = args.hasAny() ? args.getDatatypePost(RelativeBlockPos.INSTANCE, ctx.playerFeet())
                     : ctx.getSelectedBlock().orElseThrow(() -> new CommandInvalidStateException("Look directly at the chest to save"));
             args.requireMax(0);
@@ -55,10 +55,23 @@ public final class DepositCommand extends Command {
             if (!ctx.world().hasChunkAt(pos) || !DepositProcess.supports(ctx.world().getBlockState(pos).getBlock())) {
                 throw new CommandInvalidStateException("The selected position must be a loaded chest, trapped chest, copper chest (any oxidation or wax state), or barrel");
             }
-            MiningWaypoints.setDeposit(ctx.worldData(), pos);
-            MiningRouteAccess.store(ctx).setDeposit(MiningRouteAccess.endpoint(ctx, pos));
+            MiningRouteAccess.deposits(ctx); // Import an older single chest before adding to it.
+            WorldRoutes.Storage saved = MiningRouteAccess.store(ctx).addDeposit(MiningRouteAccess.endpoint(ctx, pos));
+            MiningWaypoints.clearDeposit(ctx.worldData());
             instance.getPathingBehavior().softCancelIfSafe();
-            logDirect("Deposit chest saved at " + pos + " for this world and dimension");
+            logDirect("Storage #" + saved.id() + " saved at " + pos + " in " + saved.endpoint().dimension());
+        } else if (action.equals("remove")) {
+            args.requireMin(1);
+            int id = args.getAs(Integer.class);
+            args.requireMax(0);
+            if (process.isActive()) throw new CommandInvalidStateException("Stop the deposit trip before removing storage");
+            MiningRouteAccess.deposits(ctx);
+            if (!MiningRouteAccess.store(ctx).removeDeposit(id)) {
+                throw new CommandInvalidStateException("No storage #" + id + "; use deposit list to see saved chests");
+            }
+            MiningWaypoints.clearDeposit(ctx.worldData());
+            instance.getPathingBehavior().softCancelIfSafe();
+            logDirect("Removed storage #" + id);
         } else {
             args.requireMax(0);
             switch (action) {
@@ -67,12 +80,18 @@ public final class DepositCommand extends Command {
                         throw new CommandInvalidStateException("Stop the deposit trip before clearing its destination");
                     }
                     MiningWaypoints.clearDeposit(ctx.worldData());
-                    MiningRouteAccess.store(ctx).clearDeposit(MiningRouteAccess.dimension(ctx));
-                    logDirect("Deposit chest cleared");
+                    MiningRouteAccess.store(ctx).clearDeposits();
+                    instance.getPathingBehavior().softCancelIfSafe();
+                    logDirect("All storage chests cleared for this server/save");
                     break;
                 case "status":
-                    WorldRoutes.Endpoint saved = MiningRouteAccess.deposit(ctx);
-                    logDirect(saved == null ? "No deposit chest saved for this server/save" : "Deposit chest: " + saved);
+                case "list":
+                    List<WorldRoutes.Storage> saved = MiningRouteAccess.deposits(ctx);
+                    if (saved.isEmpty()) logDirect("No storage chests saved for this server/save");
+                    for (WorldRoutes.Storage storage : saved) {
+                        WorldRoutes.Endpoint point = storage.endpoint();
+                        logDirect("#" + storage.id() + " " + point.dimension() + " " + point.x() + " " + point.y() + " " + point.z());
+                    }
                     if (process.isActive()) logDirect(process.displayName());
                     break;
                 case "now":
@@ -84,30 +103,37 @@ public final class DepositCommand extends Command {
                     }
                     break;
                 default:
-                    throw new CommandInvalidStateException("Use deposit set, now, all, status, or clear");
+                    throw new CommandInvalidStateException("Use deposit add/set, remove <id>, list, now, all, status, or clear");
             }
         }
     }
 
     @Override
     public Stream<String> tabComplete(String label, IArgConsumer args) throws CommandException {
-        return args.hasAtMostOne() ? new TabCompleteHelper().append("set", "now", "all", "status", "clear")
-                .filterPrefix(args.getString()).stream() : Stream.empty();
+        if (args.hasAtMostOne()) return new TabCompleteHelper().append("add", "set", "remove", "list", "now", "all", "status", "clear")
+                .filterPrefix(args.getString()).stream();
+        if (args.getString().equalsIgnoreCase("remove") && args.hasAtMostOne()) {
+            return new TabCompleteHelper().append(MiningRouteAccess.deposits(ctx).stream().map(storage -> Integer.toString(storage.id())))
+                    .filterPrefix(args.getString()).stream();
+        }
+        return Stream.empty();
     }
 
     @Override
     public String getShortDesc() {
-        return "Save a deposit chest and unload mining inventory";
+        return "Manage storage chests and unload mining inventory";
     }
 
     @Override
     public List<String> getLongDesc() {
-        return List.of("deposit set [x y z] - Save the chest you are looking at, or an exact chest position.",
+        return List.of("deposit add/set [x y z] - Add the selected chest or exact position; repeat to save more chests.",
                 "Supports regular and trapped chests, barrels, and all waxed/unwaxed copper chest variants.",
                 "deposit [now] - Unload resources, including mining output in the hotbar; keep reserved supplies.",
                 "deposit all - Stop mining and empty the main inventory and hotbar; worn equipment stays equipped.",
-                "deposit status / clear - Show or forget the saved chest.",
+                "deposit remove <id> - Remove one numbered storage entry; IDs do not change after removal.",
+                "deposit list/status - List storage IDs, dimensions, coordinates, and the current trip.",
+                "deposit clear - Forget all storage entries for this server/save.",
                 "With mineAutoDeposit enabled, mining returns automatically when inventory space runs low.",
-                "A full, missing, blocked, or unreachable chest stops mining without dropping items.");
+                "A full, missing, blocked, or unreachable chest is skipped; mining stops if every saved chest is unavailable.");
     }
 }

@@ -23,6 +23,7 @@ import baritone.api.cache.IWaypointCollection;
 import baritone.api.cache.IWorldData;
 import baritone.api.cache.Waypoint;
 import baritone.api.utils.BetterBlockPos;
+import baritone.api.utils.IPlayerContext;
 import net.minecraft.core.BlockPos;
 
 import java.util.ArrayList;
@@ -70,7 +71,8 @@ public final class MiningWaypoints {
                 .forEach(waypoints::removeWaypoint);
     }
 
-    public static List<ConstructionPolicy.Area> protection(IWorldData world) {
+    public static List<ConstructionPolicy.Area> protection(IPlayerContext ctx) {
+        IWorldData world = ctx.worldData();
         List<ConstructionPolicy.Area> areas = new ArrayList<>();
         if (world == null) {
             return List.of();
@@ -86,10 +88,13 @@ public final class MiningWaypoints {
                 }
             }
         }
-        BlockPos chest = deposit(world);
         int radius = Math.max(0, Math.min(256, Baritone.settings().depositProtectionRadius.value));
-        if (chest != null) {
-            areas.add(new ConstructionPolicy.Area(chest.getX(), chest.getY(), chest.getZ(), radius));
+        String dimension = MiningRouteAccess.dimension(ctx);
+        for (WorldRoutes.Storage storage : MiningRouteAccess.deposits(ctx)) {
+            WorldRoutes.Endpoint chest = storage.endpoint();
+            if (chest.dimension().equals(dimension)) {
+                areas.add(new ConstructionPolicy.Area(chest.x(), chest.y(), chest.z(), radius));
+            }
         }
         return List.copyOf(areas);
     }

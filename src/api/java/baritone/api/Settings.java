@@ -324,6 +324,24 @@ public final class Settings {
     /** Maximum time to wait inside a Nether portal for the server to change dimensions. */
     public final Setting<Long> miningPortalTimeoutMS = new Setting<>(45000L);
 
+    /** Temporarily retreat from nearby hostile mobs and actual attackers while bot tasks are active. */
+    public final Setting<Boolean> fleeConflicts = new Setting<>(true);
+
+    /** Distance at which nearby hostile mobs trigger a retreat; neutral mobs require aggression or an actual attack. */
+    public final Setting<Integer> conflictMobRadius = new Setting<>(12);
+
+    /** Desired separation during retreat; wardens require at least 64 blocks. */
+    public final Setting<Integer> conflictFleeDistance = new Setting<>(32);
+
+    /** Approximate horizontal observation distance for stalk; bounded to 16-128 blocks, with four blocks of tolerance. */
+    public final Setting<Integer> stalkDistance = new Setting<>(40);
+
+    /** Maximum local search radius when a stalk target has no visible position. Does not reveal remote coordinates. */
+    public final Setting<Integer> stalkSearchRadius = new Setting<>(256);
+
+    /** How long to search locally after losing a stalk target; bounded to 10-600 seconds. */
+    public final Setting<Long> stalkSearchTimeoutMS = new Setting<>(120000L);
+
     /**
      * A list of blocks to be treated as if they're air.
      * <p>

@@ -1,8 +1,8 @@
 # Baritone
 
-This fork targets **Fabric on Minecraft 26.3**. It adds saved deposit chests, automatic mining return trips,
+This fork targets **Fabric on Minecraft 26.3**. It adds multiple saved deposit chests, automatic mining return trips,
 construction-aware route costs, persistent protected areas, optional waste-block cleanup with building reserves, and automatic Overworld–Nether travel for ancient debris mining. See [MINING.md](MINING.md) for commands,
-settings, limitations, and validation steps. Private-message control and combat are not part of this mining patch.
+settings, limitations, and validation steps. It also adds conflict retreat and `#stalk` for distant crouching player observation. Private-message control and automated fighting remain separate features.
 
 <p align="center">
   <a href="https://github.com/cabaletta/baritone/releases/"><img src="https://img.shields.io/github/downloads/cabaletta/baritone/total.svg" alt="GitHub All Releases"/></a>

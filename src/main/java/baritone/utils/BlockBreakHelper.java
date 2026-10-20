@@ -64,7 +64,7 @@ public final class BlockBreakHelper {
 
         if (isLeftClick && isBlockTrace) {
             BlockPos target = ((BlockHitResult) trace).getBlockPos();
-            boolean protectedArea = MiningWaypoints.protection(ctx.worldData()).stream()
+            boolean protectedArea = MiningWaypoints.protection(ctx).stream()
                     .anyMatch(area -> area.contains(target.getX(), target.getY(), target.getZ()));
             boolean protectedContainer = BaritoneAPI.getSettings().protectContainers.value
                     && ConstructionPolicy.isContainer(BuiltInRegistries.BLOCK.getKey(ctx.world().getBlockState(target).getBlock()).getPath());

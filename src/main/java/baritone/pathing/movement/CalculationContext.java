@@ -106,7 +106,7 @@ public class CalculationContext {
         LocalPlayer player = baritone.getPlayerContext().player();
         this.world = baritone.getPlayerContext().world();
         this.worldData = (WorldData) baritone.getPlayerContext().worldData();
-        this.protectedAreas = MiningWaypoints.protection(this.worldData);
+        this.protectedAreas = MiningWaypoints.protection(baritone.getPlayerContext());
         this.preferAvoidConstruction = Baritone.settings().preferAvoidConstruction.value;
         this.protectContainers = Baritone.settings().protectContainers.value;
         double penalty = Baritone.settings().constructionBreakPenalty.value;

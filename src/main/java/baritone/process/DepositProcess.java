@@ -47,6 +47,9 @@ import net.minecraft.world.phys.Vec3;
 import java.util.HashSet;
 import java.util.Optional;
 import java.util.Set;
+import java.util.List;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.nio.file.Path;
 
 /** A temporary mining interruption. It never drops items or transfers worn equipment. */
@@ -66,9 +69,14 @@ public final class DepositProcess extends BaritoneProcessHelper {
     private int stageTicks;
     private int pendingSlot = -1;
     private ItemStack pendingStack;
-    private int pendingStateId;
+    private long contentRevision;
+    private long openRevision;
+    private long pendingRevision;
+    private int synchronizedMenuId = -1;
     private int pendingTicks;
     private int movedItems;
+    private int storageId;
+    private final List<WorldRoutes.Storage> remainingChests = new ArrayList<>();
     private final Set<Integer> refusedSlots = new HashSet<>();
 
     public DepositProcess(Baritone baritone) {
@@ -93,20 +101,17 @@ public final class DepositProcess extends BaritoneProcessHelper {
         if (isActive()) {
             throw new IllegalStateException("A deposit trip is already running");
         }
-        WorldRoutes.Endpoint saved = MiningRouteAccess.deposit(ctx);
-        if (saved == null) {
-            throw new IllegalStateException("Look at a chest and run deposit set first");
-        }
+        if (MiningRouteAccess.deposits(ctx).isEmpty()) throw new IllegalStateException("Look at a chest and run deposit add first");
         if (ctx.player().containerMenu != ctx.player().inventoryMenu) {
             throw new IllegalStateException("Close the current container before starting a deposit trip");
         }
-        if (!saved.dimension().equals(MiningRouteAccess.dimension(ctx)) && !Baritone.settings().mineTravelBetweenDimensions.value) {
-            throw new IllegalStateException("The deposit chest is in another dimension and dimension travel is disabled");
-        }
-        chest = MiningRouteAccess.position(saved);
+        BlockPos feet = ctx.playerFeet();
+        remainingChests.clear();
+        remainingChests.addAll(MiningRouteAccess.store(ctx).orderedDeposits(MiningRouteAccess.dimension(ctx),
+                feet.getX(), feet.getY(), feet.getZ(), Baritone.settings().mineTravelBetweenDimensions.value));
+        if (remainingChests.isEmpty()) throw new IllegalStateException("No saved storage is reachable in a supported dimension; check dimension travel settings");
         miningOutputs = baritone.getMineProcess().depositTargets();
         tripRoot = MiningRouteAccess.root(ctx);
-        depositDimension = saved.dimension();
         returnDimension = MiningRouteAccess.dimension(ctx);
         if (all) {
             baritone.getMineProcess().cancel();
@@ -115,8 +120,8 @@ public final class DepositProcess extends BaritoneProcessHelper {
         depositAll = all;
         movedItems = 0;
         refusedSlots.clear();
-        transition(Stage.TRAVEL);
-        logDirect("Returning to the deposit chest" + (all ? " (empty main inventory)" : " (keep supplies)"));
+        chooseNextStorage();
+        logDirect("Returning to storage #" + storageId + (all ? " (empty main inventory)" : " (keep supplies)"));
     }
 
     public void startFinalDeposit() {
@@ -154,10 +159,10 @@ public final class DepositProcess extends BaritoneProcessHelper {
             return fail("the server or save changed");
         }
         if (calcFailed) {
-            return fail("no usable route to " + (stage == Stage.RETURN ? "the mining site" : "the deposit chest"));
+            return stage == Stage.RETURN ? fail("no usable route to the mining site") : tryNextStorage("storage #" + storageId + " is unreachable");
         }
         if (++stageTicks > ((stage == Stage.TRAVEL || stage == Stage.RETURN) ? 12000 : 1800)) {
-            return fail("deposit trip timed out");
+            return stage == Stage.RETURN ? fail("return trip timed out") : tryNextStorage("storage #" + storageId + " timed out");
         }
         String currentDimension = MiningRouteAccess.dimension(ctx);
         String requiredDimension = stage == Stage.RETURN ? returnDimension : depositDimension;
@@ -168,7 +173,7 @@ public final class DepositProcess extends BaritoneProcessHelper {
         }
         if (stage != Stage.RETURN && ctx.world().hasChunkAt(chest)
                 && !supports(ctx.world().getBlockState(chest).getBlock())) {
-            return fail("the saved chest is missing or was replaced");
+            return tryNextStorage("storage #" + storageId + " is missing or was replaced");
         }
         if (stage == Stage.TRAVEL) {
             GoalGetToBlock goal = new GoalGetToBlock(chest);
@@ -204,20 +209,24 @@ public final class DepositProcess extends BaritoneProcessHelper {
             if (!openRequested || !(menu instanceof ChestMenu)) {
                 return fail("an unexpected container was opened");
             }
+            if (synchronizedMenuId != menu.containerId || contentRevision <= openRevision) {
+                return stageTicks > 100 ? fail("the server did not send the storage contents") : pause();
+            }
             openedMenu = menu;
             transition(Stage.TRANSFER);
             return pause();
         }
         if (openRequested) {
-            return stageTicks > 100 ? fail("the chest could not be opened; it may be blocked or protected") : pause();
+            return stageTicks > 100 ? tryNextStorage("storage #" + storageId + " could not be opened; it may be blocked or protected") : pause();
         }
         Optional<Rotation> rotation = RotationUtils.reachable(ctx, chest);
         if (rotation.isEmpty()) {
-            return fail("the chest is not reachable from the arrival position");
+            return tryNextStorage("storage #" + storageId + " is not reachable from the arrival position");
         }
         baritone.getLookBehavior().updateTarget(rotation.get(), true);
         if (ctx.isLookingAt(chest)) {
             openRequested = true;
+            openRevision = contentRevision;
             stageTicks = 0;
             ctx.playerController().processRightClickBlock(ctx.player(), ctx.world(), InteractionHand.MAIN_HAND,
                     new BlockHitResult(Vec3.atCenterOf(chest), Direction.UP, chest, false));
@@ -234,9 +243,14 @@ public final class DepositProcess extends BaritoneProcessHelper {
             return fail("unsupported chest slot layout");
         }
         if (pendingSlot >= 0) {
-            // Wait for a server menu update; client prediction alone is not a successful deposit.
-            if (++pendingTicks < 5 || openedMenu.getStateId() == pendingStateId) {
-                return pendingTicks > 100 ? fail("the server did not confirm an inventory transfer") : pause();
+            if (++pendingTicks < 5) return pause();
+            // Correct client prediction may produce no slot update at all. Reopening requests
+            // authoritative contents, including the player's inventory, rather than guessing an acknowledgement.
+            if (contentRevision <= pendingRevision || synchronizedMenuId != openedMenu.containerId) {
+                closeOwnedMenu();
+                openRequested = false;
+                transition(Stage.OPEN);
+                return pause();
             }
             ItemStack remaining = ctx.player().getInventory().getItem(pendingSlot);
             int remainingCount = remaining.getItem() == pendingStack.getItem() ? remaining.getCount() : 0;
@@ -257,7 +271,7 @@ public final class DepositProcess extends BaritoneProcessHelper {
         Optional<Integer> next = firstTransferable(true);
         if (next.isEmpty()) {
             if (firstTransferable(false).isPresent()) {
-                return fail("the chest is full or rejected some items (" + movedItems + " items deposited)");
+                return tryNextStorage("storage #" + storageId + " is full or rejected some items");
             }
             closeOwnedMenu();
             logDirect("Deposited " + movedItems + " items");
@@ -286,7 +300,7 @@ public final class DepositProcess extends BaritoneProcessHelper {
             pendingStack = null;
             return pause();
         }
-        pendingStateId = openedMenu.getStateId();
+        pendingRevision = contentRevision;
         pendingTicks = 0;
         ctx.playerController().windowClick(openedMenu.containerId, DepositPolicy.menuSlot(pendingSlot, storageSlots),
                 0, ContainerInput.QUICK_MOVE, ctx.player());
@@ -321,8 +335,57 @@ public final class DepositProcess extends BaritoneProcessHelper {
         return new PathingCommand(null, PathingCommandType.CANCEL_AND_SET_GOAL);
     }
 
+    private boolean chooseNextStorage() {
+        String dimension = MiningRouteAccess.dimension(ctx);
+        WorldRoutes.Storage next = remainingChests.stream().min(Comparator
+                .comparingInt((WorldRoutes.Storage storage) -> storage.endpoint().dimension().equals(dimension) ? 0 : 1)
+                .thenComparingDouble(storage -> storage.endpoint().dimension().equals(dimension)
+                        ? ctx.playerFeet().distSqr(MiningRouteAccess.position(storage.endpoint())) : 0)
+                .thenComparingInt(WorldRoutes.Storage::id)).orElse(null);
+        if (next == null) return false;
+        remainingChests.remove(next);
+        storageId = next.id();
+        chest = MiningRouteAccess.position(next.endpoint());
+        depositDimension = next.endpoint().dimension();
+        transition(Stage.TRAVEL);
+        return true;
+    }
+
+    private PathingCommand tryNextStorage(String reason) {
+        suspendForConflict();
+        if (!chooseNextStorage()) return fail(reason + "; all saved storage was tried (" + movedItems + " items deposited)");
+        logDirect(reason + "; trying storage #" + storageId);
+        return new PathingCommand(null, PathingCommandType.CANCEL_AND_SET_GOAL);
+    }
+
+    /** Close our own menu before retreating, preserving the trip and any already-confirmed transfer credit. */
+    public void suspendForConflict() {
+        if (pendingSlot >= 0 && pendingStack != null && openedMenu != null && contentRevision > pendingRevision
+                && synchronizedMenuId == openedMenu.containerId) {
+            ItemStack remaining = ctx.player().getInventory().getItem(pendingSlot);
+            int count = remaining.getItem() == pendingStack.getItem() ? remaining.getCount() : 0;
+            int transferred = DepositPolicy.transferred(pendingStack.getCount(), count);
+            movedItems += transferred;
+            baritone.getMineProcess().recordDeposit(pendingStack, transferred);
+        }
+        closeOwnedMenu();
+        pendingSlot = -1;
+        pendingStack = null;
+        openRequested = false;
+        refusedSlots.clear();
+        if (stage == Stage.OPEN || stage == Stage.TRANSFER) transition(Stage.TRAVEL);
+    }
+
     private PathingCommand pause() {
         return new PathingCommand(null, PathingCommandType.REQUEST_PAUSE);
+    }
+
+    /** Called only after a matching server full-content packet has been applied to this player's menu. */
+    public void onContainerContents(int containerId) {
+        if (ctx.player() != null && containerId == ctx.player().containerMenu.containerId) {
+            synchronizedMenuId = containerId;
+            contentRevision++;
+        }
     }
 
     private void transition(Stage next) {
@@ -343,6 +406,7 @@ public final class DepositProcess extends BaritoneProcessHelper {
         stage = Stage.IDLE;
         pendingSlot = -1;
         pendingStack = null;
+        synchronizedMenuId = -1;
         openRequested = false;
         depositAll = false;
         miningOutputs = null;
@@ -350,10 +414,12 @@ public final class DepositProcess extends BaritoneProcessHelper {
         depositDimension = returnDimension = null;
         returnTo = null;
         refusedSlots.clear();
+        remainingChests.clear();
+        storageId = 0;
     }
 
     @Override
     public String displayName0() {
-        return "Deposit: " + stage.name().toLowerCase(java.util.Locale.ROOT);
+        return "Deposit: " + stage.name().toLowerCase(java.util.Locale.ROOT) + " (storage #" + storageId + ")";
     }
 }

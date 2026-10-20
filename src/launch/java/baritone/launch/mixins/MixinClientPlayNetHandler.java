@@ -211,6 +211,22 @@ public abstract class MixinClientPlayNetHandler extends ClientCommonPacketListen
         }
     }
 
+    @Inject(method = "handleDamageEvent", at = @At("RETURN"))
+    private void onBotDamage(ClientboundDamageEventPacket packet, CallbackInfo ci) {
+        IBaritone instance = BaritoneAPI.getProvider().getBaritoneForConnection((ClientPacketListener) (Object) this);
+        if (instance instanceof Baritone bot && bot.getPlayerContext().world() != null
+                && bot.getPlayerContext().player() != null
+                && packet.entityId() == bot.getPlayerContext().player().getId()) {
+            bot.getConflictProcess().onDamage(packet.getSource(bot.getPlayerContext().world()));
+        }
+    }
+
+    @Inject(method = "handleContainerContent", at = @At("RETURN"))
+    private void onBotContainerContents(ClientboundContainerSetContentPacket packet, CallbackInfo ci) {
+        IBaritone instance = BaritoneAPI.getProvider().getBaritoneForConnection((ClientPacketListener) (Object) this);
+        if (instance instanceof Baritone bot) bot.getDepositProcess().onContainerContents(packet.getContainerId());
+    }
+
     /*
     @Inject(
             method = "handleChunkData",

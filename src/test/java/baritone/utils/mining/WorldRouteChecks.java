@@ -56,6 +56,35 @@ public final class WorldRouteChecks {
             Files.writeString(serverA.resolve("mining-routes.properties"), "deposit.dimension=minecraft:the_nether\ndeposit.x=not-a-number\n");
             check(new WorldRoutes(serverA).deposit() == null, "Malformed/incomplete endpoints fail closed");
 
+            Path multipleServer = temporary.resolve("multiple");
+            WorldRoutes multiple = new WorldRoutes(multipleServer);
+            WorldRoutes.Storage first = multiple.addDeposit(chest);
+            WorldRoutes.Storage nearby = multiple.addDeposit(overworld);
+            WorldRoutes.Storage acrossPortal = multiple.addDeposit(nether);
+            check(multiple.addDeposit(chest).id() == first.id() && multiple.deposits().size() == 3, "Adding one position twice does not duplicate storage");
+            check(multiple.orderedDeposits(WorldRoutes.OVERWORLD, -300, 65, 1200, true).get(0).equals(nearby), "Choose nearest same-dimension storage first");
+            check(multiple.orderedDeposits(WorldRoutes.OVERWORLD, 0, 0, 0, false).size() == 2, "Disabled travel excludes other dimensions");
+            check(multiple.orderedDeposits(WorldRoutes.NETHER, 0, 0, 0, true).get(0).equals(acrossPortal), "Local storage takes priority over a portal trip");
+            check(multiple.removeDeposit(nearby.id()), "Remove one storage entry by ID");
+            check(!multiple.removeDeposit(nearby.id()), "A removed ID cannot delete a different entry");
+            WorldRoutes restoredMultiple = new WorldRoutes(multipleServer);
+            check(restoredMultiple.deposits().size() == 2 && restoredMultiple.deposits().get(1).id() == acrossPortal.id(), "Remaining IDs stay stable through removal and restart");
+            WorldRoutes.Storage addedLater = restoredMultiple.addDeposit(new WorldRoutes.Endpoint(WorldRoutes.OVERWORLD, 1, 64, 1));
+            check(addedLater.id() > acrossPortal.id(), "Do not reuse removed IDs");
+            restoredMultiple.clearDeposits();
+            WorldRoutes cleared = new WorldRoutes(multipleServer);
+            check(cleared.deposits().isEmpty() && cleared.storageConfigured(), "Clearing storage persists a migration marker so old waypoints cannot resurrect it");
+
+            Path legacyServer = temporary.resolve("legacy");
+            Files.createDirectories(legacyServer);
+            Files.writeString(legacyServer.resolve("mining-routes.properties"), "deposit.dimension=minecraft:overworld\ndeposit.x=5\ndeposit.y=64\ndeposit.z=6\n");
+            WorldRoutes legacy = new WorldRoutes(legacyServer);
+            check(legacy.deposits().size() == 1 && legacy.deposits().get(0).id() == 1, "Migrate an older single chest without losing its location");
+            legacy.addDeposit(nether);
+            check(new WorldRoutes(legacyServer).deposits().size() == 2, "First edit saves the old and new storage together");
+            legacy.removeDeposit(1);
+            check(new WorldRoutes(legacyServer).deposits().size() == 1, "Removed legacy storage stays removed");
+
             check(WorldRoutes.connects(WorldRoutes.OVERWORLD, WorldRoutes.NETHER), "Route into Nether");
             check(WorldRoutes.connects(WorldRoutes.NETHER, WorldRoutes.OVERWORLD), "Route back to Overworld");
             check(!WorldRoutes.connects(WorldRoutes.OVERWORLD, "minecraft:the_end"), "Reject unsupported portal type");

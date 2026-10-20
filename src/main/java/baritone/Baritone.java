@@ -75,6 +75,8 @@ public class Baritone implements IBaritone {
     private final MineProcess mineProcess;
     private final DepositProcess depositProcess;
     private final PortalTravelProcess portalTravelProcess;
+    private final ConflictProcess conflictProcess;
+    private final StalkProcess stalkProcess;
     private final GetToBlockProcess getToBlockProcess;
     private final CustomGoalProcess customGoalProcess;
     private final BuilderProcess builderProcess;
@@ -120,6 +122,8 @@ public class Baritone implements IBaritone {
             this.mineProcess             = this.registerProcess(MineProcess::new);
             this.depositProcess          = this.registerProcess(DepositProcess::new);
             this.portalTravelProcess     = this.registerProcess(PortalTravelProcess::new);
+            this.conflictProcess         = this.registerProcess(ConflictProcess::new);
+            this.stalkProcess            = this.registerProcess(StalkProcess::new);
             this.customGoalProcess       = this.registerProcess(CustomGoalProcess::new); // very high iq
             this.getToBlockProcess       = this.registerProcess(GetToBlockProcess::new);
             this.builderProcess          = this.registerProcess(BuilderProcess::new);
@@ -134,6 +138,8 @@ public class Baritone implements IBaritone {
         this.selectionManager = new SelectionManager(this);
         this.commandManager = new CommandManager(this);
         this.registerBehavior(this.portalTravelProcess);
+        this.registerBehavior(this.conflictProcess);
+        this.registerBehavior(this.stalkProcess);
     }
 
     public void registerBehavior(IBehavior behavior) {
@@ -213,6 +219,10 @@ public class Baritone implements IBaritone {
     public PortalTravelProcess getPortalTravelProcess() {
         return this.portalTravelProcess;
     }
+
+    public ConflictProcess getConflictProcess() { return this.conflictProcess; }
+
+    public StalkProcess getStalkProcess() { return this.stalkProcess; }
 
     @Override
     public FarmProcess getFarmProcess() {
