@@ -41,7 +41,7 @@ public final class RepairProcess extends BaritoneProcessHelper {
     private WorldRoutes.Endpoint station,origin;
     private String item;
     private int slot=-1,previousSlot=-1,delay,lastDurability;
-    private long deadline,lastProgress,cooldown;
+    private long deadline,lastProgress,cooldown,lastActive;
     private String result="No repair requested";
     public RepairProcess(Baritone bot){super(bot);}
     @Override public boolean isActive(){return active;}
@@ -71,12 +71,13 @@ public final class RepairProcess extends BaritoneProcessHelper {
         if(ctx.player().containerMenu!=ctx.player().inventoryMenu||!ctx.player().inventoryMenu.getCarried().isEmpty())throw new IllegalStateException("Close containers and clear the cursor before repairing");
         station=MiningRouteAccess.locations(ctx).station("repair");root=MiningRouteAccess.root(ctx);origin=MiningRouteAccess.endpoint(ctx,ctx.playerFeet());
         slot=selected;item=BuiltInRegistries.ITEM.getKey(ctx.player().getInventory().getItem(slot).getItem()).toString();previousSlot=ctx.player().getInventory().getSelectedSlot();
-        active=true;returning=atStation=false;automatic=auto;delay=0;lastDurability=0;lastProgress=System.currentTimeMillis();
+        active=true;returning=atStation=false;automatic=auto;delay=0;lastDurability=0;lastProgress=lastActive=System.currentTimeMillis();
         deadline=lastProgress+Math.max(60000L,Math.min(3600000L,Baritone.settings().companionTaskTimeoutMS.value));result="Traveling to the Mending station";logDirect(result);
     }
     @Override public PathingCommand onTick(boolean failed,boolean safe){
         try{
             if(baritone.getDepositProcess().isActive())return new PathingCommand(null,PathingCommandType.DEFER);
+            long activeNow=System.currentTimeMillis();if(activeNow-lastActive>5000)lastProgress=activeNow;lastActive=activeNow;
             if(ctx.player()==null||ctx.world()==null||!root.equals(MiningRouteAccess.root(ctx)))return finish("Repair stopped: world changed",false);
             if(failed||System.currentTimeMillis()>deadline)return finish("Repair route failed or timed out",false);
             var target=returning?origin:station;
@@ -88,7 +89,10 @@ public final class RepairProcess extends BaritoneProcessHelper {
             if(returning)return finish("Pickaxe repaired; returned to work",true);
             if(ctx.player().containerMenu!=ctx.player().inventoryMenu||!ctx.player().inventoryMenu.getCarried().isEmpty())return finish("Close the container before repair can continue",false);
             ItemStack tool=ctx.player().getInventory().getItem(slot);
-            if(!BuiltInRegistries.ITEM.getKey(tool.getItem()).toString().equals(item)||!tool.getEnchantments().keySet().stream().anyMatch(holder->holder.is(Enchantments.MENDING)))return finish("The selected Mending pickaxe moved or was removed",false);
+            if(!sameTool(tool)){
+                slot=-1;for(int i=0;i<36;i++)if(sameTool(ctx.player().getInventory().getItem(i))){slot=i;break;}
+                if(slot<0)return finish("The selected Mending pickaxe was removed",false);tool=ctx.player().getInventory().getItem(slot);
+            }
             if(slot>=9){if(delay--<=0){ctx.playerController().windowClick(ctx.player().inventoryMenu.containerId,slot,0,ContainerInput.SWAP,ctx.player());slot=0;delay=10;}return pause();}
             if(delay-->0)return pause();
             ctx.player().getInventory().setSelectedSlot(slot);ctx.playerController().syncHeldItem();
@@ -105,6 +109,7 @@ public final class RepairProcess extends BaritoneProcessHelper {
         }catch(RuntimeException e){return finish("Repair stopped: "+e.getMessage(),false);}
     }
     private PathingCommand finish(String message,boolean success){boolean auto=automatic;onLostControl();result=message;if(!success&&auto)cooldown=System.currentTimeMillis()+600000;logDirect(message);return new PathingCommand(null,PathingCommandType.CANCEL_AND_SET_GOAL);}
+    private boolean sameTool(ItemStack stack){return !stack.isEmpty()&&BuiltInRegistries.ITEM.getKey(stack.getItem()).toString().equals(item)&&stack.getEnchantments().keySet().stream().anyMatch(holder->holder.is(Enchantments.MENDING));}
     private PathingCommand pause(){return new PathingCommand(null,PathingCommandType.REQUEST_PAUSE);}
     @Override public void onLostControl(){active=returning=atStation=false;if(previousSlot>=0&&ctx.player()!=null){ctx.player().getInventory().setSelectedSlot(previousSlot);if(ctx.minecraft().gameMode!=null)ctx.playerController().syncHeldItem();}previousSlot=-1;root=null;station=origin=null;slot=-1;}
     @Override public String displayName0(){return "Repair: "+result;}

@@ -47,7 +47,7 @@ public final class CompanionProcess extends BaritoneProcessHelper implements IBe
     private Path root;
     private UUID owner,targetId;
     private String targetName,item,status="Idle";
-    private int quantity,stageTicks,searchStep,quietTicks,delivered,pendingDrop,pendingEntity=-1,beforeDrop;
+    private int quantity,stageTicks,searchStep,quietTicks,delivered,pendingDrop,pendingEntity=-1;
     private boolean returning,fetching,fetchStarted,handoff,arrivalNotified,mining,finishedMine,working,depositing;
     private WorldRoutes.Endpoint origin,destination;
     private BotLocations.Death death;
@@ -133,7 +133,7 @@ public final class CompanionProcess extends BaritoneProcessHelper implements IBe
         if(!MiningRouteAccess.dimension(ctx).equals(point.dimension())){baritone.getPortalTravelProcess().start(point.dimension());return pause();}
         if(failed)return fail("No usable route to "+point);
         GoalNear goal=new GoalNear(MiningRouteAccess.position(point),2);
-        if(goal.isInGoal(ctx.playerFeet())&&safe){if(finish){String message=status;onLostControl();logDirect(message+"; returned to safety");return new PathingCommand(null,PathingCommandType.CANCEL_AND_SET_GOAL);}return null;}
+        if(goal.isInGoal(ctx.playerFeet())&&safe){if(finish){notifyOwner(status+"; returned to the starting point");onLostControl();return new PathingCommand(null,PathingCommandType.CANCEL_AND_SET_GOAL);}return null;}
         return new PathingCommand(goal,PathingCommandType.REVALIDATE_GOAL_AND_PATH);
     }
     private PathingCommand recoverTick(boolean failed,boolean safe){
@@ -158,7 +158,7 @@ public final class CompanionProcess extends BaritoneProcessHelper implements IBe
     }
     private PathingCommand deliverTick(boolean failed,boolean safe){
         if(fetching){fetching=false;if(BotItems.count(ctx,item)<quantity)return fail("Storage did not provide enough "+item+"; carrying "+BotItems.count(ctx,item)+"/"+quantity);}
-        if(!fetchStarted&&BotItems.count(ctx,item)<quantity){fetchStarted=fetching=true;baritone.getDepositProcess().startFetch(Map.of(item,quantity));return defer();}
+        if(!fetchStarted){fetchStarted=true;if(BotItems.count(ctx,item)<quantity){fetching=true;baritone.getDepositProcess().startFetch(Map.of(item,quantity));return defer();}}
         var target=player(targetId);
         if(target!=null){destination=MiningRouteAccess.endpoint(ctx,target.blockPosition());lastSeen=System.currentTimeMillis();}
         if(target==null){PathingCommand route=travel(destination,failed,safe,false);if(route!=null)return route;return pause();}
@@ -180,7 +180,7 @@ public final class CompanionProcess extends BaritoneProcessHelper implements IBe
         if(!ctx.playerRotations().isReallyCloseTo(rotation))return pause();
         int slot=BotItems.slot(ctx,item);if(slot<0)return fail("Delivery payload is missing; "+status);
         ItemStack stack=ctx.player().getInventory().getItem(slot);int button=CompanionPolicy.dropButton(stack.getCount(),quantity-delivered);
-        pendingDrop=button==1?stack.getCount():1;pendingEntity=-1;beforeDrop=BotItems.count(ctx,item);beforeEntities.clear();ctx.entitiesStream().forEach(entity->beforeEntities.add(entity.getId()));dropTime=System.currentTimeMillis();
+        pendingDrop=button==1?stack.getCount():1;pendingEntity=-1;beforeEntities.clear();ctx.entitiesStream().forEach(entity->beforeEntities.add(entity.getId()));dropTime=System.currentTimeMillis();
         ctx.playerController().windowClick(ctx.player().inventoryMenu.containerId,slot<9?slot+36:slot,button,ContainerInput.THROW,ctx.player());return pause();
     }
     private void discoverDrop(){
@@ -231,7 +231,12 @@ public final class CompanionProcess extends BaritoneProcessHelper implements IBe
         baritone.getWorkstationProcess().start(action);working=true;return defer();
     }
     private void notifyOwner(String message){logDirect(message);if(owner!=null)baritone.getBotControl().reply(owner,message);}
-    private PathingCommand fail(String message){notifyOwner("Companion task stopped: "+message);baritone.getMineProcess().cancel();baritone.getWorkstationProcess().onLostControl();onLostControl();return new PathingCommand(null,PathingCommandType.CANCEL_AND_SET_GOAL);}
+    private PathingCommand fail(String message){
+        notifyOwner("Companion task stopped: "+message);baritone.getMineProcess().cancel();
+        baritone.getDepositProcess().onLostControl();baritone.getWorkstationProcess().onLostControl();baritone.getRepairProcess().onLostControl();
+        baritone.getPortalTravelProcess().onLostControl();baritone.getSurvivalProcess().onLostControl();onLostControl();
+        return new PathingCommand(null,PathingCommandType.CANCEL_AND_SET_GOAL);
+    }
     private PathingCommand pause(){return new PathingCommand(null,PathingCommandType.REQUEST_PAUSE);}
     private PathingCommand defer(){return new PathingCommand(null,PathingCommandType.DEFER);}
     @Override public void onTick(TickEvent event){
@@ -242,9 +247,13 @@ public final class CompanionProcess extends BaritoneProcessHelper implements IBe
         if(ctx.worldData()==null)return;
         Path currentRoot=MiningRouteAccess.root(ctx);if(!currentRoot.equals(seenRoot)){seen.clear();lastInventory=Map.of();seenRoot=currentRoot;}
         if(ctx.player().isAlive())lastInventory=captureInventory();
+        if(isActive()&&nowExpired()&&baritone.getPathingControlManager().mostRecentInControl().map(process->process.priority()<0).orElse(true)){
+            fail("Task timed out; inspect supplies and issue a fresh command");baritone.getPathingBehavior().softCancelIfSafe();
+        }
         long now=System.currentTimeMillis();seen.entrySet().removeIf(entry->now-entry.getValue().time()>120000||!entry.getValue().point().dimension().equals(MiningRouteAccess.dimension(ctx)));
         for(Player player:ctx.world().players())if(player!=ctx.player()&&player.isAlive())seen.put(player.getUUID(),new Seen(MiningRouteAccess.endpoint(ctx,player.blockPosition()),now));
     }
+    private boolean nowExpired(){return System.currentTimeMillis()>deadline;}
     @Override public void onLostControl(){kind=Kind.IDLE;root=null;owner=targetId=null;targetName=item=null;quantity=stageTicks=searchStep=quietTicks=delivered=pendingDrop=0;pendingEntity=-1;returning=fetching=fetchStarted=handoff=arrivalNotified=mining=finishedMine=working=depositing=false;origin=destination=null;death=null;baseline=Map.of();reserved=Set.of();fetched.clear();failedRecoveryItems.clear();beforeEntities.clear();planner=null;status="Idle";}
     @Override public String displayName0(){return status;}
 }

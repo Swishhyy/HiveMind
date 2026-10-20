@@ -117,10 +117,10 @@ public final class DepositProcess extends BaritoneProcessHelper {
     public void start(boolean all) { start(all,null); }
     public void startProductDeposit(String item) { start(false,item); returnTo = null; returnDimension = null; }
     private void start(boolean all,String onlyProduct) {
-        this.product = onlyProduct;
         if (isActive()) {
             throw new IllegalStateException("A deposit trip is already running");
         }
+        this.product = onlyProduct;
         lastDepositError = null;
         if (MiningRouteAccess.deposits(ctx).isEmpty()) throw new IllegalStateException("Look at a chest and run deposit add first");
         if (ctx.player().containerMenu != ctx.player().inventoryMenu || !ctx.player().containerMenu.getCarried().isEmpty()) {

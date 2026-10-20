@@ -47,7 +47,7 @@ public final class CompanionCommand extends Command {
             if(label.equals("repair")){
                 if(args.hasAny())args.getString();args.requireMax(0);
                 switch(action){
-                    case "set"->{local();locations.setStation("repair",MiningRouteAccess.endpoint(ctx,ctx.playerFeet()));report("Mending/XP station saved at "+ctx.playerFeet());}
+                    case "set"->{local();if(bot().getRepairProcess().isActive())throw new IllegalStateException("Stop the repair trip before moving its station");locations.setStation("repair",MiningRouteAccess.endpoint(ctx,ctx.playerFeet()));report("Mending/XP station saved at "+ctx.playerFeet());}
                     case "clear"->{local();if(bot().getRepairProcess().isActive())throw new IllegalStateException("Stop the repair trip before clearing its station");locations.setStation("repair",null);report("Repair station removed");}
                     case "now"->bot().getRepairProcess().start();
                     case "status"->report(bot().getRepairProcess().result()+"; station "+locations.station("repair"));
@@ -66,7 +66,7 @@ public final class CompanionCommand extends Command {
             switch(label){
                 case "recover"->{
                     args.getString();args.requireMax(0);
-                    if(action.equals("reset")){local();var death=locations.death();if(death==null)throw new IllegalStateException("No recorded death");locations.setDeath(new BotLocations.Death(death.point(),death.time(),death.items(),0));report("Recovery attempts reset after inspection");}
+                    if(action.equals("reset")){local();if(process.isRecovering())throw new IllegalStateException("Stop recovery before resetting its attempts");var death=locations.death();if(death==null)throw new IllegalStateException("No recorded death");locations.setDeath(new BotLocations.Death(death.point(),death.time(),death.items(),0));report("Recovery attempts reset after inspection");}
                     else if(action.equals("now"))process.recover();else throw new IllegalArgumentException("Use recover now, status, stop, or reset");
                 }
                 case "deliver"->{
