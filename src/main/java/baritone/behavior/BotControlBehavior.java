@@ -79,14 +79,32 @@ public final class BotControlBehavior extends Behavior {
             String label = expanded.first().toLowerCase(Locale.ROOT);
             var args = new ArgConsumer(baritone.getCommandManager(), expanded.second());
             if (label.equals("status")) { args.requireMax(0); reply(player, baritone.getJobManager().status()); return; }
+            if (label.equals("job") && args.hasAny() && args.peekString().equalsIgnoreCase("list")) {
+                args.getString(); args.requireMax(0);
+                var queued = baritone.getJobManager().jobs(); reply(player, baritone.getJobManager().status());
+                for (var job : queued.stream().limit(12).toList()) reply(player, "Job #" + job.id() + ": mine " + job.quantity() + " " + String.join(" ", job.blocks()));
+                if (queued.size() > 12) reply(player, "Showing the first 12 jobs of " + queued.size());
+                return;
+            }
             if (label.equals("deposit")) {
                 String action = expanded.second().isEmpty() ? "now" : expanded.second().get(0).getValue().toLowerCase(Locale.ROOT);
                 if (!Set.of("now", "all", "status", "list").contains(action)) throw new IllegalArgumentException("Storage edits are local; use deposit now/all/status/list remotely");
+                if (action.equals("status") || action.equals("list")) {
+                    args.getString(); args.requireMax(0);
+                    var saved = MiningRouteAccess.deposits(ctx);
+                    reply(player, saved.size() + " storage chest(s); " + (baritone.getDepositProcess().isActive() ? baritone.getDepositProcess().displayName() : "No active storage trip"));
+                    for (var chest : saved.stream().limit(12).toList()) reply(player, "Storage #" + chest.id() + " " + chest.rule().label() + " [" + chest.rule().kind() + "] " + chest.endpoint());
+                    if (saved.size() > 12) reply(player, "Showing the first 12 storage entries of " + saved.size());
+                    return;
+                }
             }
             if (label.equals("mine")) {
                 args.requireMin(2); int quantity = args.getAs(Integer.class); List<String> blocks = new ArrayList<>();
                 while (args.hasAny()) blocks.add(args.getString());
-                baritone.getJobManager().withOwner(player, () -> baritone.getJobManager().submit(quantity, blocks));
+                long[] id = new long[1];
+                baritone.getJobManager().withOwner(player, () -> id[0] = baritone.getJobManager().submit(quantity, blocks));
+                reply(player, "Queued mining job #" + id[0] + ": " + quantity + " " + String.join(" ", blocks));
+                return;
             } else {
                 var target = baritone.getCommandManager().getCommand(label);
                 if (target == null) throw new IllegalArgumentException("Unknown remote command");

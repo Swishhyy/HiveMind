@@ -110,10 +110,11 @@ public final class JobManager extends BaritoneProcessHelper implements IBehavior
     public String status() {
         ensureLoaded();
         String task = baritone.getPathingControlManager().mostRecentInControl().map(p -> p.displayName()).orElse("Idle");
-        String result = (queue.isEmpty() ? "Idle" : (paused ? "Paused" : "Running")) + "; " + queue.size() + " job(s); " + reason + "; " + task;
-        if (current != null) result += "; job #" + current.id() + " " + (completedMining ? current.quantity() : Math.max(current.deposited(), baritone.getMineProcess().jobProgress())) + "/" + current.quantity();
+        String result = (queue.isEmpty() ? "Idle" : (paused ? "Paused" : "Running")) + "; " + queue.size() + " job(s)";
         if (ctx.player() != null) result += "; health " + Math.round(ctx.player().getHealth()) + "/" + Math.round(ctx.player().getMaxHealth())
                 + "; hunger " + ctx.player().getFoodData().getFoodLevel() + "/20";
+        if (current != null) result += "; job #" + current.id() + " " + (completedMining ? current.quantity() : Math.max(current.deposited(), baritone.getMineProcess().jobProgress())) + "/" + current.quantity();
+        result += "; " + reason + "; " + task;
         return result;
     }
     public void miningFinished() {
