@@ -26,7 +26,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
-/** Keep vanilla item-use alive while a controlling care/defense process owns the action. */
+/** Keep vanilla item-use alive while a controlling care/defense/stalk process owns the action. */
 @Mixin(KeyMapping.class)
 public abstract class MixinBotUseKey {
     @Inject(method = "isDown", at = @At("RETURN"), cancellable = true)
@@ -34,6 +34,6 @@ public abstract class MixinBotUseKey {
         Minecraft mc = Minecraft.getInstance();
         if ((Object) this != mc.options.keyUse || mc.player == null) return;
         if (BaritoneAPI.getProvider().getBaritoneForPlayer(mc.player) instanceof Baritone bot
-                && (bot.getSurvivalProcess().holdsUse() || bot.getConflictProcess().holdsUse())) cir.setReturnValue(true);
+                && (bot.getSurvivalProcess().holdsUse() || bot.getConflictProcess().holdsUse() || bot.getStalkProcess().holdsUse())) cir.setReturnValue(true);
     }
 }

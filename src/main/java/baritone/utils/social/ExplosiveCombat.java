@@ -76,6 +76,8 @@ public final class ExplosiveCombat {
         boolean crystal=crystals().stream().anyMatch(entity->entity.position().distanceToSqr(blastPoint(plan))<2);
         return blocks||cover||crystal?"Combat blocks/explosive still visible near "+plan.pos().getX()+" "+plan.pos().getY()+" "+plan.pos().getZ()+"; no cleanup was attempted":null;
     }
+    /** Whether a crystal/anchor plan is eligible right now; lets a melee fallback switch back to explosives. */
+    public boolean available(Player target,CombatStyle requested) { return !inProgress()&&choose(target,requested)!=null; }
     public boolean expectedCrystal(Entity entity) { return stage==Stage.WAIT_BREAK&&entity instanceof EndCrystal&&entity.getId()==id; }
     public void reset() { stage=Stage.SELECT;plan=null;ticks=delay=idleTicks=confirmedCycles=0;id=-1;blockConfirmed=false;warning=null;rejected.clear(); }
     public void onBlockChange(BlockChangeEvent event) {
@@ -360,7 +362,7 @@ public final class ExplosiveCombat {
         ctx.playerController().processRightClickBlock(ctx.player(),ctx.world(),InteractionHand.MAIN_HAND,hit);
         ctx.player().swing(InteractionHand.MAIN_HAND,SwingAnimation.DEFAULT,false);pace();return true;
     }
-    private void pace() { delay=StealthPolicy.bounded(Baritone.settings().killExplosiveDelayTicks.value,2,20); }
+    private void pace() { delay=StealthPolicy.bounded(Baritone.settings().killExplosiveDelayTicks.value,0,20); }
     private void change(Stage next) { stage=next;ticks=0; }
     private Step waitStep() { return new Step(null,false,null); }
     private Step problem(String reason,CombatStyle requested) {

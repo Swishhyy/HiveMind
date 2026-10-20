@@ -17,6 +17,8 @@
 
 package baritone.utils.social;
 
+import java.util.function.BooleanSupplier;
+
 /** Geometry and bounded decisions shared by stalking and deterministic regression checks. */
 public final class StealthPolicy {
     private StealthPolicy() {}
@@ -34,14 +36,32 @@ public final class StealthPolicy {
         return watched ? Math.min(bounded(threshold,10,200),Math.max(0,previous)+1) : Math.max(0,previous-2);
     }
     public static boolean openHeight(double vertical, int maximum) { return Math.abs(vertical) <= bounded(maximum,2,8); }
-    public static boolean readyToAmbush(int quietTicks, int requiredQuiet, double facingDot, boolean visible,
+    /** Vanilla renders an upright player's name tag through walls up to this distance; crouching hides it there. */
+    public static final int NAME_TAG_RANGE = 64;
+    /**
+     * Crouching only matters where someone could perceive the bot: footsteps inside hearing range, or a name tag or
+     * body inside that player's possible field of view. The sight-line check is lazy because it costs a ray trace.
+     */
+    public static boolean mayBeNoticed(double distance, double facingDot, boolean hidden, int hearingRange, int viewHalfAngle, BooleanSupplier sight) {
+        if (!Double.isFinite(distance)) return false;
+        if (distance <= bounded(hearingRange,4,48)) return true;
+        if (hidden || !Double.isFinite(facingDot) || facingDot < Math.cos(Math.toRadians(bounded(viewHalfAngle,30,90)))) return false;
+        return distance <= NAME_TAG_RANGE || sight.getAsBoolean();
+    }
+    public static boolean readyToAmbush(int quietTicks, int requiredQuiet, double facingDot, double maximumFacing, boolean visible,
                                         boolean alone, boolean equipped, float health, int hunger, int minimumHealth) {
-        return quietTicks >= bounded(requiredQuiet,20,400) && facingDot < -0.25 && visible && alone && equipped
+        return quietTicks >= bounded(requiredQuiet,20,400) && facingDot < maximumFacing && visible && alone && equipped
                 && health >= bounded(minimumHealth,13,20) && hunger > 6;
     }
-    public static boolean mayContinueCombat(float health, int hunger, int minimumHealth, boolean equipped, boolean alone) {
-        return health >= bounded(minimumHealth,13,20) && hunger > 6 && equipped && alone;
+    public static boolean mayStartCombat(float health, int hunger, int minimumHealth, boolean equipped) {
+        return health >= bounded(minimumHealth,13,20) && hunger > 6 && equipped;
     }
+    /** Once engaged, only low health (half the limit while a totem is held) or being outnumbered ends the fight. */
+    public static boolean lowHealth(float health, float absorption, int retreatHealth, boolean totem) {
+        int limit = bounded(retreatHealth,2,19);
+        return health + Math.max(0,absorption) < (totem ? Math.max(2,limit/2) : limit);
+    }
+    public static boolean outnumbered(int nearbyOpponents, int retreatPlayers) { return nearbyOpponents >= bounded(retreatPlayers,2,8); }
     public static double clearancePenalty(double horizontalDistance,int minimum) {
         return Double.isFinite(horizontalDistance)&&horizontalDistance<minimum?10000+Math.max(0,minimum-horizontalDistance)*1000:0;
     }

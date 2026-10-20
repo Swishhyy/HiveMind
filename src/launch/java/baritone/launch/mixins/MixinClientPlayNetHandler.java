@@ -219,7 +219,10 @@ public abstract class MixinClientPlayNetHandler extends ClientCommonPacketListen
         if (instance instanceof Baritone bot && bot.getPlayerContext().world() != null
                 && bot.getPlayerContext().player() != null) {
             if (packet.entityId() == bot.getPlayerContext().player().getId()) bot.getConflictProcess().onDamage(packet.getSource(bot.getPlayerContext().world()));
-            else bot.getConflictProcess().onProtectedDamage(packet.entityId(), packet.getSource(bot.getPlayerContext().world()));
+            else {
+                bot.getConflictProcess().onProtectedDamage(packet.entityId(), packet.getSource(bot.getPlayerContext().world()));
+                bot.getStalkProcess().onEntityDamaged(packet.entityId());
+            }
         }
     }
 

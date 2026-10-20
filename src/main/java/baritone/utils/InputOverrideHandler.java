@@ -96,7 +96,7 @@ public final class InputOverrideHandler extends Behavior implements IInputOverri
             setInputForceState(Input.CLICK_RIGHT, false);
         }
         blockBreakHelper.tick(isInputForcedDown(Input.CLICK_LEFT));
-        if (!baritone.getSurvivalProcess().holdsUse() && !baritone.getConflictProcess().holdsUse())
+        if (!baritone.getSurvivalProcess().holdsUse() && !baritone.getConflictProcess().holdsUse() && !baritone.getStalkProcess().holdsUse())
             blockPlaceHelper.tick(isInputForcedDown(Input.CLICK_RIGHT));
 
         if (inControl()) {

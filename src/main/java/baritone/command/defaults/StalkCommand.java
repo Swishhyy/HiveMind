@@ -90,12 +90,14 @@ public final class StalkCommand extends Command {
     @Override public String getShortDesc() { return "Stealth stalking, private sighting memory, and an explicit named-player ambush"; }
     @Override public List<String> getLongDesc() {
         return List.of("stalk <player|random> - Observe from open line-of-sight positions about 40 blocks away.",
+                "It crouches only where another player could hear or possibly see it, and can drink hotbar invisibility potions.",
                 "Sustained player gaze causes a scatter and a new approach. Minimal-evidence mode avoids terrain edits and closed doors.",
                 "stalk sightings [player] - List saved observations and possible/confirmed bases for this server.",
                 "stalk check <player> - Check saved places, including when that player is offline; no global coordinates are revealed.",
                 "stalk base <player> [x y z] - Locally confirm a base at supplied or previously observed coordinates.",
                 "stalk forget <player|all>; stalk report <trusted-player|off|status> - Local memory/report configuration.",
                 "kill <player> [auto|melee|crystal|anchor] - Stalk, approach an isolated player looking away, and engage using carried supplies.",
+                "An engaged fight only retreats on low health or a second nearby player; a totem is kept in the offhand.",
                 "Crystal uses obsidian/bedrock bases and real end crystals; anchor places, charges, and detonates outside respawn dimensions.",
                 "Explosive combat can leave craters/obsidian and uses blast-exposure, health, bystander, and protected-area checks.",
                 "kill status/stop; stalk status/stop - Inspect or cancel. Global pause/stop still apply.",

@@ -22,24 +22,33 @@ import baritone.api.behavior.IBehavior;
 import baritone.api.event.events.TickEvent;
 import baritone.api.event.events.BlockChangeEvent;
 import baritone.api.pathing.goals.*;
+import baritone.api.pathing.movement.IMovement;
 import baritone.api.process.PathingCommand;
 import baritone.api.process.PathingCommandType;
+import baritone.api.utils.BetterBlockPos;
 import baritone.api.utils.RotationUtils;
 import baritone.api.utils.input.Input;
 import baritone.pathing.movement.CalculationContext;
 import baritone.pathing.movement.MovementHelper;
+import baritone.pathing.path.PathExecutor;
 import baritone.utils.BaritoneProcessHelper;
 import baritone.utils.mining.MiningRouteAccess;
 import baritone.utils.social.*;
 import net.minecraft.client.multiplayer.PlayerInfo;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.component.DataComponents;
 import net.minecraft.tags.BlockTags;
 import net.minecraft.tags.ItemTags;
 import net.minecraft.world.InteractionHand;
+import net.minecraft.world.effect.MobEffectInstance;
+import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.inventory.ContainerInput;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.world.item.alchemy.PotionContents;
 import net.minecraft.world.item.component.SwingAnimation;
 import net.minecraft.world.item.enchantment.Enchantments;
 import net.minecraft.world.level.ClipContext;
@@ -52,7 +61,7 @@ import java.util.concurrent.ThreadLocalRandom;
 
 /** UUID-specific tracking using ordinary loaded-world movement, real sight lines, and real melee. */
 public final class StalkProcess extends BaritoneProcessHelper implements IBehavior {
-    private enum Phase { SEARCH, WATCH, SCATTER, APPROACH, ATTACK }
+    private enum Phase { SEARCH, WATCH, DRINK, SCATTER, APPROACH, ATTACK }
     private record Seen(BlockPos position,long time) {}
     private final Map<UUID,Seen> seen=new HashMap<>();
     private final ExplosiveCombat explosives;
@@ -64,8 +73,8 @@ public final class StalkProcess extends BaritoneProcessHelper implements IBehavi
     private PlayerMemory memory;
     private UUID targetId,owner;
     private String targetName,lastResult="No stalk target";
-    private Phase phase=Phase.SEARCH;
-    private boolean hunt,checkingMemoryOnly,watching,endAfterScatter,reachedRear;
+    private Phase phase=Phase.SEARCH,afterDrink=Phase.SEARCH;
+    private boolean hunt,checkingMemoryOnly,watching,endAfterScatter,reachedRear,perceptible,ownsUse,drinkStarted,invisibilityFailed,damageConfirmed;
     private BlockPos searchAnchor,vantageAnchor,vantage,lastReported,scatterAnchor,scatterWaypoint;
     private int scatterDistance,scatterReplan;
     private double scatterAngle;
@@ -73,9 +82,10 @@ public final class StalkProcess extends BaritoneProcessHelper implements IBehavi
     private Player watchedPlayer;
     private List<PlayerMemory.Place> rememberedPlaces=List.of();
     private int searchStep,memoryStep,legTicks,siteWait,vantageRetry,noVantageTicks,gazeTicks,quietTicks,scatterTicks,scatterQuiet,failedPaths,attempts,previousSlot=-1;
+    private int drinkTicks,drinkWait,totemDelay,explosiveRecheck;
     private boolean checkedLastSeen;
-    private long searchStarted,taskStarted,ambushAt,approachStarted,attackStarted,lastRecorded,lastReport,nextMemoryError;
-    private float startingTargetHealth;
+    private long searchStarted,taskStarted,ambushAt,approachStarted,attackStarted,lastProgress,lastRecorded,lastReport,nextMemoryError;
+    private float lastTargetHealth;
     private int attackCount;
     private String scatterReason="";
 
@@ -83,7 +93,12 @@ public final class StalkProcess extends BaritoneProcessHelper implements IBehavi
     @Override public boolean isActive() { return targetId!=null; }
     public boolean hunting() { return isActive()&&hunt; }
     public boolean terrainLocked() { return isActive()&&Baritone.settings().stalkMinimalEvidence.value; }
-    public boolean quietMovement() { return isActive()&&phase!=Phase.SCATTER&&phase!=Phase.ATTACK&&!baritone.getConflictProcess().isActive(); }
+    /** Quiet (no sprint, crouch where allowed) only while another player could hear or possibly see the bot. */
+    public boolean quietMovement() { return isActive()&&perceptible&&quietPhase()&&!baritone.getConflictProcess().isActive(); }
+    private boolean quietPhase() { return phase==Phase.SEARCH||phase==Phase.WATCH||phase==Phase.DRINK||phase==Phase.APPROACH&&!reachedRear; }
+    /** An engaged hunt keeps fighting; only low health or being outnumbered withdraws it. */
+    public boolean committedCombat() { return isActive()&&hunt&&(phase==Phase.APPROACH||phase==Phase.ATTACK); }
+    public boolean holdsUse() { return ownsUse&&baritone.getPathingControlManager().mostRecentInControl().orElse(null)==this; }
     public boolean scattering() { return isActive()&&phase==Phase.SCATTER; }
     public BlockPos avoidanceCenter() {
         if(!isActive()||ctx.world()==null||phase==Phase.APPROACH||phase==Phase.ATTACK)return null;
@@ -159,7 +174,7 @@ public final class StalkProcess extends BaritoneProcessHelper implements IBehavi
             if(!Baritone.settings().killAllowTrustedTargets.value&&baritone.getBotControl().isTrusted(selected))
                 throw new IllegalStateException("Trusted controllers are protected from kill; change killAllowTrustedTargets locally to opt in");
             if(!equipmentReady(style))throw new IllegalStateException("Carry usable hotbar supplies for "+style.name().toLowerCase(Locale.ROOT)+" combat; anchor needs anchors, glowstone, and a non-glowstone trigger hand");
-            if(!canFight(style))throw new IllegalStateException("Recover health and hunger before an ambush");
+            if(!canStart(style))throw new IllegalStateException("Recover health and hunger before an ambush");
         }
         UUID controller=baritone.getJobManager().requestOwner();baritone.getPathingBehavior().cancelEverything();
         owner=controller;targetId=selected;targetName=name;hunt=kill;combatStyle=style;meleeFallback=style==CombatStyle.AUTO&&!explosives.supplies(CombatStyle.AUTO);checkingMemoryOnly=checkOnly;observedWorld=ctx.world();
@@ -199,14 +214,35 @@ public final class StalkProcess extends BaritoneProcessHelper implements IBehavi
     private boolean equipmentReady(CombatStyle style) {
         return style==CombatStyle.MELEE?weapon()>=0:explosives.inProgress()||explosives.supplies(style)||(style==CombatStyle.AUTO&&weapon()>=0);
     }
-    private boolean canFight(CombatStyle style) {
-        return StealthPolicy.mayContinueCombat(ctx.player().getHealth(),ctx.player().getFoodData().getFoodLevel(),
-                Baritone.settings().killMinimumHealth.value,equipmentReady(style),true);
+    private boolean canStart(CombatStyle style) {
+        return StealthPolicy.mayStartCombat(ctx.player().getHealth(),ctx.player().getFoodData().getFoodLevel(),
+                Baritone.settings().killMinimumHealth.value,equipmentReady(style));
     }
-    private boolean canFight() { return canFight(meleeFallback?CombatStyle.MELEE:combatStyle); }
+    private boolean totemReady() { return ctx.player().getOffhandItem().is(Items.TOTEM_OF_UNDYING)||ctx.player().getMainHandItem().is(Items.TOTEM_OF_UNDYING); }
+    private int opponentsNear(Player target) {
+        int count=0;
+        for(Player other:ctx.world().players())
+            if(other!=ctx.player()&&other.isAlive()&&!other.isSpectator()&&(other.getUUID().equals(targetId)||!baritone.getBotControl().isTrusted(other.getUUID()))
+                    &&(other.distanceToSqr(ctx.player())<=256||other.distanceToSqr(target)<=144))count++;
+        return count;
+    }
+    private String retreatReason(Player target) {
+        if(StealthPolicy.lowHealth(ctx.player().getHealth(),ctx.player().getAbsorptionAmount(),Baritone.settings().killRetreatHealth.value,totemReady()))
+            return "Health is low; retreating";
+        if(StealthPolicy.outnumbered(opponentsNear(target),Baritone.settings().killRetreatPlayers.value))return "Several players are near the fight; retreating";
+        if(weapon()<0&&(combatStyle==CombatStyle.MELEE||!explosives.inProgress()&&!explosives.supplies(combatStyle)))
+            return "No usable weapon or explosive supplies remain; withdrawing";
+        return null;
+    }
     public boolean handlesCombatAgainst(Entity attacker) {
-        Player target=isActive()&&hunt&&phase==Phase.ATTACK?loaded(targetId):null;
-        return target!=null&&(target.getUUID().equals(attacker.getUUID())||explosives.expectedCrystal(attacker))&&canFight()&&alone(target)&&!baritone.getSculkProcess().isActive();
+        Player target=committedCombat()?loaded(targetId):null;
+        if(target==null||baritone.getSculkProcess().isActive()||retreatReason(target)!=null)return false;
+        // Hits from the target, its own crystals, and mobs do not end an engaged fight; another player's attack still does.
+        return target.getUUID().equals(attacker.getUUID())||explosives.expectedCrystal(attacker)||!(attacker instanceof Player);
+    }
+    public void onEntityDamaged(int entityId) {
+        Player target=committedCombat()&&ctx.world()!=null?loaded(targetId):null;
+        if(target!=null&&target.getId()==entityId) { damageConfirmed=true;lastProgress=System.currentTimeMillis(); }
     }
 
     @Override public PathingCommand onTick(boolean failed,boolean safe) {
@@ -214,15 +250,18 @@ public final class StalkProcess extends BaritoneProcessHelper implements IBehavi
         try {
             if(ctx.player()==null||ctx.world()==null||!ctx.player().isAlive()||ctx.world()!=observedWorld||ctx.minecraft().getConnection()==null)
                 return stop("Bot or world changed");
-            if(hunt&&System.currentTimeMillis()-taskStarted>StealthPolicy.bounded(Baritone.settings().killTimeoutMS.value,60000L,3600000L))
+            if(phase!=Phase.DRINK)releaseUse();
+            if(hunt&&!committedCombat()&&System.currentTimeMillis()-taskStarted>StealthPolicy.bounded(Baritone.settings().killTimeoutMS.value,60000L,3600000L))
                 return stop("Hunt timed out; no kill is assumed");
             if(hunt&&phase==Phase.ATTACK) {
                 Player entity=ctx.world().players().stream().filter(player->player.getUUID().equals(targetId)).findFirst().orElse(null);
                 if(entity!=null&&(!entity.isAlive()||entity.getHealth()<=0))return scatter(entity,"Target death observed; withdrawing",true);
             }
             Player target=loaded(targetId);
+            if(hunt&&(committedCombat()||phase==Phase.SCATTER))equipTotem();
             if(phase==Phase.SCATTER)return scatterTick(target,failed,safe);
             if(!checkingMemoryOnly&&ctx.minecraft().getConnection().getPlayerInfo(targetId)==null)return stop("Target left the server; no kill is assumed");
+            if(phase==Phase.DRINK)return drink(target,safe);
             if(target==null) {
                 if(phase==Phase.ATTACK)return stop("Target left client view during combat; a kill was not confirmed");
                 phase=Phase.SEARCH;quietTicks=0;ambushAt=0;return search(failed,safe);
@@ -235,7 +274,7 @@ public final class StalkProcess extends BaritoneProcessHelper implements IBehavi
             legTicks=siteWait=searchStep=0;checkedLastSeen=false;memoryStep=0;
             boolean viewed=beingWatched(target);
             gazeTicks=StealthPolicy.gazeTicks(gazeTicks,viewed,Baritone.settings().stalkGazeTicks.value);
-            if(phase!=Phase.ATTACK&&gazeTicks>=StealthPolicy.bounded(Baritone.settings().stalkGazeTicks.value,10,200))
+            if(!committedCombat()&&gazeTicks>=StealthPolicy.bounded(Baritone.settings().stalkGazeTicks.value,10,200))
                 return scatter(target,"Player watched the bot too long; scattering",false);
             if(phase==Phase.ATTACK)return attack(target,failed,safe);
             if(phase==Phase.APPROACH)return approach(target,failed,safe);
@@ -248,30 +287,17 @@ public final class StalkProcess extends BaritoneProcessHelper implements IBehavi
             vantageAnchor=target.blockPosition().immutable();vantage=null;failedVantages.clear();vantageRetry=0;
         }
         if(failed&&vantage!=null) { failedVantages.add(vantage);vantage=null;vantageRetry=0;if(++failedPaths>=6)return stop("No reachable open viewing point"); }
+        boolean sight=ctx.player().hasLineOfSight(target);
+        quietTicks=sight&&!viewed?quietTicks+1:0;
+        if(hunt) { PathingCommand ambush=ambush(target,sight,safe);if(ambush!=null)return ambush; }
         boolean inBand=new GoalStandoff(target.blockPosition(),distance()).isInGoal(ctx.playerFeet())
                 &&StealthPolicy.openHeight(ctx.player().getY()-target.getY(),Baritone.settings().stalkVerticalRange.value);
-        boolean sight=ctx.player().hasLineOfSight(target);
         boolean open=inBand&&openPoint(ctx.playerFeet());
         if(inBand&&sight&&open&&facing(target,ctx.playerHead())<0.45) {
             noVantageTicks=0;vantage=null;watching=safe;watchedPlayer=target;
             if(safe) { baritone.getInputOverrideHandler().clearAllKeys();ctx.playerController().resetBlockRemoving(); }
-            quietTicks=viewed?0:quietTicks+1;
-            if(hunt) {
-                long now=System.currentTimeMillis();
-                if(ambushAt==0) {
-                    long minimum=StealthPolicy.bounded(Baritone.settings().killWatchMinimumMS.value,3000L,120000L);
-                    long maximum=Math.max(minimum,StealthPolicy.bounded(Baritone.settings().killWatchMaximumMS.value,3000L,180000L));
-                    ambushAt=now+ThreadLocalRandom.current().nextLong(minimum,maximum+1);
-                }
-                if(safe&&now>=ambushAt&&StealthPolicy.readyToAmbush(quietTicks,60,facing(target,ctx.playerHead()),sight,alone(target),equipmentReady(combatStyle),
-                        ctx.player().getHealth(),ctx.player().getFoodData().getFoodLevel(),Baritone.settings().killMinimumHealth.value)) {
-                    phase=Phase.APPROACH;watching=false;approachStarted=now;reachedRear=false;attempts++;
-                    tell("Ambush opportunity: "+targetName+" is looking away; approaching from behind");return pause();
-                }
-            }
             return pause();
         }
-        quietTicks=0;
         if(++noVantageTicks>1200)return stop("No open line-of-sight viewing point became reachable");
         if(vantageRetry--<=0) { vantage=findVantage(target);vantageRetry=20; }
         if(vantage!=null)return path(new GoalNear(vantage,0));
@@ -279,6 +305,26 @@ public final class StalkProcess extends BaritoneProcessHelper implements IBehavi
         if(!inBand)return path(new GoalStandoff(target.blockPosition(),distance()));
         if(safe)baritone.getInputOverrideHandler().clearAllKeys();
         return pause();
+    }
+
+    /** A hunt starts from wherever it already sees the target instead of first settling into the viewing band. */
+    private PathingCommand ambush(Player target,boolean sight,boolean safe) {
+        if(!sight||Math.hypot(target.getX()-ctx.player().getX(),target.getZ()-ctx.player().getZ())>distance()+8)return null;
+        long now=System.currentTimeMillis();
+        if(ambushAt==0) {
+            long minimum=StealthPolicy.bounded(Baritone.settings().killWatchMinimumMS.value,0L,120000L);
+            long maximum=Math.max(minimum,StealthPolicy.bounded(Baritone.settings().killWatchMaximumMS.value,0L,180000L));
+            ambushAt=now+ThreadLocalRandom.current().nextLong(minimum,maximum+1);
+        }
+        if(!safe||now<ambushAt||!StealthPolicy.readyToAmbush(quietTicks,20,facing(target,ctx.playerHead()),invisible()?0.45:0,sight,alone(target),
+                equipmentReady(combatStyle),ctx.player().getHealth(),ctx.player().getFoodData().getFoodLevel(),Baritone.settings().killMinimumHealth.value))return null;
+        watching=false;
+        if(wantsInvisibility())return startDrink(Phase.APPROACH,"Drinking invisibility before the approach");
+        return enterApproach(target);
+    }
+    private PathingCommand enterApproach(Player target) {
+        phase=Phase.APPROACH;approachStarted=System.currentTimeMillis();reachedRear=false;failedPaths=0;attempts++;
+        tell("Ambush opportunity: "+targetName+" is looking away; approaching");return pause();
     }
 
     private boolean openPoint(BlockPos pos) {
@@ -315,7 +361,7 @@ public final class StalkProcess extends BaritoneProcessHelper implements IBehavi
         if(target!=null)scatterAnchor=target.blockPosition().immutable();
         else if(scatterAnchor==null)scatterAnchor=searchAnchor;
         String remaining=explosives.remaining();if(remaining!=null)tell(remaining);
-        restoreWeapon();explosives.reset();phase=Phase.SCATTER;watching=false;gazeTicks=quietTicks=scatterTicks=scatterQuiet=failedPaths=0;
+        releaseUse();restoreWeapon();explosives.reset();phase=Phase.SCATTER;watching=false;gazeTicks=quietTicks=scatterTicks=scatterQuiet=failedPaths=0;
         scatterWaypoint=null;scatterReplan=0;scatterDistance=Math.min(128,Math.max(64,distance()+24));
         scatterAngle=Math.atan2(ctx.player().getZ()-scatterAnchor.getZ(),ctx.player().getX()-scatterAnchor.getX())+(ThreadLocalRandom.current().nextBoolean()?1:-1)*Math.PI/2;
         vantage=null;failedVantages.clear();endAfterScatter=finish;scatterReason=reason;ambushAt=0;
@@ -337,8 +383,9 @@ public final class StalkProcess extends BaritoneProcessHelper implements IBehavi
         if(clear&&scatterQuiet>=40&&scatterTicks>=StealthPolicy.bounded(Baritone.settings().stalkScatterTicks.value,40,1200)) {
             if(endAfterScatter)return stop(scatterReason);
             if(hunt&&attempts>=StealthPolicy.bounded(Baritone.settings().killMaxAttempts.value,1,10))return stop("Ambush attempt limit reached");
+            if(wantsInvisibility())return startDrink(Phase.SEARCH,"Out of sight; drinking invisibility before re-approaching");
             phase=Phase.SEARCH;searchStarted=System.currentTimeMillis();noVantageTicks=failedPaths=0;vantageRetry=0;
-            tell("Lost the stare; resuming observation from a new angle");return pause();
+            tell("Out of sight; resuming observation from a new angle");return pause();
         }
         if(clear) { if(safe)baritone.getInputOverrideHandler().clearAllKeys();return pause(); }
         if(failed) { scatterWaypoint=null;scatterReplan=0;scatterAngle+=Math.PI/4; }
@@ -367,28 +414,45 @@ public final class StalkProcess extends BaritoneProcessHelper implements IBehavi
     }
 
     private PathingCommand approach(Player target,boolean failed,boolean safe) {
-        if(failed||System.currentTimeMillis()-approachStarted>45000)return scatter(target,"Ambush approach failed; withdrawing",false);
-        if(!canFight()||!alone(target))return scatter(target,"Ambush conditions changed; withdrawing",true);
-        if(target.hasLineOfSight(ctx.player())&&facing(target,ctx.playerHead())>0.2)return scatter(target,"Target turned toward the approach; scattering",false);
+        if(failed&&++failedPaths>=3||System.currentTimeMillis()-approachStarted>45000)return scatter(target,"Ambush approach failed; withdrawing",false);
+        String retreat=retreatReason(target);if(retreat!=null)return scatter(target,retreat,true);
+        double facing=facing(target,ctx.playerHead());
+        if(!reachedRear&&target.hasLineOfSight(ctx.player())&&facing>0.2) { reachedRear=true;tell("Spotted during the approach; engaging "+targetName); }
         double attackRange=combatStyle==CombatStyle.MELEE||meleeFallback?8:25;
         if(target.distanceToSqr(ctx.player())<=attackRange&&ctx.player().hasLineOfSight(target)&&safe) {
-            phase=Phase.ATTACK;attackStarted=System.currentTimeMillis();startingTargetHealth=target.getHealth();attackCount=0;
+            phase=Phase.ATTACK;attackStarted=lastProgress=System.currentTimeMillis();attackCount=failedPaths=explosiveRecheck=0;damageConfirmed=false;
+            lastTargetHealth=target.getHealth()+target.getAbsorptionAmount();
             return attack(target,false,true);
         }
         if(!reachedRear) {
             Vec3 look=target.getLookAngle();double length=Math.hypot(look.x,look.z);
-            if(length<0.01)return scatter(target,"Cannot establish a rear approach",false);
-            BlockPos rear=BlockPos.containing(target.getX()-look.x/length*6,target.getY(),target.getZ()-look.z/length*6);
-            GoalNear rearGoal=new GoalNear(rear,1);if(!rearGoal.isInGoal(ctx.playerFeet()))return path(rearGoal);reachedRear=true;
+            // Already close behind the target (or no usable facing): skip the rear waypoint and strike.
+            if(length<0.01||facing<-0.3&&target.distanceToSqr(ctx.player())<=64)reachedRear=true;
+            else {
+                BlockPos rear=BlockPos.containing(target.getX()-look.x/length*6,target.getY(),target.getZ()-look.z/length*6);
+                GoalNear rearGoal=new GoalNear(rear,1);if(!rearGoal.isInGoal(ctx.playerFeet()))return path(rearGoal);reachedRear=true;
+            }
         }
         return path(new GoalNear(target.blockPosition(),1));
     }
     private PathingCommand attack(Player target,boolean failed,boolean safe) {
-        if(failed||!canFight()||!alone(target))return scatter(target,"Combat no longer favorable; retreating",true);
-        if(System.currentTimeMillis()-attackStarted>StealthPolicy.bounded(Baritone.settings().killAttackTimeoutMS.value,3000L,60000L))
-            return scatter(target,"Combat timed out; target death was not confirmed",true);
-        if((attackCount>=3||explosives.confirmedCycles()>0)&&System.currentTimeMillis()-attackStarted>6000&&target.getHealth()>=startingTargetHealth)
-            return scatter(target,"No confirmed health reduction; PvP may be disabled or blocked",true);
+        long now=System.currentTimeMillis();
+        String retreat=retreatReason(target);if(retreat!=null)return scatter(target,retreat,true);
+        float health=target.getHealth()+target.getAbsorptionAmount();
+        if(health<lastTargetHealth) { damageConfirmed=true;lastProgress=now; }
+        lastTargetHealth=health;
+        if(failed&&++failedPaths>=4)return scatter(target,"Cannot reach the target; returning to stalking",false);
+        if(!damageConfirmed&&(attackCount>=4||explosives.confirmedCycles()>=2)&&now-attackStarted>6000)
+            return scatter(target,"No confirmed damage; PvP may be disabled or blocked",true);
+        if(now-lastProgress>StealthPolicy.bounded(Baritone.settings().killAttackTimeoutMS.value,5000L,600000L))
+            return scatter(target,"No hit landed for a while; returning to stalking",false);
+        if(combatStyle!=CombatStyle.MELEE&&meleeFallback&&++explosiveRecheck>=40) {
+            explosiveRecheck=0;
+            if(explosives.available(target,combatStyle)) { meleeFallback=false;tell("A blast position opened up; switching back to explosives"); }
+        }
+        if(combatStyle!=CombatStyle.MELEE&&!meleeFallback&&!explosives.inProgress()&&!explosives.supplies(combatStyle)&&weapon()>=0) {
+            meleeFallback=true;explosives.reset();tell("Out of explosive supplies; switching to melee");
+        }
         if(combatStyle!=CombatStyle.MELEE&&!meleeFallback) {
             if(target.distanceToSqr(ctx.player())>36)return path(new GoalNear(target.blockPosition(),4));
             if(!safe||ctx.minecraft().gameMode==null)return pause();
@@ -396,8 +460,10 @@ public final class StalkProcess extends BaritoneProcessHelper implements IBehavi
             if(previousSlot<0)previousSlot=ctx.player().getInventory().getSelectedSlot();
             var step=explosives.tick(target,combatStyle);
             String warning=explosives.takeWarning();if(warning!=null)tell(warning);
-            if(step.problem()!=null)return scatter(target,step.problem(),true);
-            if(step.fallback()) {
+            if(step.problem()!=null) {
+                if(weapon()<0)return scatter(target,step.problem(),true);
+                meleeFallback=true;explosives.reset();tell(step.problem()+"; fighting in melee until a blast position opens");
+            } else if(step.fallback()) {
                 if(weapon()<0)return scatter(target,"No eligible explosive action and no usable melee fallback",true);
                 meleeFallback=true;explosives.reset();tell("No eligible explosive position/supply remains; switching to melee");
             } else return step.goal()==null?pause():path(step.goal());
@@ -412,6 +478,83 @@ public final class StalkProcess extends BaritoneProcessHelper implements IBehavi
         if(ctx.playerRotations().isReallyCloseTo(rotation)&&ctx.player().getAttackStrengthScale(0)>=0.95f) {
             ctx.minecraft().gameMode.attack(ctx.player(),target);ctx.player().swing(InteractionHand.MAIN_HAND,SwingAnimation.DEFAULT,false);attackCount++;
         }return pause();
+    }
+
+    private PathingCommand startDrink(Phase next,String message) {
+        phase=Phase.DRINK;afterDrink=next;drinkStarted=false;drinkTicks=drinkWait=0;watching=false;tell(message);return pause();
+    }
+    private PathingCommand drink(Player target,boolean safe) {
+        if(invisible()||++drinkTicks>100)return finishDrink(target);
+        if(drinkStarted) {
+            if(ctx.player().isUsingItem())return pause();
+            releaseUse();return ++drinkWait>20?finishDrink(target):pause(); // the effect arrives from the server after the drink finishes
+        }
+        int slot=invisibilityPotion();
+        if(slot<0||drinkTicks>20)return finishDrink(target);
+        if(!safe||ctx.minecraft().gameMode==null)return pause();
+        baritone.getInputOverrideHandler().clearAllKeys();ctx.playerController().resetBlockRemoving();
+        if(previousSlot<0)previousSlot=ctx.player().getInventory().getSelectedSlot();
+        ctx.player().getInventory().setSelectedSlot(slot);ctx.playerController().syncHeldItem();ownsUse=true;
+        if(ctx.player().isUsingItem()&&ctx.player().getUseItem().is(Items.POTION))drinkStarted=true;
+        else if(!ctx.player().isUsingItem())ctx.playerController().processRightClick(ctx.player(),ctx.world(),InteractionHand.MAIN_HAND);
+        return pause();
+    }
+    private PathingCommand finishDrink(Player target) {
+        releaseUse();restoreWeapon();drinkStarted=false;drinkTicks=drinkWait=0;
+        if(!invisible()) { invisibilityFailed=true;tell("Invisibility was not confirmed; continuing without potions"); }
+        if(afterDrink==Phase.APPROACH&&target!=null&&ctx.player().hasLineOfSight(target))return enterApproach(target);
+        phase=Phase.SEARCH;searchStarted=System.currentTimeMillis();noVantageTicks=failedPaths=vantageRetry=0;ambushAt=0;return pause();
+    }
+    private void releaseUse() {
+        boolean release=ownsUse;ownsUse=false;
+        if(release&&ctx.player()!=null&&ctx.player().isUsingItem()&&ctx.minecraft().gameMode!=null)ctx.minecraft().gameMode.releaseUsingItem(ctx.player());
+    }
+    private boolean wantsInvisibility() {
+        return Baritone.settings().stalkUseInvisibility.value&&!invisibilityFailed&&!invisible()&&invisibilityPotion()>=0;
+    }
+    /** Re-drinking is allowed once less than 30 seconds of invisibility remain. */
+    private boolean invisible() {
+        MobEffectInstance effect=ctx.player().getEffect(MobEffects.INVISIBILITY);
+        return effect!=null&&(effect.isInfiniteDuration()||effect.getDuration()>600);
+    }
+    /** Invisible players still show worn armor and held items; only a fully bare bot is hidden from sight. */
+    private boolean visuallyHidden() {
+        return ctx.player().hasEffect(MobEffects.INVISIBILITY)&&Arrays.stream(EquipmentSlot.values()).allMatch(slot->ctx.player().getItemBySlot(slot).isEmpty());
+    }
+    private int invisibilityPotion() {
+        for(int slot=0;slot<9;slot++) {
+            ItemStack stack=ctx.player().getInventory().getItem(slot);PotionContents contents=stack.is(Items.POTION)?stack.get(DataComponents.POTION_CONTENTS):null;
+            if(contents!=null)for(MobEffectInstance effect:contents.getAllEffects())if(effect.is(MobEffects.INVISIBILITY))return slot;
+        }return -1;
+    }
+    /** Keeps an inventory totem in the offhand; a popped totem is replaced on a following tick. */
+    private void equipTotem() {
+        if(!Baritone.settings().killUseTotems.value||ctx.player().getOffhandItem().is(Items.TOTEM_OF_UNDYING))return;
+        if(totemDelay>0) { totemDelay--;return; }
+        if(ctx.player().containerMenu!=ctx.player().inventoryMenu||!ctx.player().inventoryMenu.getCarried().isEmpty())return;
+        for(int slot=0;slot<36;slot++)if(ctx.player().getInventory().getItem(slot).is(Items.TOTEM_OF_UNDYING)) {
+            ctx.playerController().windowClick(ctx.player().inventoryMenu.containerId,slot<9?slot+36:slot,40,ContainerInput.SWAP,ctx.player());
+            totemDelay=4;return;
+        }
+    }
+    private boolean noticeable() {
+        boolean hidden=visuallyHidden();
+        for(Player other:ctx.world().players()) {
+            if(other==ctx.player()||!other.isAlive()||other.isSpectator())continue;
+            if(StealthPolicy.mayBeNoticed(Math.sqrt(other.distanceToSqr(ctx.player())),facing(other,ctx.playerHead()),hidden,Baritone.settings().stalkSneakHearingRange.value,
+                    Baritone.settings().stalkSneakViewAngle.value,()->other.hasLineOfSight(ctx.player())))return true;
+        }return false;
+    }
+    /** Crouching stops a player at ledges, so crouch is released near the edge of a planned one-block drop and while falling. */
+    private boolean steppingDown() {
+        PathExecutor current=baritone.getPathingBehavior().getCurrent();
+        if(current==null||!baritone.getPathingBehavior().isPathing())return false;
+        List<IMovement> movements=current.getPath().movements();int index=current.getPosition();
+        if(index<0||index>=movements.size())return false;
+        BetterBlockPos src=movements.get(index).getSrc(),dest=movements.get(index).getDest();
+        if(dest.y!=src.y-1)return false;
+        if(ctx.player().getY()<src.y-0.01)return !ctx.player().onGround();
+        return (ctx.player().getX()-(src.x+0.5))*(dest.x-src.x)+(ctx.player().getZ()-(src.z+0.5))*(dest.z-src.z)>=0.25;
     }
 
     private PathingCommand search(boolean failed,boolean safe) {
@@ -473,19 +616,20 @@ public final class StalkProcess extends BaritoneProcessHelper implements IBehavi
         if(observedWorld!=null&&observedWorld!=ctx.world())onLostControl();rememberPlayers();
         if(!isActive())return;
         boolean controlled=baritone.getPathingControlManager().mostRecentInControl().orElse(null)==this;
-        if(!controlled) { watching=false;quietTicks=gazeTicks=0;return; }
-        if(quietMovement()&&(watching||Baritone.settings().stalkSneakWhileMoving.value))
-            baritone.getInputOverrideHandler().setInputForceState(Input.SNEAK,true);
-        else baritone.getInputOverrideHandler().setInputForceState(Input.SNEAK,false);
+        if(!controlled) { watching=perceptible=false;quietTicks=gazeTicks=0;releaseUse();return; }
+        perceptible=quietPhase()&&noticeable();
+        boolean sneak=quietMovement()&&(watching||Baritone.settings().stalkSneakWhileMoving.value)&&!steppingDown();
+        baritone.getInputOverrideHandler().setInputForceState(Input.SNEAK,sneak);
         if(watching&&watchedPlayer!=null) {
-            baritone.getInputOverrideHandler().clearAllKeys();baritone.getInputOverrideHandler().setInputForceState(Input.SNEAK,true);
+            baritone.getInputOverrideHandler().clearAllKeys();baritone.getInputOverrideHandler().setInputForceState(Input.SNEAK,sneak);
             baritone.getLookBehavior().updateTarget(RotationUtils.calcRotationFromVec3d(ctx.playerHead(),watchedPlayer.getEyePosition(),ctx.playerRotations()),true);
         }
     }
     @Override public void onBlockChange(BlockChangeEvent event) { explosives.onBlockChange(event); }
     @Override public void onLostControl() {
         if(isActive()) { String remaining=explosives.remaining();if(remaining!=null)tell(remaining); }
-        restoreWeapon();explosives.reset();combatStyle=CombatStyle.MELEE;meleeFallback=false;targetId=owner=null;targetName=null;hunt=checkingMemoryOnly=watching=endAfterScatter=reachedRear=checkedLastSeen=false;
+        releaseUse();restoreWeapon();explosives.reset();combatStyle=CombatStyle.MELEE;meleeFallback=false;targetId=owner=null;targetName=null;hunt=checkingMemoryOnly=watching=endAfterScatter=reachedRear=checkedLastSeen=false;
+        perceptible=drinkStarted=invisibilityFailed=damageConfirmed=false;drinkTicks=drinkWait=totemDelay=explosiveRecheck=0;lastProgress=0;afterDrink=Phase.SEARCH;
         phase=Phase.SEARCH;watchedPlayer=null;searchAnchor=vantageAnchor=vantage=lastReported=scatterAnchor=scatterWaypoint=null;searchGoal=null;scatterDistance=scatterReplan=0;
         searchStep=memoryStep=legTicks=siteWait=vantageRetry=noVantageTicks=gazeTicks=quietTicks=scatterTicks=scatterQuiet=failedPaths=attempts=attackCount=0;
         ambushAt=approachStarted=attackStarted=lastRecorded=lastReport=0;rememberedPlaces=List.of();failedVantages.clear();

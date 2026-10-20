@@ -148,8 +148,10 @@ public final class ConflictProcess extends BaritoneProcessHelper implements IBeh
             }
         }
         int radius = Math.max(4, Math.min(32, Baritone.settings().conflictMobRadius.value));
+        // An engaged hunt does not break off for nearby mobs; it retreats on low health or a second player instead.
+        boolean engaged = baritone.getStalkProcess().committedCombat();
         for (Entity entity : loaded.values()) {
-            if (!(entity instanceof Mob mob) || entity.distanceToSqr(ctx.player()) > radius * radius) continue;
+            if (engaged || !(entity instanceof Mob mob) || entity.distanceToSqr(ctx.player()) > radius * radius) continue;
             boolean neutral = isType(entity, "enderman") || isType(entity, "zombified_piglin") || isType(entity, "piglin");
             if ((entity.getType().getCategory() == MobCategory.MONSTER && !neutral) || mob.getTarget() == ctx.player()) remember(entity, false);
         }

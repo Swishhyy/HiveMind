@@ -383,6 +383,15 @@ public final class Settings {
     public final Setting<Boolean> stalkMinimalEvidence = new Setting<>(true);
     public final Setting<Boolean> stalkPreferOpenAir = new Setting<>(true);
     public final Setting<Boolean> stalkSneakWhileMoving = new Setting<>(true);
+
+    /** Crouch and walk only while another player could hear (within this many blocks) or possibly see the bot. */
+    public final Setting<Integer> stalkSneakHearingRange = new Setting<>(16);
+
+    /** Half-angle of another player's possible field of view used for that crouch decision; bounded to 30-90 degrees. */
+    public final Setting<Integer> stalkSneakViewAngle = new Setting<>(80);
+
+    /** Drink a hotbar invisibility potion before an ambush approach and before re-approaching after being spotted. */
+    public final Setting<Boolean> stalkUseInvisibility = new Setting<>(true);
     public final Setting<Integer> stalkVerticalRange = new Setting<>(5);
     public final Setting<Integer> stalkViewConeDegrees = new Setting<>(18);
     public final Setting<Integer> stalkGazeTicks = new Setting<>(40);
@@ -395,15 +404,26 @@ public final class Settings {
     public final Setting<Boolean> killAllowTrustedTargets = new Setting<>(false);
     public final Setting<Integer> killMinimumHealth = new Setting<>(16);
     public final Setting<Integer> killMaxAttempts = new Setting<>(3);
-    public final Setting<Long> killWatchMinimumMS = new Setting<>(12000L);
-    public final Setting<Long> killWatchMaximumMS = new Setting<>(30000L);
-    public final Setting<Long> killAttackTimeoutMS = new Setting<>(15000L);
+    public final Setting<Long> killWatchMinimumMS = new Setting<>(1000L);
+    public final Setting<Long> killWatchMaximumMS = new Setting<>(3000L);
+
+    /** An engaged fight resets to stalking after this long without a confirmed hit on the target. */
+    public final Setting<Long> killAttackTimeoutMS = new Setting<>(30000L);
+
+    /** Once engaged, retreat only below this health (half of it while holding a totem) or when outnumbered. */
+    public final Setting<Integer> killRetreatHealth = new Setting<>(8);
+
+    /** Retreat once this many non-trusted players, including the target, are close to the fight; at least two. */
+    public final Setting<Integer> killRetreatPlayers = new Setting<>(2);
+
+    /** Keep a totem of undying from the inventory in the offhand during a hunt's approach, fight, and retreat. */
+    public final Setting<Boolean> killUseTotems = new Setting<>(true);
     public final Setting<Long> killTimeoutMS = new Setting<>(600000L);
     public final Setting<String> killCombatStyle = new Setting<>("auto");
     public final Setting<Integer> killMaximumSelfDamage = new Setting<>(10);
     public final Setting<Integer> killMinimumBlastDamage = new Setting<>(4);
     public final Setting<Integer> killBlastHealthReserve = new Setting<>(6);
-    public final Setting<Integer> killExplosiveDelayTicks = new Setting<>(4);
+    public final Setting<Integer> killExplosiveDelayTicks = new Setting<>(1);
     public final Setting<Boolean> killUseBlastCover = new Setting<>(true);
 
 

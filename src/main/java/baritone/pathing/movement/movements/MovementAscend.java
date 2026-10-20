@@ -212,6 +212,11 @@ public class MovementAscend extends Movement {
             return state;
         }
 
+        if (ctx.player().isCrouching() && flatDistToNext > 0.9 && !ctx.player().horizontalCollision) {
+            // crouched walking is too slow to carry an early jump onto the block, so wait until we're at the step
+            return state;
+        }
+
         if (headBonkClear()) {
             return state.setInput(Input.JUMP, true);
         }
