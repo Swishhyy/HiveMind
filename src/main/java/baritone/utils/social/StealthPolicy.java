@@ -42,6 +42,9 @@ public final class StealthPolicy {
     public static boolean mayContinueCombat(float health, int hunger, int minimumHealth, boolean equipped, boolean alone) {
         return health >= bounded(minimumHealth,13,20) && hunger > 6 && equipped && alone;
     }
+    public static double clearancePenalty(double horizontalDistance,int minimum) {
+        return Double.isFinite(horizontalDistance)&&horizontalDistance<minimum?10000+Math.max(0,minimum-horizontalDistance)*1000:0;
+    }
     public static boolean frequentPlace(int visits, long observedSeconds) { return visits >= 3 && observedSeconds >= 180; }
     public static boolean shouldReport(long now, long last, double movedSquared, long interval) {
         return last == 0 || now-last >= bounded(interval,10000L,600000L) && movedSquared >= 64*64;

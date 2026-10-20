@@ -41,6 +41,7 @@ public final class StealthChecks {
         gaze=StealthPolicy.gazeTicks(gaze,true,40);check(gaze==40,"Sustained observation reaches the scatter threshold");
         for(int i=0;i<20;i++)gaze=StealthPolicy.gazeTicks(gaze,false,40);check(gaze==0,"Looking away clears suspicion");
         check(StealthPolicy.openHeight(-5,5)&&!StealthPolicy.openHeight(6,5),"Observation height stays close to the player");
+        check(StealthPolicy.clearancePenalty(0,24)>StealthPolicy.clearancePenalty(16,24)&&StealthPolicy.clearancePenalty(24,24)==0,"Scatter paths prefer clearance instead of crossing through the watched player");
         check(StealthPolicy.readyToAmbush(60,60,-0.4,true,true,true,20,20,16),"A healthy armed bot can approach an isolated player looking away");
         check(!StealthPolicy.readyToAmbush(59,60,-0.4,true,true,true,20,20,16),"Observe before approaching");
         check(!StealthPolicy.readyToAmbush(60,60,0,true,true,true,20,20,16),"A side/front view is not a rear ambush");

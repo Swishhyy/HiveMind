@@ -19,6 +19,7 @@ package baritone.pathing.movement;
 
 import baritone.Baritone;
 import baritone.utils.bot.SculkPolicy;
+import baritone.utils.social.StealthPolicy;
 import baritone.utils.bot.MiningZone;
 import baritone.utils.mining.MiningRouteAccess;
 import baritone.api.IBaritone;
@@ -95,6 +96,8 @@ public class CalculationContext {
     public final PrecomputedData precomputedData;
     private final List<ConstructionPolicy.Area> protectedAreas;
     private final boolean avoidSculk;
+    private final BlockPos stalkTarget;
+    private final int stalkClearance;
     private final boolean miningBoundary;
     private final MiningZone miningZone;
     private final String miningWorld;
@@ -133,6 +136,8 @@ public class CalculationContext {
         this.bsi = new BlockStateInterface(baritone.getPlayerContext(), forUseOnAnotherThread);
         this.toolSet = new ToolSet(player);
         this.stealth = ((Baritone) baritone).getStalkProcess().terrainLocked();
+        this.stalkTarget = ((Baritone) baritone).getStalkProcess().avoidanceCenter();
+        this.stalkClearance = Math.min(24,Math.max(8,Baritone.settings().stalkDistance.value-8));
         this.hasThrowaway = !stealth && Baritone.settings().allowPlace.value && ((Baritone) baritone).getInventoryBehavior().hasGenericThrowaway();
         this.hasWaterBucket = !stealth && Baritone.settings().allowWaterBucketFall.value && Inventory.isHotbarSlot(player.getInventory().findSlotMatchingItem(STACK_BUCKET_WATER)) && world.dimension() != Level.NETHER;
         this.canSprint = !((Baritone) baritone).getStalkProcess().quietMovement() && !((Baritone) baritone).getSculkProcess().quiet() && Baritone.settings().allowSprint.value && player.getFoodData().getFoodLevel() > 6;
@@ -251,7 +256,12 @@ public class CalculationContext {
 
     public boolean insideMiningBoundary(int x,int y,int z) { return !miningBoundary || (miningZone != null && miningZone.contains(miningWorld,x,y,z)); }
 
-    public double sculkPathPenalty(int x, int y, int z) { return avoidSculk ? sculk.penalty(x, y, z) * sculkPenalty : 0; }
+    public double sculkPathPenalty(int x, int y, int z) {
+        // Both are immutable per-calculation movement hazards; ordinary melee/ambush approach omits player clearance.
+        double penalty = avoidSculk ? sculk.penalty(x, y, z) * sculkPenalty : 0;
+        if (stalkTarget != null) penalty += StealthPolicy.clearancePenalty(Math.hypot((double)x-stalkTarget.getX(),(double)z-stalkTarget.getZ()),stalkClearance);
+        return penalty;
+    }
     private boolean sculkProtected(int x, int y, int z, BlockState state) {
         return avoidSculk && (sculk.contains(x, y, z) || SculkPolicy.sculk(BuiltInRegistries.BLOCK.getKey(state.getBlock()).getPath()));
     }

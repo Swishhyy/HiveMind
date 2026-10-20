@@ -66,7 +66,9 @@ public final class StalkProcess extends BaritoneProcessHelper implements IBehavi
     private String targetName,lastResult="No stalk target";
     private Phase phase=Phase.SEARCH;
     private boolean hunt,checkingMemoryOnly,watching,endAfterScatter,reachedRear;
-    private BlockPos searchAnchor,vantageAnchor,vantage,lastReported,scatterAnchor;
+    private BlockPos searchAnchor,vantageAnchor,vantage,lastReported,scatterAnchor,scatterWaypoint;
+    private int scatterDistance,scatterReplan;
+    private double scatterAngle;
     private Goal searchGoal;
     private Player watchedPlayer;
     private List<PlayerMemory.Place> rememberedPlaces=List.of();
@@ -83,6 +85,10 @@ public final class StalkProcess extends BaritoneProcessHelper implements IBehavi
     public boolean terrainLocked() { return isActive()&&Baritone.settings().stalkMinimalEvidence.value; }
     public boolean quietMovement() { return isActive()&&phase!=Phase.SCATTER&&phase!=Phase.ATTACK&&!baritone.getConflictProcess().isActive(); }
     public boolean scattering() { return isActive()&&phase==Phase.SCATTER; }
+    public BlockPos avoidanceCenter() {
+        if(!isActive()||ctx.world()==null||phase==Phase.APPROACH||phase==Phase.ATTACK)return null;
+        Player target=loaded(targetId);return target==null?null:target.blockPosition().immutable();
+    }
     public String status() { return isActive()?displayName0():lastResult; }
     private int distance() { return SocialPolicy.stalkDistance(Baritone.settings().stalkDistance.value); }
     private int retention() { return StealthPolicy.bounded(Baritone.settings().stalkMemoryDays.value,1,90); }
@@ -308,7 +314,10 @@ public final class StalkProcess extends BaritoneProcessHelper implements IBehavi
     private PathingCommand scatter(Player target,String reason,boolean finish) {
         if(target!=null)scatterAnchor=target.blockPosition().immutable();
         else if(scatterAnchor==null)scatterAnchor=searchAnchor;
+        String remaining=explosives.remaining();if(remaining!=null)tell(remaining);
         restoreWeapon();explosives.reset();phase=Phase.SCATTER;watching=false;gazeTicks=quietTicks=scatterTicks=scatterQuiet=failedPaths=0;
+        scatterWaypoint=null;scatterReplan=0;scatterDistance=Math.min(128,Math.max(64,distance()+24));
+        scatterAngle=Math.atan2(ctx.player().getZ()-scatterAnchor.getZ(),ctx.player().getX()-scatterAnchor.getX())+(ThreadLocalRandom.current().nextBoolean()?1:-1)*Math.PI/2;
         vantage=null;failedVantages.clear();endAfterScatter=finish;scatterReason=reason;ambushAt=0;
         baritone.getInputOverrideHandler().clearAllKeys();baritone.getPathingBehavior().softCancelIfSafe();tell(reason);return pause();
     }
@@ -317,9 +326,13 @@ public final class StalkProcess extends BaritoneProcessHelper implements IBehavi
         if(scatterAnchor==null)return stop("No retreat anchor was available");
         if(failed&&++failedPaths>=3)return stop("No safe terrain-preserving scatter route");
         if(++scatterTicks>1200)return stop("Scatter limit reached");
-        int separation=Math.min(128,Math.max(64,distance()+24));
-        GoalRetreat goal=new GoalRetreat(List.of(new GoalRetreat.Threat(scatterAnchor,separation)));
-        boolean clear=goal.isInGoal(ctx.playerFeet())&&(target==null||!beingWatched(target));
+        GoalRetreat goal=new GoalRetreat(List.of(new GoalRetreat.Threat(scatterAnchor,scatterDistance)));
+        boolean viewed=target!=null&&beingWatched(target);
+        if(goal.isInGoal(ctx.playerFeet())&&viewed&&scatterTicks%40==0) {
+            scatterDistance=Math.min(128,scatterDistance+16);scatterWaypoint=null;scatterReplan=0;
+            goal=new GoalRetreat(List.of(new GoalRetreat.Threat(scatterAnchor,scatterDistance)));
+        }
+        boolean clear=goal.isInGoal(ctx.playerFeet())&&!viewed;
         scatterQuiet=clear?scatterQuiet+1:0;
         if(clear&&scatterQuiet>=40&&scatterTicks>=StealthPolicy.bounded(Baritone.settings().stalkScatterTicks.value,40,1200)) {
             if(endAfterScatter)return stop(scatterReason);
@@ -328,7 +341,29 @@ public final class StalkProcess extends BaritoneProcessHelper implements IBehavi
             tell("Lost the stare; resuming observation from a new angle");return pause();
         }
         if(clear) { if(safe)baritone.getInputOverrideHandler().clearAllKeys();return pause(); }
-        return path(goal);
+        if(failed) { scatterWaypoint=null;scatterReplan=0;scatterAngle+=Math.PI/4; }
+        if(scatterReplan--<=0||scatterWaypoint!=null&&new GoalNear(scatterWaypoint,0).isInGoal(ctx.playerFeet())) {
+            scatterWaypoint=findEscapePoint(target);scatterReplan=40;
+        }
+        return path(scatterWaypoint==null?goal:new GoalNear(scatterWaypoint,0));
+    }
+    private BlockPos findEscapePoint(Player target) {
+        CalculationContext context=new CalculationContext(baritone);BlockPos best=null;double score=Double.POSITIVE_INFINITY;
+        for(int step=0;step<8;step++) {
+            double angle=scatterAngle+step*Math.PI/4;
+            int x=(int)Math.floor(scatterAnchor.getX()+Math.cos(angle)*(scatterDistance+2));
+            int z=(int)Math.floor(scatterAnchor.getZ()+Math.sin(angle)*(scatterDistance+2));
+            for(int y=ctx.playerFeet().getY()-3;y<=ctx.playerFeet().getY()+3;y++) {
+                BlockPos pos=new BlockPos(x,y,z);
+                if(!ctx.world().hasChunkAt(pos)||!openPoint(pos)||!MovementHelper.canWalkThrough(context,x,y,z)
+                        ||!MovementHelper.canWalkThrough(context,x,y+1,z)||!MovementHelper.canWalkOn(context,x,y-1,z)
+                        ||!context.get(pos).getFluidState().isEmpty()||!context.get(pos.above()).getFluidState().isEmpty())continue;
+                Vec3 eye=new Vec3(x+0.5,y+1.27,z+0.5);
+                boolean visible=target!=null&&ctx.world().clip(new ClipContext(eye,target.getEyePosition(),ClipContext.Block.COLLIDER,ClipContext.Fluid.NONE,ctx.player())).getType()==HitResult.Type.MISS;
+                double candidate=ctx.playerFeet().distSqr(pos)*0.03+(visible?200:0)+(target==null?0:Math.max(0,facing(target,eye))*400);
+                if(candidate<score) { score=candidate;best=pos; }
+            }
+        }return best;
     }
 
     private PathingCommand approach(Player target,boolean failed,boolean safe) {
@@ -360,6 +395,7 @@ public final class StalkProcess extends BaritoneProcessHelper implements IBehavi
             baritone.getInputOverrideHandler().clearAllKeys();ctx.playerController().resetBlockRemoving();
             if(previousSlot<0)previousSlot=ctx.player().getInventory().getSelectedSlot();
             var step=explosives.tick(target,combatStyle);
+            String warning=explosives.takeWarning();if(warning!=null)tell(warning);
             if(step.problem()!=null)return scatter(target,step.problem(),true);
             if(step.fallback()) {
                 if(weapon()<0)return scatter(target,"No eligible explosive action and no usable melee fallback",true);
@@ -448,8 +484,9 @@ public final class StalkProcess extends BaritoneProcessHelper implements IBehavi
     }
     @Override public void onBlockChange(BlockChangeEvent event) { explosives.onBlockChange(event); }
     @Override public void onLostControl() {
+        if(isActive()) { String remaining=explosives.remaining();if(remaining!=null)tell(remaining); }
         restoreWeapon();explosives.reset();combatStyle=CombatStyle.MELEE;meleeFallback=false;targetId=owner=null;targetName=null;hunt=checkingMemoryOnly=watching=endAfterScatter=reachedRear=checkedLastSeen=false;
-        phase=Phase.SEARCH;watchedPlayer=null;searchAnchor=vantageAnchor=vantage=lastReported=scatterAnchor=null;searchGoal=null;
+        phase=Phase.SEARCH;watchedPlayer=null;searchAnchor=vantageAnchor=vantage=lastReported=scatterAnchor=scatterWaypoint=null;searchGoal=null;scatterDistance=scatterReplan=0;
         searchStep=memoryStep=legTicks=siteWait=vantageRetry=noVantageTicks=gazeTicks=quietTicks=scatterTicks=scatterQuiet=failedPaths=attempts=attackCount=0;
         ambushAt=approachStarted=attackStarted=lastRecorded=lastReport=0;rememberedPlaces=List.of();failedVantages.clear();
         baritone.getInputOverrideHandler().setInputForceState(Input.SNEAK,false);baritone.getInputOverrideHandler().setInputForceState(Input.SPRINT,false);

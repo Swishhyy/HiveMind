@@ -62,14 +62,22 @@ public final class ExplosiveCombat {
     private Plan plan;
     private int ticks,delay,id=-1,idleTicks,confirmedCycles;
     private boolean blockConfirmed;
-    private String lastProblem="No suitable blast position";
+    private String lastProblem="No suitable blast position",warning;
     private final Set<CombatStyle> rejected=EnumSet.noneOf(CombatStyle.class);
 
     public ExplosiveCombat(Baritone bot) { this.bot=bot;ctx=bot.getPlayerContext(); }
     public int confirmedCycles() { return confirmedCycles; }
     public boolean inProgress() { return plan!=null&&stage!=Stage.SELECT; }
+    public String takeWarning() { String message=warning;warning=null;return message; }
+    public String remaining() {
+        if(plan==null||ctx.world()==null)return warning;
+        boolean blocks=ctx.world().getBlockState(plan.pos()).is(Blocks.RESPAWN_ANCHOR)||plan.newBase()&&ctx.world().getBlockState(plan.pos()).is(Blocks.OBSIDIAN);
+        boolean cover=plan.cover()!=null&&ctx.world().getBlockState(plan.cover()).is(Blocks.OBSIDIAN);
+        boolean crystal=crystals().stream().anyMatch(entity->entity.position().distanceToSqr(blastPoint(plan))<2);
+        return blocks||cover||crystal?"Combat blocks/explosive still visible near "+plan.pos().getX()+" "+plan.pos().getY()+" "+plan.pos().getZ()+"; no cleanup was attempted":null;
+    }
     public boolean expectedCrystal(Entity entity) { return stage==Stage.WAIT_BREAK&&entity instanceof EndCrystal&&entity.getId()==id; }
-    public void reset() { stage=Stage.SELECT;plan=null;ticks=delay=idleTicks=confirmedCycles=0;id=-1;blockConfirmed=false;rejected.clear(); }
+    public void reset() { stage=Stage.SELECT;plan=null;ticks=delay=idleTicks=confirmedCycles=0;id=-1;blockConfirmed=false;warning=null;rejected.clear(); }
     public void onBlockChange(BlockChangeEvent event) {
         if(plan!=null)for(var change:event.getBlocks())if(change.first().equals(stage==Stage.WAIT_COVER?plan.cover():plan.pos()))blockConfirmed=true;
     }
@@ -249,10 +257,16 @@ public final class ExplosiveCombat {
     private boolean worthwhile(Player target,Vec3 blast,double power,BlockPos removedBlock,BlockPos addedCover) {
         boolean bystanders=ctx.world().players().stream().anyMatch(player->player!=ctx.player()&&!player.getUUID().equals(target.getUUID())
                 &&player.isAlive()&&!player.isSpectator()&&player.position().distanceToSqr(blast)<power*power*4);
+        List<EndCrystal> nearbyCrystals=crystals().stream().filter(crystal->crystal.position().distanceToSqr(blast)<power*power*4).toList();
+        long centered=removedBlock==null?nearbyCrystals.stream().filter(crystal->crystal.position().distanceToSqr(blast)<0.25).count():0;
+        boolean chain=nearbyCrystals.size()>(centered==1?1:0)||ctx.entitiesStream().anyMatch(entity-> {
+            String type=BuiltInRegistries.ENTITY_TYPE.getKey(entity.getType()).getPath();
+            return (type.equals("tnt")||type.equals("tnt_minecart"))&&entity.position().distanceToSqr(blast)<power*power*4;
+        });
         boolean protectedArea=MiningWaypoints.protection(ctx).stream().anyMatch(area->
                 Math.abs(blast.x-area.x())<=area.radius()+power*2&&Math.abs(blast.y-area.y())<=area.radius()+power*2
                         &&Math.abs(blast.z-area.z())<=area.radius()+power*2);
-        if(bystanders||protectedArea||bot.getSculkProcess().snapshot().contains((int)Math.floor(blast.x),(int)Math.floor(blast.y),(int)Math.floor(blast.z)))return false;
+        if(bystanders||chain||protectedArea||bot.getSculkProcess().snapshot().contains((int)Math.floor(blast.x),(int)Math.floor(blast.y),(int)Math.floor(blast.z)))return false;
         double self=damage(ctx.player(),blast,power,removedBlock,addedCover)+2; // margin for movement and unobserved equipment changes
         double opponent=damage(target,blast,power,removedBlock,addedCover);
         return BlastPolicy.mayBlast(self,opponent,ctx.player().getHealth(),ctx.player().getAbsorptionAmount(),target.getHealth(),
@@ -350,6 +364,7 @@ public final class ExplosiveCombat {
     private void change(Stage next) { stage=next;ticks=0; }
     private Step waitStep() { return new Step(null,false,null); }
     private Step problem(String reason,CombatStyle requested) {
+        warning=remaining();
         if(plan!=null)rejected.add(plan.style());else rejected.addAll(List.of(CombatStyle.CRYSTAL,CombatStyle.ANCHOR));
         lastProblem=reason;stage=Stage.SELECT;plan=null;ticks=idleTicks=0;
         if(requested==CombatStyle.AUTO) {
