@@ -89,7 +89,10 @@ public final class JobManager extends BaritoneProcessHelper implements IBehavior
     }
     public void resumeJobs() {
         ensureLoaded(); if (queue.isEmpty()) throw new IllegalStateException("No queued jobs");
-        save(); baritone.getSurvivalProcess().retry(); baritone.getSculkProcess().retry(); paused = false; reason = "Ready to resume";
+        save(); baritone.getSurvivalProcess().retry(); baritone.getSculkProcess().retry();
+        if (current != null && !baritone.getMineProcess().isActive() && !baritone.getDepositProcess().isActive()
+                && !baritone.getPortalTravelProcess().isActive()) { current = null; completedMining = false; }
+        paused = false; reason = "Ready to resume";
     }
     public void cancelJobs() {
         ensureLoaded(); stopOwnedWork(); queue.clear(); current = null; paused = true; completedMining = false;
@@ -138,7 +141,7 @@ public final class JobManager extends BaritoneProcessHelper implements IBehavior
     }
     private void save() { if (store != null) store.write(queue); }
     @Override public void onLostControl() {
-        if (launching || current == null) return;
+        if (launching || queue.isEmpty()) return;
         paused = true; reason = "Stopped or disconnected; use job resume"; current = null; completedMining = false; save();
     }
     @Override public void onPlayerDeath() { fail("Player died; inspect equipment before resuming"); onLostControl(); }
