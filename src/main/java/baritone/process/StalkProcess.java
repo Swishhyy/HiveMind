@@ -67,6 +67,7 @@ public final class StalkProcess extends BaritoneProcessHelper implements IBehavi
     private record Seen(BlockPos position,long time) {}
     private final Map<UUID,Seen> seen=new HashMap<>();
     private final ExplosiveCombat explosives;
+    private final WatchPolicy.Station watchStation=new WatchPolicy.Station();
     private CombatStyle combatStyle=CombatStyle.MELEE;
     private boolean meleeFallback;
     private final Set<BlockPos> failedVantages=new HashSet<>();
@@ -83,11 +84,15 @@ public final class StalkProcess extends BaritoneProcessHelper implements IBehavi
     private Goal searchGoal;
     private Player watchedPlayer;
     private List<PlayerMemory.Place> rememberedPlaces=List.of();
-    private int searchStep,memoryStep,legTicks,siteWait,vantageRetry,noVantageTicks,gazeTicks,quietTicks,scatterTicks,scatterQuiet,failedPaths,attempts,previousSlot=-1;
+    private int searchStep,memoryStep,legTicks,siteWait,gazeTicks,quietTicks,scatterTicks,scatterQuiet,failedPaths,attempts,previousSlot=-1;
     private int drinkTicks,drinkWait,totemDelay,explosiveRecheck,explosiveBackoff=20;
     private boolean stalkSneak;
     private String lastWarning;
     private boolean checkedLastSeen;
+    private boolean recycleVantages,targetMissing;
+    private int retryCount;
+    private long retryAt,lastRetryReport;
+    private String retryReason="";
     private long searchStarted,taskStarted,ambushAt,approachStarted,attackStarted,lastProgress,lastStrike,lastRecorded,lastReport,nextMemoryError;
     private float lastTargetHealth;
     private int attackCount;
@@ -271,6 +276,7 @@ public final class StalkProcess extends BaritoneProcessHelper implements IBehavi
         try {
             if(ctx.player()==null||ctx.world()==null||!ctx.player().isAlive()||ctx.world()!=observedWorld||ctx.minecraft().getConnection()==null)
                 return stop("Bot or world changed");
+            if(phase==Phase.SEARCH&&!targetMissing&&waitingToRetry(safe))return pause();
             if(phase!=Phase.DRINK)releaseUse();
             if(hunt&&!committedCombat()&&System.currentTimeMillis()-taskStarted>StealthPolicy.bounded(Baritone.settings().killTimeoutMS.value,60000L,3600000L))
                 return stop("Hunt timed out; no kill is assumed");
@@ -280,10 +286,13 @@ public final class StalkProcess extends BaritoneProcessHelper implements IBehavi
             }
             Player target=loaded(targetId);
             if(phase==Phase.SCATTER)return scatterTick(target,failed,safe);
-            if(!checkingMemoryOnly&&ctx.minecraft().getConnection().getPlayerInfo(targetId)==null)return stop("Target left the server; no kill is assumed");
+            if(hunt&&!checkingMemoryOnly&&ctx.minecraft().getConnection().getPlayerInfo(targetId)==null)return stop("Target left the server; no kill is assumed");
             if(phase==Phase.DRINK)return drink(target,safe);
             if(target==null) {
                 if(phase==Phase.ATTACK)return stop("Target left client view during combat; a kill was not confirmed");
+                targetMissing=true;
+                if(!hunt&&watchStation.hold(false,true,Baritone.settings().stalkLostSightTicks.value))return watch(null,safe);
+                watchStation.reset();
                 phase=Phase.SEARCH;quietTicks=0;ambushAt=0;return search(failed,safe);
             }
             if(hunt&&(target.isCreative()||target.isSpectator()))return stop("Target is not a survival-mode opponent");
@@ -298,32 +307,63 @@ public final class StalkProcess extends BaritoneProcessHelper implements IBehavi
                 return scatter(target,"Player watched the bot too long; scattering",false);
             if(phase==Phase.ATTACK)return attack(target,failed,safe);
             if(phase==Phase.APPROACH)return approach(target,failed,safe);
+            if(targetMissing) { retryAt=0;retryCount=0;targetMissing=false; }
             phase=Phase.WATCH;return observe(target,failed,safe,viewed);
-        } catch(RuntimeException error) { return stop("Tracking error: "+error.getMessage()); }
+        } catch(RuntimeException error) {
+            if(hunt)return stop("Tracking error: "+error.getMessage());
+            watchStation.reset();vantage=null;searchGoal=null;targetMissing=false;
+            return retry(Phase.SEARCH,"Tracking interrupted: "+error.getMessage(),safe);
+        }
     }
 
     private PathingCommand observe(Player target,boolean failed,boolean safe,boolean viewed) {
-        if(vantageAnchor==null||vantageAnchor.distSqr(target.blockPosition())>16) {
-            vantageAnchor=target.blockPosition().immutable();vantage=null;failedVantages.clear();vantageRetry=0;
-        }
-        if(failed&&vantage!=null) { failedVantages.add(vantage);vantage=null;vantageRetry=0;if(++failedPaths>=6)return stop("No reachable open viewing point"); }
         boolean sight=ctx.player().hasLineOfSight(target);
         quietTicks=sight&&!viewed?quietTicks+1:0;
         if(hunt) { PathingCommand ambush=ambush(target,sight,safe);if(ambush!=null)return ambush; }
-        boolean inBand=new GoalStandoff(target.blockPosition(),distance()).isInGoal(ctx.playerFeet())
-                &&StealthPolicy.openHeight(ctx.player().getY()-target.getY(),Baritone.settings().stalkVerticalRange.value);
-        boolean open=inBand&&openPoint(ctx.playerFeet());
-        if(inBand&&sight&&open&&facing(target,ctx.playerHead())<(hunt&&!invisible()?0:0.45)) {
-            noVantageTicks=0;vantage=null;watching=safe;watchedPlayer=target;
-            if(safe) { baritone.getInputOverrideHandler().clearAllKeys();ctx.playerController().resetBlockRemoving(); }
-            return pause();
+        // Once settled, small movements, head turns, and brief occlusions do not start another path.
+        if(watchStation.hold(sight,watchRange(target,true),Baritone.settings().stalkLostSightTicks.value)) {
+            retryCount=0;retryAt=0;return watch(target,safe);
         }
-        if(++noVantageTicks>1200)return stop("No open line-of-sight viewing point became reachable");
-        if(vantageRetry--<=0) { vantage=findVantage(target);vantageRetry=20; }
-        if(vantage!=null)return path(new GoalNear(vantage,0));
-        if(failed)return stop("No terrain-preserving route to the target");
-        if(!inBand)return path(new GoalStandoff(target.blockPosition(),distance()));
-        if(safe)baritone.getInputOverrideHandler().clearAllKeys();
+        if(waitingToRetry(safe))return pause();
+        if(failed) {
+            if(vantage!=null)failedVantages.add(vantage);
+            vantage=null;
+            return retry(Phase.WATCH,"Viewing route blocked; trying another concealed spot",safe);
+        }
+        int tolerance=StealthPolicy.bounded(Baritone.settings().stalkPositionTolerance.value,4,32);
+        if(vantageAnchor!=null&&vantageAnchor.distSqr(target.blockPosition())>tolerance*tolerance) {
+            vantage=null;failedVantages.clear();vantageAnchor=null;
+        }
+        // Keep the chosen destination while travelling. Re-scoring every second caused visible zigzags.
+        if(vantage!=null) {
+            if(new GoalNear(vantage,0).isInGoal(ctx.playerFeet())) {
+                if(sight&&watchRange(target,true)) {
+                    watchStation.settle();retryCount=0;vantage=null;return watch(target,safe);
+                }
+                failedVantages.add(vantage);vantage=null;
+                return retry(Phase.WATCH,"Viewing spot lost its sight line; waiting before repositioning",safe);
+            }
+            return path(new GoalNear(vantage,0));
+        }
+        if(recycleVantages) { failedVantages.clear();recycleVantages=false; }
+        vantage=findVantage(target);vantageAnchor=target.blockPosition().immutable();
+        if(vantage!=null) {
+            if(new GoalNear(vantage,0).isInGoal(ctx.playerFeet())) {
+                watchStation.settle();retryCount=0;vantage=null;return watch(target,safe);
+            }
+            return path(new GoalNear(vantage,0));
+        }
+        recycleVantages=true;
+        return retry(Phase.WATCH,"No concealed sight line is reachable yet; staying put and retrying",safe);
+    }
+
+    private boolean watchRange(Player target,boolean settled) {
+        return WatchPolicy.inRange(Math.hypot(ctx.player().getX()-target.getX(),ctx.player().getZ()-target.getZ()),ctx.player().getY()-target.getY(),
+                distance(),Baritone.settings().stalkPositionTolerance.value,Baritone.settings().stalkVerticalRange.value,settled);
+    }
+    private PathingCommand watch(Player target,boolean safe) {
+        watching=safe;watchedPlayer=target;
+        if(safe) { baritone.getInputOverrideHandler().clearAllKeys();ctx.playerController().resetBlockRemoving(); }
         return pause();
     }
 
@@ -343,6 +383,7 @@ public final class StalkProcess extends BaritoneProcessHelper implements IBehavi
         return enterApproach(target);
     }
     private PathingCommand enterApproach(Player target) {
+        watchStation.reset();retryAt=0;
         phase=Phase.APPROACH;approachStarted=System.currentTimeMillis();reachedRear=false;failedPaths=0;attempts++;
         tell("Ambush opportunity: "+targetName+" is looking away; approaching");return pause();
     }
@@ -359,22 +400,56 @@ public final class StalkProcess extends BaritoneProcessHelper implements IBehavi
         CalculationContext context=new CalculationContext(baritone);BlockPos center=target.blockPosition();
         double initial=Math.atan2(ctx.player().getZ()-target.getZ(),ctx.player().getX()-target.getX());
         BlockPos best=null;double bestScore=Double.POSITIVE_INFINITY;
+        BlockPos current=ctx.playerFeet().immutable();
+        if(!failedVantages.contains(current)&&watchRange(target,false)&&openPoint(current)&&ctx.player().hasLineOfSight(target)
+                &&clearRay(new Vec3(current.getX()+0.5,current.getY()+1.27,current.getZ()+0.5),target.getEyePosition())) {
+            best=current;bestScore=vantageScore(target,current);
+        }
         int vertical=StealthPolicy.bounded(Baritone.settings().stalkVerticalRange.value,2,8);
-        for(int step=0;step<16;step++) {
-            double angle=initial+step*Math.PI/8;
-            int x=(int)Math.floor(target.getX()+Math.cos(angle)*distance()),z=(int)Math.floor(target.getZ()+Math.sin(angle)*distance());
+        int slack=Math.max(4,StealthPolicy.bounded(Baritone.settings().stalkPositionTolerance.value,4,32)/2);
+        for(int radius:new int[]{distance(),distance()-slack,distance()+slack})for(int step=0;step<24;step++) {
+            double angle=initial+step*Math.PI/12;
+            int x=(int)Math.floor(target.getX()+Math.cos(angle)*radius),z=(int)Math.floor(target.getZ()+Math.sin(angle)*radius);
             for(int y=center.getY()-vertical;y<=center.getY()+vertical;y++) {
                 BlockPos pos=new BlockPos(x,y,z);
-                if(failedVantages.contains(pos)||!ctx.world().hasChunkAt(pos)||!openPoint(pos)
+                if(!WatchPolicy.inRange(Math.hypot(x+0.5-target.getX(),z+0.5-target.getZ()),y-target.getY(),distance(),
+                        Baritone.settings().stalkPositionTolerance.value,Baritone.settings().stalkVerticalRange.value,false)
+                        ||failedVantages.contains(pos)||!ctx.world().hasChunkAt(pos)||!openPoint(pos)
                         ||!MovementHelper.canWalkThrough(context,x,y,z)||!MovementHelper.canWalkThrough(context,x,y+1,z)
                         ||!MovementHelper.canWalkOn(context,x,y-1,z)||!context.get(pos).getFluidState().isEmpty()||!context.get(pos.above()).getFluidState().isEmpty())continue;
                 Vec3 eye=new Vec3(x+0.5,y+1.27,z+0.5);
                 if(pos.equals(ctx.playerFeet())&&!ctx.player().hasLineOfSight(target))continue;
-                if(ctx.world().clip(new ClipContext(eye,target.getEyePosition(),ClipContext.Block.COLLIDER,ClipContext.Fluid.NONE,ctx.player())).getType()!=HitResult.Type.MISS)continue;
-                double score=ctx.playerFeet().distSqr(pos)*0.025+Math.max(0,facing(target,eye)+0.2)*800+Math.abs(y-center.getY())*4;
+                if(!clearRay(eye,target.getEyePosition()))continue;
+                double score=vantageScore(target,pos);
                 if(score<bestScore) { bestScore=score;best=pos; }
             }
         }return best;
+    }
+    private boolean clearRay(Vec3 from,Vec3 to) {
+        return ctx.world().clip(new ClipContext(from,to,ClipContext.Block.COLLIDER,ClipContext.Fluid.NONE,ctx.player())).getType()==HitResult.Type.MISS;
+    }
+    private double vantageScore(Player target,BlockPos point) {
+        Vec3 eye=new Vec3(point.getX()+0.5,point.getY()+1.27,point.getZ()+0.5);
+        double range=Math.hypot(eye.x-target.getX(),eye.z-target.getZ());
+        return WatchPolicy.vantageScore(ctx.playerFeet().distSqr(point),facing(target,eye),cover(target,point),point.getY()-target.getY(),range-distance());
+    }
+    /** Leave the eye ray open while hiding part of the body and breaking its silhouette with nearby terrain. */
+    private double cover(Player target,BlockPos point) {
+        Vec3 center=new Vec3(point.getX()+0.5,point.getY(),point.getZ()+0.5),observer=target.getEyePosition();
+        Vec3 away=center.subtract(observer);double length=Math.hypot(away.x,away.z);
+        if(length<0.01)return 0;
+        double sideX=-away.z/length*0.22,sideZ=away.x/length*0.22;
+        int obscured=0,adjacent=0;
+        for(double height:new double[]{0.4,0.9})for(int side:new int[]{-1,1})
+            if(!clearRay(observer,center.add(side*sideX,height,side*sideZ)))obscured++;
+        for(BlockPos neighbor:List.of(point.north(),point.south(),point.east(),point.west())) {
+            if(!ctx.world().hasChunkAt(neighbor))continue;
+            if(!ctx.world().getBlockState(neighbor).getCollisionShape(ctx.world(),neighbor).isEmpty()
+                    ||!ctx.world().getBlockState(neighbor.above()).getCollisionShape(ctx.world(),neighbor.above()).isEmpty())adjacent++;
+        }
+        Vec3 eye=center.add(0,1.27,0);
+        boolean backdrop=!clearRay(eye,eye.add(away.x/length*3,0,away.z/length*3));
+        return obscured*0.15+Math.min(2,adjacent)*0.125+(backdrop?0.15:0);
     }
 
     private PathingCommand scatter(Player target,String reason,boolean finish) {
@@ -382,6 +457,7 @@ public final class StalkProcess extends BaritoneProcessHelper implements IBehavi
         else if(scatterAnchor==null)scatterAnchor=searchAnchor;
         String remaining=explosives.remaining();if(remaining!=null)tell(remaining);
         releaseUse();restoreWeapon();explosives.reset();phase=Phase.SCATTER;watching=false;gazeTicks=quietTicks=scatterTicks=scatterQuiet=failedPaths=0;
+        watchStation.reset();retryAt=0;retryCount=0;
         scatterWaypoint=null;scatterReplan=0;scatterDistance=Math.min(128,Math.max(64,distance()+24));
         scatterAngle=Math.atan2(ctx.player().getZ()-scatterAnchor.getZ(),ctx.player().getX()-scatterAnchor.getX())+(ThreadLocalRandom.current().nextBoolean()?1:-1)*Math.PI/2;
         vantage=null;failedVantages.clear();endAfterScatter=finish;scatterReason=reason;ambushAt=0;
@@ -389,9 +465,13 @@ public final class StalkProcess extends BaritoneProcessHelper implements IBehavi
     }
     private PathingCommand scatterTick(Player target,boolean failed,boolean safe) {
         if(target!=null)scatterAnchor=target.blockPosition().immutable();
-        if(scatterAnchor==null)return stop("No retreat anchor was available");
-        if(failed&&++failedPaths>=3)return stop("No safe terrain-preserving scatter route");
-        if(++scatterTicks>1200)return stop("Scatter limit reached");
+        if(scatterAnchor==null)scatterAnchor=ctx.playerFeet().immutable();
+        if(waitingToRetry(safe))return pause();
+        if((failed&&++failedPaths>=3)||++scatterTicks>1200) {
+            if(hunt)return stop("No safe terrain-preserving scatter route");
+            failedPaths=scatterTicks=scatterQuiet=scatterReplan=0;scatterWaypoint=null;scatterAngle+=Math.PI/4;
+            return retry(Phase.SCATTER,"Scatter route blocked; waiting and trying another flank",safe);
+        }
         GoalRetreat goal=new GoalRetreat(List.of(new GoalRetreat.Threat(scatterAnchor,scatterDistance)));
         boolean viewed=target!=null&&beingWatched(target);
         if(goal.isInGoal(ctx.playerFeet())&&viewed&&scatterTicks%40==0) {
@@ -404,7 +484,7 @@ public final class StalkProcess extends BaritoneProcessHelper implements IBehavi
             if(endAfterScatter)return stop(scatterReason);
             if(hunt&&attempts>=StealthPolicy.bounded(Baritone.settings().killMaxAttempts.value,1,10))return stop("Ambush attempt limit reached");
             if(wantsInvisibility())return startDrink(Phase.SEARCH,"Out of sight; drinking invisibility before re-approaching");
-            phase=Phase.SEARCH;searchStarted=System.currentTimeMillis();noVantageTicks=failedPaths=0;vantageRetry=0;
+            phase=Phase.SEARCH;searchStarted=System.currentTimeMillis();failedPaths=0;
             tell("Out of sight; resuming observation from a new angle");return pause();
         }
         if(clear) { if(safe)baritone.getInputOverrideHandler().clearAllKeys();return pause(); }
@@ -538,7 +618,7 @@ public final class StalkProcess extends BaritoneProcessHelper implements IBehavi
         releaseUse();restoreWeapon();drinkStarted=false;drinkTicks=drinkWait=0;
         if(!invisible()) { invisibilityFailed=true;tell("Invisibility was not confirmed; continuing without potions"); }
         if(afterDrink==Phase.APPROACH&&target!=null&&ctx.player().hasLineOfSight(target))return enterApproach(target);
-        phase=Phase.SEARCH;searchStarted=System.currentTimeMillis();noVantageTicks=failedPaths=vantageRetry=0;ambushAt=0;return pause();
+        phase=Phase.SEARCH;searchStarted=System.currentTimeMillis();failedPaths=0;ambushAt=0;return pause();
     }
     private void releaseUse() {
         boolean release=ownsUse;ownsUse=false;
@@ -595,12 +675,16 @@ public final class StalkProcess extends BaritoneProcessHelper implements IBehavi
     }
 
     private PathingCommand search(boolean failed,boolean safe) {
+        if(waitingToRetry(safe))return pause();
         long timeout=StealthPolicy.bounded(Baritone.settings().stalkSearchTimeoutMS.value,10000L,600000L);
-        if(System.currentTimeMillis()-searchStarted>timeout)return stop("Target not found within the search limit");
+        if(System.currentTimeMillis()-searchStarted>timeout)return restartSearch("Search pass finished; keeping the target and trying again",safe,false);
         if(searchGoal!=null) {
-            if(failed||++legTicks>600) { searchGoal=null;legTicks=siteWait=0; }
+            if(failed||++legTicks>600) {
+                searchGoal=null;legTicks=siteWait=0;
+                return retry(Phase.SEARCH,"Search route blocked; trying the next saved place or search leg",safe);
+            }
             else if(searchGoal.isInGoal(ctx.playerFeet())) {
-                if(++siteWait<40) { if(safe)baritone.getInputOverrideHandler().clearAllKeys();return pause(); }
+                if(++siteWait<200) { if(safe)baritone.getInputOverrideHandler().clearAllKeys();return pause(); }
                 searchGoal=null;legTicks=siteWait=0;
             }
         }
@@ -611,13 +695,20 @@ public final class StalkProcess extends BaritoneProcessHelper implements IBehavi
                 var place=rememberedPlaces.get(memoryStep++);searchGoal=new GoalStandoff(MiningRouteAccess.position(place.point()),distance());
                 tell("Checking "+place.label()+" for "+targetName+" at "+coordinates(place.point().dimension(),MiningRouteAccess.position(place.point())));
             } else {
-                if(checkingMemoryOnly)return stop("Saved places checked; no player visually confirmed");
+                if(checkingMemoryOnly)return restartSearch("Saved places checked; waiting before checking them again",safe,true);
                 int radius=SocialPolicy.searchRadius(Baritone.settings().stalkSearchRadius.value);
-                if(searchStep>=SocialPolicy.searchSteps(radius))return stop("Target not found in the bounded local search");
+                if(searchStep>=SocialPolicy.searchSteps(radius))return restartSearch("Local search pass completed; waiting before searching again",safe,true);
                 SocialPolicy.Offset offset=SocialPolicy.searchOffset(searchStep++,radius);
                 searchGoal=new GoalXZ(searchAnchor.getX()+offset.x(),searchAnchor.getZ()+offset.z());
             }
         }return path(searchGoal);
+    }
+    private PathingCommand restartSearch(String reason,boolean safe,boolean recycle) {
+        searchGoal=null;legTicks=siteWait=0;
+        if(recycle) { searchStep=memoryStep=0;checkedLastSeen=false; }
+        searchStarted=System.currentTimeMillis();
+        rememberedPlaces=memory().places(targetId,MiningRouteAccess.dimension(ctx),searchStarted,retention());
+        return retry(Phase.SEARCH,reason,safe);
     }
 
     private void record(Player target) {
@@ -645,6 +736,20 @@ public final class StalkProcess extends BaritoneProcessHelper implements IBehavi
     }
     private PathingCommand path(Goal goal) { return new PathingCommand(goal,PathingCommandType.REVALIDATE_GOAL_AND_PATH); }
     private PathingCommand pause() { return new PathingCommand(null,PathingCommandType.REQUEST_PAUSE); }
+    private PathingCommand retry(Phase next,String reason,boolean safe) {
+        phase=next;watching=false;watchedPlayer=null;retryReason=reason;
+        retryCount=Math.min(100,retryCount+1);
+        long now=System.currentTimeMillis();retryAt=now+WatchPolicy.retryDelay(retryCount,Baritone.settings().stalkRetryDelayMS.value);
+        if(safe) { baritone.getInputOverrideHandler().clearAllKeys();ctx.playerController().resetBlockRemoving(); }
+        if(lastRetryReport==0||now-lastRetryReport>=60000) { tell(reason+"; stalking remains active");lastRetryReport=now; }
+        return pause();
+    }
+    private boolean waitingToRetry(boolean safe) {
+        if(retryAt==0)return false;
+        if(System.currentTimeMillis()>=retryAt) { retryAt=0;return false; }
+        if(safe) { baritone.getInputOverrideHandler().clearAllKeys();ctx.playerController().resetBlockRemoving(); }
+        return true;
+    }
     private PathingCommand stop(String reason) {
         tell((hunt?"Hunt":"Stalk")+" stopped: "+reason);lastResult=reason;onLostControl();return new PathingCommand(null,PathingCommandType.CANCEL_AND_SET_GOAL);
     }
@@ -671,10 +776,15 @@ public final class StalkProcess extends BaritoneProcessHelper implements IBehavi
         releaseUse();restoreWeapon();explosives.reset();combatStyle=CombatStyle.MELEE;meleeFallback=false;targetId=owner=null;targetName=null;hunt=checkingMemoryOnly=watching=endAfterScatter=reachedRear=checkedLastSeen=false;
         perceptible=drinkStarted=invisibilityFailed=damageConfirmed=stalkSneak=false;drinkTicks=drinkWait=totemDelay=explosiveRecheck=0;explosiveBackoff=20;lastProgress=lastStrike=0;lastWarning=null;afterDrink=Phase.SEARCH;
         phase=Phase.SEARCH;watchedPlayer=null;searchAnchor=vantageAnchor=vantage=lastReported=scatterAnchor=scatterWaypoint=null;searchGoal=null;scatterDistance=scatterReplan=0;
-        searchStep=memoryStep=legTicks=siteWait=vantageRetry=noVantageTicks=gazeTicks=quietTicks=scatterTicks=scatterQuiet=failedPaths=attempts=attackCount=0;
+        watchStation.reset();retryAt=lastRetryReport=0;retryCount=0;retryReason="";recycleVantages=targetMissing=false;
+        searchStep=memoryStep=legTicks=siteWait=gazeTicks=quietTicks=scatterTicks=scatterQuiet=failedPaths=attempts=attackCount=0;
         ambushAt=approachStarted=attackStarted=lastRecorded=lastReport=0;rememberedPlaces=List.of();failedVantages.clear();
         baritone.getInputOverrideHandler().setInputForceState(Input.SNEAK,false);baritone.getInputOverrideHandler().setInputForceState(Input.SPRINT,false);
     }
     @Override public void onPlayerDeath() { onLostControl(); }
-    @Override public String displayName0() { return (hunt?"Hunt ["+(meleeFallback?"melee":combatStyle.name().toLowerCase(Locale.ROOT))+"] ":"Stalk ")+targetName+": "+phase.name().toLowerCase(Locale.ROOT)+" (view distance "+distance()+")"; }
+    @Override public String displayName0() {
+        String waiting=retryAt>System.currentTimeMillis()?"; retry in "+Math.max(1,(retryAt-System.currentTimeMillis()+999)/1000)+"s: "+retryReason:"";
+        return (hunt?"Hunt ["+(meleeFallback?"melee":combatStyle.name().toLowerCase(Locale.ROOT))+"] ":"Stalk ")+targetName+": "+phase.name().toLowerCase(Locale.ROOT)
+                +(watchStation.settled()?" (holding viewing spot)":"")+" (view distance "+distance()+")"+waiting;
+    }
 }

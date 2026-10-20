@@ -57,6 +57,7 @@ public final class ConflictProcess extends BaritoneProcessHelper implements IBeh
     private int failedPaths;
     private UUID attackerId;
     private long defendUntil;
+    private long stalkRetreatRetryAt;
     private boolean protectingEscort;
     private boolean ownsShield;
     private int previousSlot = -1;
@@ -163,7 +164,18 @@ public final class ConflictProcess extends BaritoneProcessHelper implements IBeh
             onLostControl();
             return null;
         }
+        if (System.currentTimeMillis() < stalkRetreatRetryAt) {
+            if (isSafeToCancel) baritone.getInputOverrideHandler().clearAllKeys();
+            tryDefend(isSafeToCancel);
+            return new PathingCommand(null, PathingCommandType.REQUEST_PAUSE);
+        }
         if (calcFailed && ++failedPaths >= 3) {
+            if (baritone.getStalkProcess().isActive() && !baritone.getStalkProcess().hunting()) {
+                failedPaths = 0;
+                stalkRetreatRetryAt = System.currentTimeMillis() + 5000;
+                logDirect("Retreat route blocked; keeping the stalk target and retrying the escape");
+                return new PathingCommand(null, PathingCommandType.REQUEST_PAUSE);
+            }
             logDirect("No safe retreat path was found; stopping bot work");
             stopTasks();
             onLostControl();
@@ -281,7 +293,7 @@ public final class ConflictProcess extends BaritoneProcessHelper implements IBeh
         var id = BuiltInRegistries.ENTITY_TYPE.getKey(entity.getType());
         return id != null && id.getNamespace().equals("minecraft") && id.getPath().equals(path);
     }
-    @Override public void onLostControl() { releaseShield(); active = protectingEscort = false; quietTicks = failedPaths = attackDelay = 0; threats.clear(); attackerId = null; defendUntil = 0; }
+    @Override public void onLostControl() { releaseShield(); active = protectingEscort = false; quietTicks = failedPaths = attackDelay = 0; threats.clear(); attackerId = null; defendUntil = stalkRetreatRetryAt = 0; }
     @Override public void onPlayerDeath() { onLostControl(); }
     @Override public String displayName0() { return "Retreating from conflict"; }
 }

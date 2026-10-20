@@ -89,7 +89,9 @@ public final class StalkCommand extends Command {
     }
     @Override public String getShortDesc() { return "Stealth stalking, private sighting memory, and an explicit named-player ambush"; }
     @Override public List<String> getLongDesc() {
-        return List.of("stalk <player|random> - Observe from open line-of-sight positions about 40 blocks away.",
+        return List.of("stalk <player|random> - Choose a concealed line-of-sight viewing point about 40 blocks away and hold it.",
+                "Small target movements, head turns, and brief obstructions do not cause constant repositioning.",
+                "Blocked paths, exhausted searches, and an offline target wait and retry until stopped; there is no stalking attempt limit.",
                 "It crouches only where another player could hear or possibly see it, and can drink hotbar invisibility potions.",
                 "Sustained player gaze causes a scatter and a new approach. Minimal-evidence mode avoids terrain edits and closed doors.",
                 "stalk sightings [player] - List saved observations and possible/confirmed bases for this server.",

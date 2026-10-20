@@ -42,6 +42,7 @@ public final class SurvivalProcess extends BaritoneProcessHelper implements IBeh
     private int previousSlot = -1;
     private boolean ownsUse;
     private int careTicks;
+    private long stalkCareRetryAt;
 
     public SurvivalProcess(Baritone bot) { super(bot); }
     @Override public boolean isActive() { return stage != Stage.IDLE; }
@@ -92,7 +93,10 @@ public final class SurvivalProcess extends BaritoneProcessHelper implements IBeh
     public void supplyFailed(String message) { releaseFood(); waitForHelp("Resupply failed: " + message); }
     private void waitForHelp(String message) {
         stage = Stage.WAIT; reason = message;
-        baritone.getJobManager().fail(message); logDirect("Survival paused: " + message + ". Use survival retry after fixing it.");
+        boolean watching = baritone.getStalkProcess().isActive() && !baritone.getStalkProcess().hunting();
+        stalkCareRetryAt = watching ? System.currentTimeMillis() + 30000 : 0;
+        baritone.getJobManager().fail(message);
+        logDirect("Survival paused: " + message + (watching ? ". Stalking stays active; checking care again in 30 seconds." : ". Use survival retry after fixing it."));
     }
     @Override public PathingCommand onTick(boolean failed, boolean safe) {
         if (!Baritone.settings().botSurvival.value || ctx.player() == null || !ctx.player().isAlive()) { onLostControl(); return null; }
@@ -101,7 +105,11 @@ public final class SurvivalProcess extends BaritoneProcessHelper implements IBeh
         if (stage == Stage.SUPPLY && baritone.getDepositProcess().isActive()) return new PathingCommand(null, PathingCommandType.DEFER);
         if (!safe) return pause();
         baritone.getInputOverrideHandler().clearAllKeys(); ctx.playerController().resetBlockRemoving();
-        if (stage == Stage.WAIT) return pause();
+        if (stage == Stage.WAIT) {
+            if (!baritone.getStalkProcess().isActive() || baritone.getStalkProcess().hunting()
+                    || stalkCareRetryAt == 0 || System.currentTimeMillis() < stalkCareRetryAt) return pause();
+            stage = Stage.CARE; ticks = careTicks = 0; stalkCareRetryAt = 0;
+        }
         if (ctx.player().containerMenu != ctx.player().inventoryMenu) { waitForHelp("Close the open container before continuing"); return pause(); }
         if (++ticks > 2400) { waitForHelp("Care timed out; check hunger, food use, regeneration, and supplies"); return pause(); }
         if (stage == Stage.SUPPLY) { stage = Stage.CARE; reason = "Checking restocked supplies"; }
@@ -168,7 +176,7 @@ public final class SurvivalProcess extends BaritoneProcessHelper implements IBeh
         if (!isActive() && BotWork.active(baritone) && !baritone.getDepositProcess().isActive() && !baritone.getConflictProcess().isActive() && !baritone.getWorkstationProcess().isActive()
                 && !baritone.getStalkProcess().suppressesCare()) beforeMining();
     }
-    @Override public void onLostControl() { releaseFood(); stage = Stage.IDLE; reason = "Ready"; ticks = swapDelay = careTicks = 0; }
+    @Override public void onLostControl() { releaseFood(); stage = Stage.IDLE; reason = "Ready"; ticks = swapDelay = careTicks = 0; stalkCareRetryAt = 0; }
     @Override public void onPlayerDeath() { onLostControl(); }
     @Override public String displayName0() { return "Survival " + status(); }
 }

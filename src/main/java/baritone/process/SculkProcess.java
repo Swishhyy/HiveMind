@@ -40,6 +40,7 @@ public final class SculkProcess extends BaritoneProcessHelper implements IBehavi
     private volatile SculkPolicy.Snapshot snapshot = SculkPolicy.Snapshot.EMPTY;
     private Level observed;
     private long lastScan;
+    private long stalkRetryAt;
     private BlockPos scanOrigin;
     private boolean active, blocked;
     private int quietTicks, failures;
@@ -105,7 +106,16 @@ public final class SculkProcess extends BaritoneProcessHelper implements IBehavi
     }
     @Override public PathingCommand onTick(boolean failed, boolean safe) {
         if (!Baritone.settings().mineAvoidSculk.value || ctx.world() == null || ctx.player() == null) { onLostControl(); return null; }
+        if (System.currentTimeMillis() < stalkRetryAt) {
+            if (safe) baritone.getInputOverrideHandler().clearAllKeys();
+            return new PathingCommand(null, PathingCommandType.REQUEST_PAUSE);
+        }
         if (failed && ++failures >= 3) {
+            if (baritone.getStalkProcess().isActive() && !baritone.getStalkProcess().hunting()) {
+                failures = 0; stalkRetryAt = System.currentTimeMillis() + 5000;
+                logDirect("Quiet escape route blocked; keeping the stalk target and retrying");
+                return new PathingCommand(null, PathingCommandType.REQUEST_PAUSE);
+            }
             blocked = true; baritone.getJobManager().fail("No quiet path out of the sculk area");
             logDirect("No quiet escape path; bot work paused. Use stop before taking manual control.");
         }
@@ -127,7 +137,7 @@ public final class SculkProcess extends BaritoneProcessHelper implements IBehavi
             baritone.getInputOverrideHandler().setInputForceState(Input.SPRINT, false);
         }
     }
-    @Override public void onLostControl() { active = blocked = false; quietTicks = failures = 0; exitZones = List.of(); }
+    @Override public void onLostControl() { active = blocked = false; quietTicks = failures = 0; stalkRetryAt = 0; exitZones = List.of(); }
     @Override public void onPlayerDeath() { onLostControl(); }
     @Override public String displayName0() { return blocked ? "Sculk escape paused" : "Leaving sculk quietly"; }
 }

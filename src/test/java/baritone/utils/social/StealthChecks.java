@@ -26,9 +26,10 @@ import java.util.*;
 /** Checks gaze geometry, ambush eligibility, and persistent evidence without a running game. */
 public final class StealthChecks {
     public static void main(String[] args) throws Exception {
-        runAll();System.out.println("Stealth/combat checks passed: gaze, ambush gates, memory, server isolation, crystal/anchor damage, cover, dimension limits");
+        runAll();System.out.println("Stealth/combat checks passed: stationary watching, concealment, persistent retries, gaze, ambush gates, memory, crystal/anchor damage");
     }
     public static void runAll() throws Exception {
+        watchingChecks();
         check(StealthPolicy.gazeDot(0,0,1,0,0,40)==1,"Normalize the target's facing vector");
         check(StealthPolicy.gazeDot(0,0,1,0,0,-40)==-1,"Rear positions are outside the facing cone");
         check(StealthPolicy.gazeDot(1,0,0,0,0,40)==0,"Perpendicular positions do not count as a stare");
@@ -130,6 +131,38 @@ public final class StealthChecks {
         } finally {
             try(var files=Files.walk(root)) { for(Path file:files.sorted(Comparator.reverseOrder()).toList())Files.deleteIfExists(file); }
         }
+    }
+    private static void watchingChecks() {
+        check(WatchPolicy.inRange(51,6,40,12,5,true),"A settled watcher tolerates ordinary target movement without orbiting");
+        check(!WatchPolicy.inRange(51,6,40,12,5,false),"A new viewing point uses a tighter acquisition band than an established station");
+        check(!WatchPolicy.inRange(53,0,40,12,5,true)&&!WatchPolicy.inRange(27,0,40,12,5,true),"Large separation changes eventually require another viewing point");
+        check(!WatchPolicy.inRange(40,8,40,12,5,true)&&!WatchPolicy.inRange(Double.NaN,0,40,12,5,true),"Invalid or excessive height cannot become a viewing station");
+        WatchPolicy.Station station=new WatchPolicy.Station();
+        check(!station.hold(true,true,100),"Watching must first acquire a viewing point");
+        station.settle();
+        for(int tick=0;tick<12000;tick++)check(station.hold(true,true,100),"Ten minutes of a valid view never schedules a gratuitous move");
+        for(int pass=0;pass<10;pass++) {
+            for(int tick=0;tick<99;tick++)check(station.hold(false,true,100),"Brief repeated occlusions keep the current station");
+            check(station.hold(true,true,100),"A restored sight line resets the occlusion timer");
+        }
+        for(int tick=0;tick<99;tick++)check(station.hold(false,true,100),"Wait through the configured lost-sight grace period");
+        check(!station.hold(false,true,100)&&!station.settled(),"Sustained loss of sight permits a necessary move");
+        station.settle();
+        for(int tick=0;tick<39;tick++)check(station.hold(true,false,100),"A short distance excursion does not start a chase");
+        check(station.hold(true,true,100),"Returning to range resets distance suspicion");
+        for(int tick=0;tick<39;tick++)check(station.hold(true,false,100),"Require sustained displacement before repositioning");
+        check(!station.hold(true,false,100),"A target that stays out of range eventually needs following");
+        station.settle();station.reset();check(!station.settled(),"Stop/scatter clears the old station");
+        double open=WatchPolicy.vantageScore(0,-0.5,0,0,0);
+        check(WatchPolicy.vantageScore(25,-0.5,0.7,0,0)<open,"Nearby body cover is preferred over an exposed viewing point");
+        check(WatchPolicy.vantageScore(80*80,-0.5,1,0,0)>open,"Marginal cover does not justify an obvious long orbit");
+        check(WatchPolicy.vantageScore(25,-0.5,0.7,0,0)<WatchPolicy.vantageScore(25,0.8,0.7,0,0),"Equal cover behind the target beats the same cover in front");
+        check(WatchPolicy.retryDelay(1,5000)==5000&&WatchPolicy.retryDelay(3,5000)==20000,"Failed routes receive increasing quiet waits");
+        for(int failure=1;failure<10000;failure++) {
+            long delay=WatchPolicy.retryDelay(failure,5000);
+            check(delay>=1000&&delay<=30000,"Repeated failures always retain a bounded next retry instead of exhausting an attempt limit");
+        }
+        check(WatchPolicy.retryDelay(100,Long.MAX_VALUE)==30000&&WatchPolicy.retryDelay(1,-1)==1000,"Retry settings cannot cause a busy loop or an effectively permanent wait");
     }
     private static void expect(Runnable action,String message) {
         boolean failed=false;try { action.run(); }catch(IllegalArgumentException|IllegalStateException expected) { failed=true; }check(failed,message);

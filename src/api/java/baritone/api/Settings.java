@@ -376,12 +376,18 @@ public final class Settings {
     /** Maximum local search radius when a stalk target has no visible position. Does not reveal remote coordinates. */
     public final Setting<Integer> stalkSearchRadius = new Setting<>(256);
 
-    /** How long to search locally after losing a stalk target; bounded to 10-600 seconds. */
+    /** Duration of one local search pass before regrouping and retrying; stalking itself does not time out. */
     public final Setting<Long> stalkSearchTimeoutMS = new Setting<>(120000L);
 
     /** Stealth tracking does not alter terrain or operate closed doors. These restrictions are scoped to the task. */
     public final Setting<Boolean> stalkMinimalEvidence = new Setting<>(true);
     public final Setting<Boolean> stalkPreferOpenAir = new Setting<>(true);
+    /** Distance tolerance around an established viewing spot; bounded to 4-32 blocks. */
+    public final Setting<Integer> stalkPositionTolerance = new Setting<>(12);
+    /** Brief obstructions do not cause repositioning; bounded to 20-600 ticks. */
+    public final Setting<Integer> stalkLostSightTicks = new Setting<>(100);
+    /** Delay between failed stalking attempts; repeated failures back off up to 30 seconds. */
+    public final Setting<Long> stalkRetryDelayMS = new Setting<>(5000L);
     public final Setting<Boolean> stalkSneakWhileMoving = new Setting<>(true);
 
     /** Crouch and walk only while another player could hear (within this many blocks) or possibly see the bot. */
