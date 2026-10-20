@@ -40,6 +40,11 @@ public final class MiningPoliciesTest {
     }
 
     @Test
+    public void companionRecipesRecoveryHandoffsAndBoundariesAreFinite() throws Exception {
+        baritone.utils.bot.CompanionPolicyChecks.runAll();
+    }
+
+    @Test
     public void standOffAndRetreatRespectDistanceAndSearchLimits() {
         baritone.utils.social.SocialPolicyChecks.runAll();
     }

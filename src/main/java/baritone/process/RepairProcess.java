@@ -56,6 +56,7 @@ public final class RepairProcess extends BaritoneProcessHelper {
             ItemStack stack=ctx.player().getInventory().getItem(i);
             if(!mending(stack)||!BuiltInRegistries.ITEM.getKey(stack.getItem()).getPath().endsWith("_pickaxe"))continue;
             int left=stack.getMaxDamage()-stack.getDamageValue();
+            if(auto&&CompanionPolicy.repairComplete(left,stack.getMaxDamage(),Baritone.settings().repairTargetPercent.value))continue;
             if(auto&&left>Math.max(Baritone.settings().botToolReserve.value+16,Baritone.settings().repairAtDurability.value))continue;
             double ratio=left/(double)stack.getMaxDamage();if(ratio<fraction){best=i;fraction=ratio;}
         }return best;
@@ -75,12 +76,13 @@ public final class RepairProcess extends BaritoneProcessHelper {
     }
     @Override public PathingCommand onTick(boolean failed,boolean safe){
         try{
+            if(baritone.getDepositProcess().isActive())return new PathingCommand(null,PathingCommandType.DEFER);
             if(ctx.player()==null||ctx.world()==null||!root.equals(MiningRouteAccess.root(ctx)))return finish("Repair stopped: world changed",false);
             if(failed||System.currentTimeMillis()>deadline)return finish("Repair route failed or timed out",false);
             var target=returning?origin:station;
             if(!MiningRouteAccess.dimension(ctx).equals(target.dimension())){baritone.getPortalTravelProcess().start(target.dimension());return pause();}
             GoalNear goal=new GoalNear(MiningRouteAccess.position(target),2);
-            if(!goal.isInGoal(ctx.playerFeet()))return new PathingCommand(goal,PathingCommandType.REVALIDATE_GOAL_AND_PATH);
+            if(!goal.isInGoal(ctx.playerFeet())&&(returning||!atStation||ctx.playerFeet().distSqr(MiningRouteAccess.position(target))>36))return new PathingCommand(goal,PathingCommandType.REVALIDATE_GOAL_AND_PATH);
             if(!safe)return pause();
             baritone.getInputOverrideHandler().clearAllKeys();ctx.playerController().resetBlockRemoving();
             if(returning)return finish("Pickaxe repaired; returned to work",true);

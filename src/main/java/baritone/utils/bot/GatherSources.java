@@ -35,7 +35,7 @@ public final class GatherSources {
                 Map.entry("minecraft:cobblestone",List.of("stone","cobblestone")),Map.entry("minecraft:cobbled_deepslate",List.of("deepslate","cobbled_deepslate")),Map.entry("minecraft:clay_ball",List.of("clay")),Map.entry("minecraft:quartz",List.of("nether_quartz_ore")));
         if(explicit.containsKey(item))return explicit.get(item).stream().map(id->"minecraft:"+id).toList();
         var value=BuiltInRegistries.ITEM.getValue(Identifier.parse(item));
-        if(value instanceof BlockItem block&&new BlockOptionalMeta(block.getBlock()).has(new ItemStack(value)))return List.of(BuiltInRegistries.BLOCK.getKey(block.getBlock()).toString());
+        if(value instanceof BlockItem block&&new BlockOptionalMeta(block.getBlock()).matches(new ItemStack(value)))return List.of(BuiltInRegistries.BLOCK.getKey(block.getBlock()).toString());
         return List.of();
     }
     public static String dimension(String item,String current){if(item.equals("minecraft:ancient_debris")||item.equals("minecraft:quartz")||item.equals("minecraft:netherrack"))return "minecraft:the_nether";return "minecraft:overworld";}

@@ -16,6 +16,11 @@ fi
     src/main/java/baritone/utils/bot/JobStore.java \
     src/main/java/baritone/utils/bot/SurvivalPolicy.java \
     src/main/java/baritone/utils/bot/SculkPolicy.java \
+    src/main/java/baritone/utils/bot/BotLocations.java \
+    src/main/java/baritone/utils/bot/MiningZone.java \
+    src/main/java/baritone/utils/bot/GatherPlanner.java \
+    src/main/java/baritone/utils/bot/CompanionPolicy.java \
+    src/test/java/baritone/utils/bot/CompanionPolicyChecks.java \
     src/test/java/baritone/utils/bot/BotPolicyChecks.java \
     src/main/java/baritone/utils/mining/WorldRoutes.java \
     src/main/java/baritone/utils/mining/WastePolicy.java \
@@ -30,3 +35,4 @@ java -cp "$task_classes" baritone.utils.mining.WastePolicyChecks
 java -cp "$task_classes" baritone.utils.social.SocialPolicyChecks
 
 java -cp "$task_classes" baritone.utils.bot.BotPolicyChecks
+java -cp "$task_classes" baritone.utils.bot.CompanionPolicyChecks

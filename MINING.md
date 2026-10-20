@@ -62,7 +62,7 @@ Old-world ore scans are invalidated after a dimension change. Stop, death, disco
 
 `fleeConflicts` defaults to `true`. While a bot task is active, nearby hostile mobs or a server damage event identifying an attacker trigger a temporary retreat. Player attackers are tracked by UUID; ordinary bystanders and environmental damage are not treated as attacks. Known neutral endermen/piglins require detected aggression or an actual attack. This does not automatically take over normal manual gameplay when no bot task is running.
 
-The bot closes an open container, interrupts depositing/mining/watching, and paths away using ordinary movement safety settings. `conflictMobRadius` defaults to 12 (bounded to 4–32); `conflictFleeDistance` defaults to 32 (bounded to 16–128), with at least 64 for wardens. Further attacks extend separation beyond the current attack distance, up to 128 blocks, so repeated ranged hits keep the bot moving. Once safely separated for five seconds, the interrupted job resumes. Repeated escape-path failures stop bot work and report the problem. Retreat is the default. Optional defensive retaliation is described below; neither mode guarantees escape from every terrain layout.
+The bot returns any owned crafting cursor stack and closes an empty-cursor container, interrupts active work, and paths away using ordinary movement safety settings. `conflictMobRadius` defaults to 12 (bounded to 4–32); `conflictFleeDistance` defaults to 32 (bounded to 16–128), with at least 64 for wardens. Further attacks extend separation beyond the current attack distance, up to 128 blocks, so repeated ranged hits keep the bot moving. Once safely separated for five seconds, the interrupted job resumes. Repeated escape-path failures stop bot work and report the problem. Retreat is the default. Optional defensive retaliation is described below; neither mode guarantees escape from every terrain layout.
 
 Use `#set fleeConflicts false` to disable it. `#pause` and `#stop` retain priority. Death, disconnects, and world changes clear remembered threats.
 
@@ -103,8 +103,14 @@ From that player's account, send `/msg BotAccount #mine 32 netherite`. The bot q
 | `#pause` / `#resume` / `#stop` | Normal global task controls |
 | `#deposit now` / `all` / `status` / `list` | Deposit or query storage; configuration edits remain local |
 | `#stalk PlayerName` / `random` / `status` / `stop` | Distant watching using client-known positions |
+| `#recover now` / `status` / `stop` | Recover the recorded dropped inventory after respawning |
+| `#deliver PlayerName diamond 32 [x y z]` / `handoff` / `status` / `stop` | Fetch and hand over items to one recipient |
+| `#escort PlayerName` / `status` / `stop` | Follow and optionally protect a visible player |
+| `#gather 64 glass` / `plan 64 glass` / `status` / `stop` | Fetch/mine ingredients, craft/smelt, and deposit the requested product |
+| `#repair now` / `status` | Visit the configured Mending/XP point |
+| `#station status` / `#minezone status` | Inspect configured stations and current-dimension boundaries |
 
-By default only signed, client-validated private chat with the incoming whisper chat type is accepted. Public chat, unsigned display overrides, untrusted senders, and arbitrary administrative commands cannot control the bot. Trust, settings, and chest-rule edits are local operations. Incoming commands and outgoing replies are paced and bounded; revoked/offline controllers do not receive queued replies.
+By default only signed, client-validated private chat with the incoming whisper chat type is accepted. Public chat, unsigned display overrides, untrusted senders, and arbitrary administrative commands cannot control the bot. Trust, settings, chest rules, station/boundary edits, and recovery-attempt resets are local operations. Incoming commands and outgoing replies are paced and bounded; revoked/offline controllers do not receive queued replies.
 
 `bot-control.properties` is stored beside `mining-routes.properties` in the server/save's Baritone cache directory. It contains `trusted` (comma-separated UUIDs), `whisperTypes` (default `minecraft:msg_command_incoming`), `allowUnsignedServerWhispers=false`, and `unsignedWhisperFormat=`. Custom authenticated whisper chat types can be added to `whisperTypes`.
 
@@ -169,7 +175,7 @@ The bot pauses to eat allowed food and recover low health. It never assumes eati
 | `botToolReserve` | 32 durability remaining |
 | `botFoodItems` | Cooked meats/fish, bread, baked potatoes, carrots, golden carrots, and apples |
 
-Supply thresholds and timeouts are bounded in code. Food use keeps vanilla item-use held only while the care process controls the bot; pause, stop, conflict, and death release it. Ordinary deposits retain the fullest building stacks (using `mineWasteKeepStacks`, default two) while survival checks are enabled, including blocks restocked into the main inventory. Mining targets and `deposit all` keep their existing output/unload rules. The bot does not craft replacement equipment, farm food, or repair tools automatically.
+Supply thresholds and timeouts are bounded in code. Food use keeps vanilla item-use held only while the care process controls the bot; pause, stop, conflict, and death release it. Ordinary deposits retain the fullest building stacks (using `mineWasteKeepStacks`, default two) while survival checks are enabled, including blocks restocked into the main inventory. Mining targets and `deposit all` keep their existing output/unload rules. The bot does not farm food or automatically craft replacement tools. A registered Mending station is tried before replacement supplies when repair is enabled; see below.
 
 ## Sculk-aware paths
 
@@ -183,11 +189,74 @@ The client cannot inspect unloaded terrain or prevent every server vibration. Cr
 
 `#defense flee` is the default; `#defense defend` enables limited retaliation. `#defense status` reports the mode. The existing `fleeConflicts` switch controls conflict monitoring in either mode.
 
-Defend requires a confirmed, living attacker within close melee range, line of sight, more than 12 health, sufficient hunger, one nearby threat, and a usable sword/axe already on the hotbar. It uses normal attack cooldowns and an equipped offhand shield between attacks when available. It does not pursue targets or attack a trusted controller, and it never chooses melee against a Warden/creeper. Low health, multiple nearby threats, sculk escape, missing equipment, loss of range/sight, or the ten-second defense limit return to retreat. Food/recovery can run after separation. This is basic defensive behavior, not a full PvP combat system.
+Defend requires a confirmed, living attacker within close melee range, line of sight, more than 12 health, sufficient hunger, one nearby threat, and a usable sword/axe already on the hotbar. It uses normal attack cooldowns and an equipped offhand shield between attacks when available. Outside escort protection it does not pursue targets. It never attacks a trusted controller, and it never chooses melee against a Warden/creeper. Low health, multiple nearby threats, sculk escape, missing equipment, loss of range/sight, or the ten-second defense limit return to retreat. Food/recovery can run after separation. This is basic defensive behavior, not a full PvP combat system.
+
+## Settings through Mod Menu
+
+Commands remain the task controls. Install **Mod Menu 21.0.0 for Fabric 26.3**, then open **Mods > Baritone > Configure** for a paged settings form. There is no bot dashboard, gameplay control screen, extra hotkey, or patrol mode. Mod Menu is optional; without it all commands and the existing `#set` interface still work. Values are saved only with **Save**; **Cancel** or Escape discards edits. Existing `#set <setting> <value>` commands and Baritone's settings file use the same settings.
+
+The form includes deposits, waste reserves, dimension travel, construction/sculk avoidance, survival, flee/defend, stalking/escort distance, delivery confirmation, recovery limits, Mending repair, and gathering limits. Trust and world endpoints remain in their server/save-scoped command configuration.
+
+## Death recovery
+
+After respawning, run `#recover now`. The death position, inventory item IDs/counts, time, and attempts are saved in `bot-locations.properties` for this server/save. The bot follows registered portal routes when necessary, searches for matching dropped items around the recorded point, and returns to the position where recovery started. It compares carried inventory against its starting inventory; simply revisiting the coordinates does not count as recovery. Equipped armor/offhand items are included in the death snapshot.
+
+The local search radius defaults to 16 blocks (`recoverySearchRadius`, bounded 4–32); attempts default to three (`recoveryMaxAttempts`, bounded 1–10). No remaining visible matching drops after a bounded search produces a partial report and a return trip. Full inventory, an unreachable site, unsafe conditions, absent portals, and the task timeout stop the task with a reason. Healthy recovery can begin without the ordinary food-stock minimum, but hunger/low-health checks still apply. A matching item ID cannot prove historical ownership of a particular dropped stack; named/enchanted items are not deliberately discarded or handed over as ordinary courier stock.
+
+`#recover status` inspects the record. `#recover stop` cancels the active recovery. Local `#recover reset` clears the attempt counter after inspecting the site; it retains the recorded location and item counts. The bot does not automatically respawn or start another recovery after dying. `keepInventory`, destroyed/despawned drops, and inaccessible chunks can prevent recovery.
+
+## Deliveries
+
+`#deliver PlayerName diamond 32` uses ordinary, unmodified carried stock and fetches missing items from enabled registered storage. Supply chests are preferred; courier stock can also come from an ore/item/general chest. Withdrawals use confirmed whole-stack transfers, so spare stock can remain with the bot. The amount handed over is limited to the requested quantity.
+
+The recipient must be online. If their position is unknown to the client, provide a meeting point in the bot's current dimension: `#deliver PlayerName diamond 32 100 64 -200`. Visible players update the destination as they move; a recent client-observed position is also usable. It does not query hidden server coordinates.
+
+When the bot arrives, use `#deliver handoff` locally or from the trusted original controller/recipient. `deliveryRequireHandoff` defaults to true. The bot waits until it is stationary, within four blocks with line of sight, and no other player is within eight blocks, then faces the recipient and releases one stack or one remainder item at a time. Only server pickup packets identifying that recipient count toward completion. Another collector stops the task; re-collection by the bot requires confirmation again. Unconfirmed pickup times out after one minute. A delivery can still be intercepted by a mob or a player moving into range after a drop; the bot reports only pickups it confirmed.
+
+`#deliver status` reports progress and `#deliver stop` cancels. `deliveryApproachDistance` defaults to three (bounded 2–6); if configured above four it can wait outside handoff range until the recipient approaches. On completion the bot stays at the meeting point. Items already released are ordinary world drops and cannot be recalled by `#stop`.
+
+## Escort and limited bodyguard behavior
+
+`#escort PlayerName` starts beside a player currently visible to the client. The bot follows a ring around them at `escortDistance` (default five, bounded 3–16), backs away when too close, and keeps the existing pathfinding protections. If the target leaves client tracking, it visits the last observed point and waits up to `stalkSearchTimeoutMS` before stopping.
+
+With `escortDefendOwner=true` and `#defense defend`, a server-observed attack on that player can trigger limited bodyguard defense. The attacker must stay within eight blocks of the escorted player and within 16 blocks of the bot for an approach. Existing health, hunger, weapon, line-of-sight, single-threat, ten-second, trusted-player, Warden, and creeper restrictions still apply. Retreat takes over when defense is unsuitable. The default flee mode retreats from the conflict. `#escort status`, `#escort stop`, and global pause/stop work normally.
+
+## Mining boundaries
+
+Mark two corners using `#minezone pos1 [x y z]` and `#minezone pos2 [x y z]`, or use `#minezone set x1 y1 z1 x2 y2 z2`. Without coordinates each corner uses the bot's feet. Saving both corners enables an inclusive cuboid for this dimension. `#minezone on`, `off`, `status`, and `clear` manage it.
+
+Walking, portal travel, and chest trips may leave the zone; automated block breaking while a mining request is active must stay inside it. Loaded/cached ore candidates, dropped-item targets, exploration points, path costs, and live breaking checks all apply the boundary. With boundaries enabled, a missing zone in a target mining dimension stops mining rather than inheriting another dimension's coordinates. Create an Overworld and Nether zone before a bounded debris route, or turn boundaries off. Zones and corners survive restart; malformed bounds stop digging. Exploration uses a finite grid within the zone and stops when its points and known targets are exhausted. Existing construction/container/sculk protections still apply within a zone.
+
+## Mending repair station
+
+Stand at an existing XP collection point and run `#repair set` (or `#station repair [x y z]`). `#repair now` selects a damaged Mending pickaxe, visits that point, holds the pickaxe, collects nearby available XP, and waits for actual durability improvement. It returns to the starting point after reaching `repairTargetPercent` (default 90). It uses existing XP sources; it does not generate XP, repair unenchantable tools, or spend invented repair materials.
+
+During mining, `repairToolsBeforeReplace=true` tries this route before replacement supplies when remaining durability falls below `repairAtDurability` (default 64, also accounting for the tool reserve). A usable Mending pickaxe already meeting the configured repair target does not trigger repeated trips. `repairNoProgressTimeoutMS` defaults to two minutes; no progress makes automatic repair back off for ten minutes so normal replacement-supply checks can proceed. Food and conflict handling can interrupt the trip. Missing stations/tools, changed inventory, failed portals, and the overall task deadline report a stop. `#repair status`, local `#repair clear`, and global pause/stop are available.
+
+## Recipe-aware gathering
+
+Register the stations once while looking at them:
+
+```text
+#station crafting
+#station furnace
+#gather plan 64 glass
+#gather 64 glass
+```
+
+The planner reads bundled vanilla shaped/shapeless crafting and furnace-smelting recipes, reuses ordinary carried inventory, chooses concrete ingredient alternatives, rounds recipe batches up, and accounts for coal/charcoal fuel. It first tries registered stock for products and ingredients, mines supported missing resource sources, then uses the actual crafting/furnace menus. A stack of glass plans 64 sand and eight coal when nothing is carried. `#gather 32 rail` and `#gather 64 torch` also demonstrate recursive recipes. Result stacks and reopened server inventory contents confirm progress. Recipe inputs/fuel/products are reserved against ordinary deposits and waste cleanup while the task runs.
+
+Gathering uses a selected empty crafting table and a regular furnace with empty input/output, plus at least one free inventory slot. Register their coordinates explicitly with `#station crafting x y z` / `#station furnace x y z` if needed. These points and the XP station receive an automatic three-block construction-protection area. `#station status` lists them and local `#station clear <crafting|furnace|repair>` removes a point. A furnace may retain compatible fuel from earlier use. Crafting interruptions return owned cursor contents and close only a clear cursor; uncertain inventory state stops rather than continuing a guessed recipe.
+
+Supported resources include ordinary self-dropping blocks, common mineral drops/raw metals, cobblestone, cobbled deepslate, clay balls, and Nether quartz. Resource mining uses normal loot/tool requirements, survival checks, boundaries, sculk avoidance, and existing Overworld–Nether portals. Unsupported acquisition requires stock in a registered chest. Use a suitable pickaxe without Silk Touch when requesting mineral/raw-metal drops. Smithing, brewing, stonecutting, special crafting recipes, arbitrary mod/datapack recipes, farms, and custom-component items require supplies or manual work. The real server result must match the planned product/yield; changed recipes stop the operation.
+
+When enough final product is carried, the bot deposits that product into matching registered storage. With no storage registered it finishes carrying the product. Whole recipe batches can produce a few extras, which are deposited too; tools, other ingredients, and spare fetched stock stay in the inventory. `#gather status` / `stop` and global pause/stop are available. The plan/action count defaults to 4096 (`gatherMaxActions`, bounded 1–4096); quantity requests are 1–4096. `companionTaskTimeoutMS` defaults to 30 minutes (bounded 1–60 minutes) for finite companion tasks and workstations. Escort refreshes its deadline while the target remains visible.
+
+Companion tasks are issued directly by command. Starting one replaces current work and leaves persistent mining jobs paused. An expected portal transition, conflict retreat, or global pause preserves a running task. Stop, death, disconnect, or an unexpected world change cancels live task execution; only saved endpoints, boundaries, and the death record persist. Inspect the reason and issue a fresh command instead of assuming reconnect will resume a handoff or crafting click.
 
 ## Validation
 
-Run `bash scripts/check-mining-policies.sh` for dependency-free inventory, storage migration/rules, trust, job persistence, survival, sculk, construction, and observation/retreat policy checks (JDK 17 or later). Full Fabric validation requires Java 25 and the Gradle/Minecraft dependencies:
+Run `bash scripts/check-mining-policies.sh` for dependency-free inventory, storage migration/rules, trust, job persistence, survival, sculk, construction, observation/retreat, recipe batching/fuel, recovery persistence, exact handoff quantities, repair targets, and mining-boundary policy checks (JDK 17 or later). Full Fabric validation requires Java 25 and the Gradle/Minecraft dependencies:
 
 ```sh
 ./gradlew test :fabric:remapJar
@@ -220,3 +289,15 @@ Additional gameplay checks for control, jobs, supplies, and defense:
 - Run low on food, building blocks, and tool durability. Check successful restocking and an empty/protected/missing supply chest, including a full reserved inventory. Verify failed resupply does not discard equipment or take unrelated items.
 - Enter sensor/shrieker areas, including calibrated sensors, and compare a safe detour with a short noisy route. Check discovery during an existing path, blocked quiet exits, storage in hazard zones, and that stop releases crouch.
 - Compare flee and defend with one attacker, low health, multiple threats, a trusted controller, a ranged attacker, a creeper, and a Warden. Verify the time limit, attack cooldown, shield release, and no pursuit.
+
+Additional gameplay checks for companion work and Mod Menu:
+
+- Open Baritone Configure through Mod Menu 21.0.0. Save changed toggles/numbers, cancel another edit, resize across GUI scales, and verify commands still work without Mod Menu installed.
+- Record a death with equipment, respawn, recover through a portal, and confirm matched inventory/return behavior. Check a full inventory, inaccessible/despawned drops, repeated death, restart, and the attempt limit.
+- Deliver one full stack and a partial quantity to a trusted test account. Confirm no release before handoff, exactly requested quantities, server-confirmed recipient pickup, interruption/recollection, another collector, an unknown player position, and an offline target.
+- Escort a moving player. Trigger a confirmed attacker near the player, compare flee/defend, and verify health/threat/distance/time limits. Unload the target, pause/stop, die, and disconnect.
+- Select a small mining cuboid with reversed/negative corners, place targets just outside every face, and verify paths and live breaking stay inside. Try storage outside the zone and a missing Nether zone.
+- Hold a damaged Mending pickaxe at an XP station, check real durability progress, food interruption, no-XP timeout/replacement fallback, changed inventory, and stop.
+- Gather glass, rails, and torches with partial existing stock, exact recipe batches, and alternate ingredients. Interrupt during a cursor transfer and furnace smelting; test occupied/protected stations, insufficient fuel/space, changed server recipes, final-storage filters/fullness, portal failure, and disconnect.
+
+Gameplay validation still needs a Minecraft 26.3 client and a test world/server; policy checks and a successful build do not simulate server inventories, combat, portals, or GUI rendering.

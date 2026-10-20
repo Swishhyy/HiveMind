@@ -234,6 +234,7 @@ public abstract class MixinClientPlayNetHandler extends ClientCommonPacketListen
 
     @Inject(method = "handleTakeItemEntity", at = @At("HEAD"))
     private void onCompanionPickup(ClientboundTakeItemEntityPacket packet, CallbackInfo ci) {
+        if (!Minecraft.getInstance().isSameThread()) return;
         IBaritone instance = BaritoneAPI.getProvider().getBaritoneForConnection((ClientPacketListener) (Object) this);
         if (instance instanceof Baritone bot) bot.getCompanionProcess().onPickup(packet.getItemId(), packet.getPlayerId(), packet.getAmount());
     }
