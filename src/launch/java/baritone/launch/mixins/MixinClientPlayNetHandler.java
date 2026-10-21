@@ -206,9 +206,40 @@ public abstract class MixinClientPlayNetHandler extends ClientCommonPacketListen
         for (IBaritone ibaritone : BaritoneAPI.getProvider().getAllBaritones()) {
             LocalPlayer player = ibaritone.getPlayerContext().player();
             if (player != null && player.connection == (ClientPacketListener) (Object) this) {
+                if (ibaritone instanceof Baritone bot) bot.getCompanionProcess().recordDeath();
                 ibaritone.getGameEventHandler().onPlayerDeath();
+                ibaritone.getPathingBehavior().cancelEverything();
             }
         }
+    }
+
+    @Inject(method = "handleDamageEvent", at = @At("RETURN"))
+    private void onBotDamage(ClientboundDamageEventPacket packet, CallbackInfo ci) {
+        IBaritone instance = BaritoneAPI.getProvider().getBaritoneForConnection((ClientPacketListener) (Object) this);
+        if (instance instanceof Baritone bot && bot.getPlayerContext().world() != null
+                && bot.getPlayerContext().player() != null) {
+            if (packet.entityId() == bot.getPlayerContext().player().getId()) bot.getConflictProcess().onDamage(packet.getSource(bot.getPlayerContext().world()));
+            else {
+                bot.getConflictProcess().onProtectedDamage(packet.entityId(), packet.getSource(bot.getPlayerContext().world()));
+                bot.getStalkProcess().onEntityDamaged(packet.entityId(), packet.getSource(bot.getPlayerContext().world()));
+            }
+        }
+    }
+
+    @Inject(method = "handleContainerContent", at = @At("RETURN"))
+    private void onBotContainerContents(ClientboundContainerSetContentPacket packet, CallbackInfo ci) {
+        IBaritone instance = BaritoneAPI.getProvider().getBaritoneForConnection((ClientPacketListener) (Object) this);
+        if (instance instanceof Baritone bot) {
+            bot.getDepositProcess().onContainerContents(packet.containerId());
+            bot.getWorkstationProcess().onContents(packet.containerId());
+        }
+    }
+
+    @Inject(method = "handleTakeItemEntity", at = @At("HEAD"))
+    private void onCompanionPickup(ClientboundTakeItemEntityPacket packet, CallbackInfo ci) {
+        if (!Minecraft.getInstance().isSameThread()) return;
+        IBaritone instance = BaritoneAPI.getProvider().getBaritoneForConnection((ClientPacketListener) (Object) this);
+        if (instance instanceof Baritone bot) bot.getCompanionProcess().onPickup(packet.getItemId(), packet.getPlayerId(), packet.getAmount());
     }
 
     /*

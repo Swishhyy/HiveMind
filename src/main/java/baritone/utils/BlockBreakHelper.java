@@ -18,8 +18,15 @@
 package baritone.utils;
 
 import baritone.api.BaritoneAPI;
+import baritone.Baritone;
+import baritone.utils.bot.SculkPolicy;
+import baritone.utils.mining.MiningRouteAccess;
 import baritone.api.utils.IPlayerContext;
 import baritone.utils.accessor.IPlayerControllerMP;
+import baritone.utils.mining.ConstructionPolicy;
+import baritone.utils.mining.MiningWaypoints;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.item.component.SwingAnimation;
 import net.minecraft.world.phys.BlockHitResult;
@@ -51,6 +58,9 @@ public final class BlockBreakHelper {
     }
 
     public void tick(boolean isLeftClick) {
+        if (BaritoneAPI.getProvider().getBaritoneForPlayer(ctx.player()) instanceof Baritone bot && bot.getRoamProcess().terrainLocked()) {
+            stopBreakingBlock(); return;
+        }
         if (breakDelayTimer > 0) {
             breakDelayTimer--;
             return;
@@ -59,6 +69,28 @@ public final class BlockBreakHelper {
         boolean isBlockTrace = trace != null && trace.getType() == HitResult.Type.BLOCK;
 
         if (isLeftClick && isBlockTrace) {
+            BlockPos target = ((BlockHitResult) trace).getBlockPos();
+            boolean protectedArea = MiningWaypoints.protection(ctx).stream()
+                    .anyMatch(area -> area.contains(target.getX(), target.getY(), target.getZ()));
+            boolean protectedContainer = BaritoneAPI.getSettings().protectContainers.value
+                    && ConstructionPolicy.isContainer(BuiltInRegistries.BLOCK.getKey(ctx.world().getBlockState(target).getBlock()).getPath());
+            boolean sculk = false;
+            if (BaritoneAPI.getSettings().mineAvoidSculk.value && BaritoneAPI.getProvider().getBaritoneForPlayer(ctx.player()) instanceof Baritone bot) {
+                sculk = SculkPolicy.sculk(BuiltInRegistries.BLOCK.getKey(ctx.world().getBlockState(target).getBlock()).getPath())
+                        || bot.getSculkProcess().snapshot().contains(target.getX(), target.getY(), target.getZ());
+            }
+            boolean outsideZone = false;
+            if (BaritoneAPI.getProvider().getBaritoneForPlayer(ctx.player()) instanceof Baritone bot && bot.getMineProcess().isActive()) {
+                var locations = MiningRouteAccess.locations(ctx);
+                if (locations.zonesEnabled()) {
+                    var zone = locations.zone(MiningRouteAccess.dimension(ctx));
+                    outsideZone = zone == null || !zone.contains(MiningRouteAccess.dimension(ctx),target.getX(),target.getY(),target.getZ());
+                }
+            }
+            if (protectedArea || protectedContainer || sculk || outsideZone) {
+                stopBreakingBlock();
+                return;
+            }
             ctx.playerController().setHittingBlock(wasHitting);
             if (ctx.playerController().hasBrokenBlock()) {
                 ctx.playerController().syncHeldItem();

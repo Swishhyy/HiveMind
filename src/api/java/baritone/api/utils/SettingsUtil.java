@@ -93,6 +93,16 @@ public class SettingsUtil {
                     ex.printStackTrace();
                 }
             });
+            // Older settings forms also wrote untouched defaults. Upgrade the exact old
+            // blast preset so existing installations receive the less hesitant combat tuning.
+            if (SETTINGS_DEFAULT_NAME.equals(settingsName) && settings.killMaximumSelfDamage.value == 10
+                    && settings.killMinimumBlastDamage.value == 4 && settings.killBlastHealthReserve.value == 6) {
+                settings.killMaximumSelfDamage.value = settings.killMaximumSelfDamage.defaultValue;
+                settings.killMinimumBlastDamage.value = settings.killMinimumBlastDamage.defaultValue;
+                settings.killBlastHealthReserve.value = settings.killBlastHealthReserve.defaultValue;
+                save(settings);
+                Helper.HELPER.logDirect("Updated the legacy blast preset: self-damage limit 14, target minimum 1, health reserve 4.");
+            }
         } catch (NoSuchFileException ignored) {
             Helper.HELPER.logDirect("Baritone settings file not found, resetting.");
         } catch (Exception ex) {

@@ -18,6 +18,7 @@
 package baritone.command.defaults;
 
 import baritone.api.IBaritone;
+import baritone.Baritone;
 import baritone.api.command.Command;
 import baritone.api.command.argument.IArgConsumer;
 import baritone.api.command.exception.CommandException;
@@ -88,6 +89,7 @@ public class ExecutionControlCommands {
                     throw new CommandInvalidStateException("Already paused");
                 }
                 paused[0] = true;
+                if(baritone instanceof Baritone bot)bot.getAutonomy().pause(true);
                 logDirect("Paused");
             }
 
@@ -118,10 +120,13 @@ public class ExecutionControlCommands {
             public void execute(String label, IArgConsumer args) throws CommandException {
                 args.requireMax(0);
                 baritone.getBuilderProcess().resume();
-                if (!paused[0]) {
+                boolean parked=baritone instanceof Baritone bot&&(bot.getRoamProcess().parked()||bot.getAutonomy().paused());
+                if(baritone instanceof Baritone bot)bot.getRoamProcess().hold(false);
+                if (!paused[0] && !parked) {
                     throw new CommandInvalidStateException("Not paused");
                 }
                 paused[0] = false;
+                if(baritone instanceof Baritone bot)bot.getAutonomy().pause(false);
                 logDirect("Resumed");
             }
 
@@ -179,6 +184,8 @@ public class ExecutionControlCommands {
                 if (paused[0]) {
                     paused[0] = false;
                 }
+                if(baritone instanceof Baritone bot)bot.getRoamProcess().hold(true);
+                if(baritone instanceof Baritone bot)bot.getAutonomy().clear();
                 baritone.getPathingBehavior().cancelEverything();
                 logDirect("ok canceled");
             }

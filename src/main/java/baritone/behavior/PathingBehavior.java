@@ -98,7 +98,7 @@ public final class PathingBehavior extends Behavior implements IPathingBehavior,
         dispatchEvents();
         if (event.getType() == TickEvent.Type.OUT) {
             secretInternalSegmentCancel();
-            baritone.getPathingControlManager().cancelEverything();
+            baritone.getPathingControlManager().cancelEverything(baritone.getPortalTravelProcess().canPreserveTransition(null));
             return;
         }
 
@@ -111,6 +111,9 @@ public final class PathingBehavior extends Behavior implements IPathingBehavior,
 
     @Override
     public void onPlayerSprintState(SprintStateEvent event) {
+        if (baritone.getStalkProcess().quietMovement() && baritone.getPathingControlManager().mostRecentInControl().orElse(null) == baritone.getStalkProcess()) {
+            event.setState(false); return;
+        }
         if (isPathing()) {
             event.setState(current.isSprinting());
         }

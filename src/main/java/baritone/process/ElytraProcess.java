@@ -79,6 +79,14 @@ public class ElytraProcess extends BaritoneProcessHelper implements IBaritonePro
     private boolean allowTight;
     private boolean allowAboveBuildLimit;
     private boolean allowAboveRoof;
+    private IBaritoneProcess travelOwner;
+    private boolean autonomousTravel;
+    private int takeoffTicks;
+    private boolean requestedLanding;
+    @Override public boolean isTemporary(){return autonomousTravel;}
+    public boolean ownedBy(IBaritoneProcess owner){return travelOwner==owner&&isActive();}
+    public void travelFor(IBaritoneProcess owner,Goal destination){pathTo(destination);travelOwner=owner;autonomousTravel=true;takeoffTicks=0;}
+    public void requestLanding(){requestedLanding=true;}
     private final Semaphore npfSema = new Semaphore(1);
 
     private static final int SHORT_LANDING_COLUMN_HEIGHT = 15;
@@ -94,6 +102,7 @@ public class ElytraProcess extends BaritoneProcessHelper implements IBaritonePro
     }
 
     public void onLostControl(boolean destroyNpf) {
+        travelOwner=null;takeoffTicks=0;requestedLanding=false;
         this.state = State.START_FLYING; // TODO: null state?
         this.goingToLandingSpot = false;
         this.landingSpot = null;
@@ -136,6 +145,7 @@ public class ElytraProcess extends BaritoneProcessHelper implements IBaritonePro
 
     @Override
     public PathingCommand onTick(boolean calcFailed, boolean isSafeToCancel) {
+        if(travelOwner!=null&&!travelOwner.isActive()){onLostControl();return null;}
         try {
             final long seedSetting = Baritone.settings().elytraNetherSeed.value;
             if (seedSetting != this.behavior.npfContext.getSeed()) {
@@ -175,7 +185,7 @@ public class ElytraProcess extends BaritoneProcessHelper implements IBaritonePro
             return new PathingCommand(null, PathingCommandType.CANCEL_AND_SET_GOAL);
         }
 
-        boolean safetyLanding = false;
+        boolean safetyLanding = requestedLanding;
         if (ctx.player().isFallFlying() && shouldLandForSafety()) {
             if (Baritone.settings().elytraAllowEmergencyLand.value) {
                 logDirect("Emergency landing - almost out of elytra durability or fireworks");
@@ -263,6 +273,13 @@ public class ElytraProcess extends BaritoneProcessHelper implements IBaritonePro
             return new PathingCommand(null, PathingCommandType.REQUEST_PAUSE);
         }
 
+        if(travelOwner!=null&&(this.state==State.FLYING||this.state==State.START_FLYING)&&!ctx.player().isFallFlying()){
+            // Ordinary jump, release, glide request. No non-vanilla lift or movement packets.
+            if(++takeoffTicks>120){onLostControl();return new PathingCommand(null,PathingCommandType.CANCEL_AND_SET_GOAL);}
+            baritone.getInputOverrideHandler().clearAllKeys();
+            baritone.getInputOverrideHandler().setInputForceState(Input.JUMP,ctx.player().onGround()?takeoffTicks%20==1:ctx.player().getDeltaMovement().y<-.05&&takeoffTicks%4<2);
+            return new PathingCommand(null,PathingCommandType.CANCEL_AND_SET_GOAL);
+        }
         if (this.state == State.FLYING || this.state == State.START_FLYING) {
             this.state = ctx.player().onGround() && Baritone.settings().elytraAutoJump.value
                     ? State.LOCATE_JUMP
@@ -361,7 +378,7 @@ public class ElytraProcess extends BaritoneProcessHelper implements IBaritonePro
 
     @Override
     public double priority() {
-        return 0; // higher priority than CustomGoalProcess
+        return travelOwner==null||ctx.player()!=null&&ctx.player().isFallFlying()?0:-0.8;
     }
 
     @Override
@@ -407,6 +424,7 @@ public class ElytraProcess extends BaritoneProcessHelper implements IBaritonePro
 
     @Override
     public void pathTo(BlockPos destination) {
+        travelOwner=null;autonomousTravel=false;
         if (!isSupportedPos(destination)) {
             throw new IllegalArgumentException("The goal must be within bounds to use elytra flight.");
         }
@@ -422,7 +440,8 @@ public class ElytraProcess extends BaritoneProcessHelper implements IBaritonePro
         if (ctx.player() == null) {
             return;
         }
-        this.onLostControl(false);
+        IBaritoneProcess owner=this.travelOwner;boolean landing=this.requestedLanding;
+        this.onLostControl(false);this.travelOwner=owner;this.requestedLanding=landing;
         this.predictingTerrain = ctx.player().level().dimension() == Level.NETHER && Baritone.settings().elytraPredictTerrain.value;
         this.allowTight = Baritone.settings().elytraAllowTightSpaces.value;
         this.allowAboveBuildLimit = Baritone.settings().elytraAllowAboveBuildLimit.value;
@@ -477,7 +496,7 @@ public class ElytraProcess extends BaritoneProcessHelper implements IBaritonePro
 
     private boolean shouldLandForSafety() {
         ItemStack chest = ctx.player().getItemBySlot(EquipmentSlot.CHEST);
-        if (chest.getItem() != Items.ELYTRA || chest.getMaxDamage() - chest.getDamageValue() < Baritone.settings().elytraMinimumDurability.value) {
+        if (chest.getItem() != Items.ELYTRA || chest.getMaxDamage() - chest.getDamageValue() < (travelOwner!=null?Math.max(32,Baritone.settings().elytraMinimumDurability.value):Baritone.settings().elytraMinimumDurability.value)) {
             // elytrabehavior replaces when durability <= minimumDurability, so if durability < minimumDurability then we can reasonably assume that the elytra will soon be broken without replacement
             return true;
         }
@@ -489,7 +508,7 @@ public class ElytraProcess extends BaritoneProcessHelper implements IBaritonePro
                 qty += inv.get(i).getCount();
             }
         }
-        if (qty <= Baritone.settings().elytraMinFireworksBeforeLanding.value) {
+        if (qty <= (travelOwner!=null?Math.max(Baritone.settings().botFlightRocketReserve.value,Baritone.settings().elytraMinFireworksBeforeLanding.value):Baritone.settings().elytraMinFireworksBeforeLanding.value)) {
             return true;
         }
         return false;

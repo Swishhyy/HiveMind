@@ -73,6 +73,21 @@ public class Baritone implements IBaritone {
 
     private final FollowProcess followProcess;
     private final MineProcess mineProcess;
+    private final RoamProcess roamProcess;
+    private final DepositProcess depositProcess;
+    private final PortalTravelProcess portalTravelProcess;
+    private final ConflictProcess conflictProcess;
+    private final SculkProcess sculkProcess;
+    private final SurvivalProcess survivalProcess;
+    private final CompanionProcess companionProcess;
+    private final WorkstationProcess workstationProcess;
+    private final RepairProcess repairProcess;
+    private final JobManager jobManager;
+    private final BotControlBehavior botControl;
+    private final NetworkBehavior network;
+    private final AutonomyBehavior autonomy;
+    private final FlightBehavior flight;
+    private final StalkProcess stalkProcess;
     private final GetToBlockProcess getToBlockProcess;
     private final CustomGoalProcess customGoalProcess;
     private final BuilderProcess builderProcess;
@@ -116,6 +131,17 @@ public class Baritone implements IBaritone {
         {
             this.followProcess           = this.registerProcess(FollowProcess::new);
             this.mineProcess             = this.registerProcess(MineProcess::new);
+            this.roamProcess             = this.registerProcess(RoamProcess::new);
+            this.depositProcess          = this.registerProcess(DepositProcess::new);
+            this.portalTravelProcess     = this.registerProcess(PortalTravelProcess::new);
+            this.conflictProcess         = this.registerProcess(ConflictProcess::new);
+            this.stalkProcess            = this.registerProcess(StalkProcess::new);
+            this.sculkProcess            = this.registerProcess(SculkProcess::new);
+            this.survivalProcess         = this.registerProcess(SurvivalProcess::new);
+            this.companionProcess        = this.registerProcess(CompanionProcess::new);
+            this.workstationProcess      = this.registerProcess(WorkstationProcess::new);
+            this.repairProcess           = this.registerProcess(RepairProcess::new);
+            this.jobManager              = this.registerProcess(JobManager::new);
             this.customGoalProcess       = this.registerProcess(CustomGoalProcess::new); // very high iq
             this.getToBlockProcess       = this.registerProcess(GetToBlockProcess::new);
             this.builderProcess          = this.registerProcess(BuilderProcess::new);
@@ -128,7 +154,23 @@ public class Baritone implements IBaritone {
 
         this.worldProvider = new WorldProvider(this);
         this.selectionManager = new SelectionManager(this);
+        this.botControl = new BotControlBehavior(this);
+        this.network = new NetworkBehavior(this);
+        this.flight = new FlightBehavior(this);
+        this.autonomy = new AutonomyBehavior(this);
         this.commandManager = new CommandManager(this);
+        this.registerBehavior(this.roamProcess);
+        this.registerBehavior(this.portalTravelProcess);
+        this.registerBehavior(this.conflictProcess);
+        this.registerBehavior(this.stalkProcess);
+        this.registerBehavior(this.sculkProcess);
+        this.registerBehavior(this.survivalProcess);
+        this.registerBehavior(this.companionProcess);
+        this.registerBehavior(this.jobManager);
+        this.registerBehavior(this.botControl);
+        this.registerBehavior(this.network);
+        this.registerBehavior(this.flight);
+        this.registerBehavior(this.autonomy);
     }
 
     public void registerBehavior(IBehavior behavior) {
@@ -200,6 +242,30 @@ public class Baritone implements IBaritone {
     public MineProcess getMineProcess() {
         return this.mineProcess;
     }
+
+    public DepositProcess getDepositProcess() {
+        return this.depositProcess;
+    }
+
+    public PortalTravelProcess getPortalTravelProcess() {
+        return this.portalTravelProcess;
+    }
+
+    public ConflictProcess getConflictProcess() { return this.conflictProcess; }
+
+    public SculkProcess getSculkProcess() { return this.sculkProcess; }
+    public SurvivalProcess getSurvivalProcess() { return this.survivalProcess; }
+    public CompanionProcess getCompanionProcess() { return this.companionProcess; }
+    public WorkstationProcess getWorkstationProcess() { return this.workstationProcess; }
+    public RepairProcess getRepairProcess() { return this.repairProcess; }
+    public JobManager getJobManager() { return this.jobManager; }
+    public BotControlBehavior getBotControl() { return this.botControl; }
+    public RoamProcess getRoamProcess(){return roamProcess;}
+    public NetworkBehavior getNetwork() { return this.network; }
+    public AutonomyBehavior getAutonomy(){return autonomy;}
+    public FlightBehavior getFlight(){return flight;}
+
+    public StalkProcess getStalkProcess() { return this.stalkProcess; }
 
     @Override
     public FarmProcess getFarmProcess() {

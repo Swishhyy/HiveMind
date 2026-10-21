@@ -113,7 +113,7 @@ public class CommandManager implements ICommandManager {
         ArgConsumer args = new ArgConsumer(this, expanded.second());
 
         ICommand command = this.getCommand(label);
-        return command == null ? null : new ExecutionWrapper(command, label, args);
+        return command == null ? null : new ExecutionWrapper(baritone,command, label, args);
     }
 
     private static Pair<String, List<ICommandArgument>> expand(String string, boolean preserveEmptyLast) {
@@ -127,12 +127,14 @@ public class CommandManager implements ICommandManager {
     }
 
     private static final class ExecutionWrapper {
+        private final Baritone baritone;
 
         private ICommand command;
         private String label;
         private ArgConsumer args;
 
-        private ExecutionWrapper(ICommand command, String label, ArgConsumer args) {
+        private ExecutionWrapper(Baritone baritone,ICommand command, String label, ArgConsumer args) {
+            this.baritone=baritone;
             this.command = command;
             this.label = label;
             this.args = args;
@@ -140,7 +142,10 @@ public class CommandManager implements ICommandManager {
 
         private void execute() {
             try {
+                String first=args.hasAny()?args.peekString().toLowerCase(Locale.ROOT):"";
+                baritone.getAutonomy().beforeCommand(label,first);
                 this.command.execute(this.label, this.args);
+                baritone.getAutonomy().afterCommand(label,first);
             } catch (Throwable t) {
                 // Create a handleable exception, wrap if needed
                 ICommandException exception = t instanceof ICommandException

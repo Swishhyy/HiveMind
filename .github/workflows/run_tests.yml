@@ -21,6 +21,9 @@ jobs:
     - name: Grant execute permission for gradlew
       run: chmod +x gradlew
       
+    - name: Check mining policies without game dependencies
+      run: bash scripts/check-mining-policies.sh
+
     - name: Executing tests
       run: ./gradlew test
 

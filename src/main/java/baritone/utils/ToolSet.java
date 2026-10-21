@@ -160,6 +160,8 @@ public class ToolSet {
             if (Baritone.settings().itemSaver.value && (itemStack.getDamageValue() + Baritone.settings().itemSaverThreshold.value) >= itemStack.getMaxDamage() && itemStack.getMaxDamage() > 1) {
                 continue;
             }
+            if (Baritone.settings().botSurvival.value && itemStack.isDamageableItem()
+                    && itemStack.getMaxDamage() - itemStack.getDamageValue() <= Math.max(1, Math.min(1000, Baritone.settings().botToolReserve.value))) continue;
             double speed = calculateSpeedVsBlock(itemStack, blockState);
             boolean silkTouch = hasSilkTouch(itemStack);
             if (speed > highestSpeed) {

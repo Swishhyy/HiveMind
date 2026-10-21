@@ -18,6 +18,8 @@
 package baritone.process;
 
 import baritone.Baritone;
+import baritone.utils.network.TeamPackets.Kind;
+import baritone.utils.bot.BotItems;
 import baritone.api.BaritoneAPI;
 import baritone.api.pathing.goals.*;
 import baritone.api.process.IMineProcess;
@@ -30,6 +32,9 @@ import baritone.pathing.movement.CalculationContext;
 import baritone.pathing.movement.MovementHelper;
 import baritone.utils.BaritoneProcessHelper;
 import baritone.utils.BlockStateInterface;
+import baritone.utils.mining.MiningRouteAccess;
+import baritone.utils.mining.MiningWasteCleanup;
+import baritone.utils.mining.WorldRoutes;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.entity.Entity;
@@ -53,17 +58,27 @@ import static baritone.api.pathing.movement.ActionCosts.COST_INF;
  */
 public final class MineProcess extends BaritoneProcessHelper implements IMineProcess {
 
-    private BlockOptionalMetaLookup filter;
-    private List<BlockPos> knownOreLocations;
+    private volatile BlockOptionalMetaLookup filter;
+    private volatile List<BlockPos> knownOreLocations;
     private List<BlockPos> blacklist; // inaccessible
     private Map<BlockPos, Long> anticipatedDrops;
     private BlockPos branchPoint;
     private GoalRunAway branchPointRunaway;
     private int desiredQuantity;
     private int tickCount;
+    private int depositedQuantity;
+    private String miningDimension;
+    private String companionItem;
+    private volatile long jobEpoch;
+    private boolean needsRescan;
+    private volatile boolean scanFailed;
+    private final MiningWasteCleanup wasteCleanup;
+    private List<int[]> zoneExploration = List.of();
+    private int zoneStep;
 
     public MineProcess(Baritone baritone) {
         super(baritone);
+        this.wasteCleanup = new MiningWasteCleanup(baritone);
     }
 
     @Override
@@ -73,15 +88,78 @@ public final class MineProcess extends BaritoneProcessHelper implements IMinePro
 
     @Override
     public PathingCommand onTick(boolean calcFailed, boolean isSafeToCancel) {
+        baritone.getSculkProcess().refresh();
+        if (baritone.getSculkProcess().isActive()) return new PathingCommand(null, PathingCommandType.REQUEST_PAUSE);
         if (desiredQuantity > 0) {
-            int curr = ctx.player().getInventory().getNonEquipmentItems().stream()
+            int curr = companionItem != null ? BotItems.count(ctx, companionItem)
+                    : ctx.player().getInventory().getNonEquipmentItems().stream()
                     .filter(stack -> filter.has(stack))
                     .mapToInt(ItemStack::getCount).sum();
-            if (curr >= desiredQuantity) {
-                logDirect("Have " + curr + " valid items");
+            if ((long) curr + depositedQuantity >= desiredQuantity) {
+                if (companionItem != null) {
+                    cancel();
+                    baritone.getCompanionProcess().mined();
+                    return new PathingCommand(null, PathingCommandType.CANCEL_AND_SET_GOAL);
+                }
+                baritone.getJobManager().miningFinished();
+                logDirect("Have " + ((long) curr + depositedQuantity) + " valid items including confirmed deposits");
+                if (Baritone.settings().mineAutoDeposit.value) {
+                    try {
+                        if (MiningRouteAccess.deposit(ctx) != null) baritone.getDepositProcess().startFinalDeposit();
+                    } catch (IllegalStateException e) {
+                        baritone.getJobManager().fail("Final deposit could not start: " + e.getMessage());
+                        logDirect("Mining complete; final deposit could not start: " + e.getMessage());
+                    }
+                }
+                cancel();
+                return baritone.getDepositProcess().isActive()
+                        ? new PathingCommand(null, PathingCommandType.REQUEST_PAUSE) : null;
+            }
+        }
+        if (wasteCleanup.tick(isSafeToCancel, filter)) return new PathingCommand(null, PathingCommandType.REQUEST_PAUSE);
+        if (MiningRouteAccess.locations(ctx).zonesEnabled() && MiningRouteAccess.locations(ctx).zone(miningDimension) == null) {
+            baritone.getJobManager().fail("Set a mining zone in " + miningDimension + " or use minezone off");
+            logDirect("Mining stopped: no boundary exists in the target dimension " + miningDimension); cancel(); return null;
+        }
+        if (baritone.getSurvivalProcess().beforeMining()) return new PathingCommand(null, PathingCommandType.REQUEST_PAUSE);
+        if (!MiningRouteAccess.dimension(ctx).equals(miningDimension)) {
+            try {
+                if (!Baritone.settings().mineTravelBetweenDimensions.value) throw new IllegalStateException("dimension travel is disabled");
+                baritone.getPortalTravelProcess().start(miningDimension);
+                return new PathingCommand(null, PathingCommandType.REQUEST_PAUSE);
+            } catch (IllegalStateException e) {
+                baritone.getJobManager().fail("Mining: " + e.getMessage());
+                logDirect("Mining stopped: " + e.getMessage());
                 cancel();
                 return null;
             }
+        }
+        if (needsRescan) {
+            needsRescan = false;
+            rescan(new ArrayList<>(), new CalculationContext(baritone), jobEpoch, filterFilter(),
+                    new ArrayList<>(blacklist), droppedItemsScan());
+        }
+        if (scanFailed) {
+            baritone.getJobManager().fail("No known targets and mining exploration is disabled");
+            logDirect("No known locations for " + filter + "; exploration is disabled");
+            cancel();
+            return null;
+        }
+        try {
+            if (baritone.getDepositProcess().shouldStartAutomatic()) {
+                baritone.getDepositProcess().start(false);
+                return new PathingCommand(null, PathingCommandType.REQUEST_PAUSE);
+            }
+        } catch (IllegalStateException e) {
+            baritone.getJobManager().fail("Automatic deposit: " + e.getMessage());
+            logDirect("Cannot start automatic deposit: " + e.getMessage());
+            cancel();
+            return null;
+        }
+        if (companionItem != null && ctx.player().getInventory().getNonEquipmentItems().stream().limit(36).noneMatch(ItemStack::isEmpty)) {
+            logDirect("Resource inventory is full before the requested ingredient quantity was reached");
+            cancel();
+            return null;
         }
         if (calcFailed) {
             if (!knownOreLocations.isEmpty() && Baritone.settings().blacklistClosestOnFailure.value) {
@@ -92,6 +170,7 @@ public final class MineProcess extends BaritoneProcessHelper implements IMinePro
                 knownOreLocations.stream().min(Comparator.comparingDouble(ctx.playerFeet()::distSqr)).ifPresent(blacklist::add);
                 knownOreLocations.removeIf(blacklist::contains);
             } else {
+                baritone.getJobManager().fail("No usable path to the requested mining targets");
                 logDirect("Unable to find any path to " + filter + ", canceling mine");
                 if (Baritone.settings().notificationOnMineFail.value) {
                     logNotification("Unable to find any path to " + filter + ", canceling mine", true);
@@ -106,15 +185,22 @@ public final class MineProcess extends BaritoneProcessHelper implements IMinePro
         List<BlockPos> curr = new ArrayList<>(knownOreLocations);
         if (mineGoalUpdateInterval != 0 && tickCount++ % mineGoalUpdateInterval == 0) { // big brain
             CalculationContext context = new CalculationContext(baritone, true);
-            Baritone.getExecutor().execute(() -> rescan(curr, context));
+            long epoch = jobEpoch;
+            BlockOptionalMetaLookup target = filterFilter();
+            List<BlockPos> excluded = new ArrayList<>(blacklist);
+            List<BlockPos> drops = droppedItemsScan();
+            Baritone.getExecutor().execute(() -> rescan(curr, context, epoch, target, excluded, drops));
         }
         if (Baritone.settings().legitMine.value) {
             if (!addNearby()) {
+                baritone.getJobManager().fail("No reachable local mining targets in legitMine mode");
                 cancel();
                 return null;
             }
         }
-        Optional<BlockPos> shaft = curr.stream()
+        List<BlockPos> coordinated=baritone.getNetwork().team().mineTargets(curr);
+        if(baritone.getNetwork().team().enabled()&&!curr.isEmpty()&&coordinated.isEmpty()) { baritone.getInputOverrideHandler().clearAllKeys();ctx.playerController().resetBlockRemoving();return new PathingCommand(null,PathingCommandType.REQUEST_PAUSE); }
+        Optional<BlockPos> shaft = coordinated.stream()
                 .filter(pos -> pos.getX() == ctx.playerFeet().getX() && pos.getZ() == ctx.playerFeet().getZ())
                 .filter(pos -> pos.getY() >= ctx.playerFeet().getY())
                 .filter(pos -> !(BlockStateInterface.get(ctx, pos).getBlock() instanceof AirBlock)) // after breaking a block, it takes mineGoalUpdateInterval ticks for it to actually update this list =(
@@ -122,8 +208,7 @@ public final class MineProcess extends BaritoneProcessHelper implements IMinePro
         baritone.getInputOverrideHandler().clearAllKeys();
         if (shaft.isPresent() && ctx.player().onGround()) {
             BlockPos pos = shaft.get();
-            BlockState state = baritone.bsi.get0(pos);
-            if (!MovementHelper.avoidBreaking(baritone.bsi, pos.getX(), pos.getY(), pos.getZ(), state)) {
+            if (plausibleToBreak(new CalculationContext(baritone), pos)) {
                 Optional<Rotation> rot = RotationUtils.reachable(ctx, pos);
                 if (rot.isPresent() && isSafeToCancel) {
                     baritone.getLookBehavior().updateTarget(rot.get(), true);
@@ -137,6 +222,7 @@ public final class MineProcess extends BaritoneProcessHelper implements IMinePro
         }
         PathingCommand command = updateGoal();
         if (command == null) {
+            baritone.getJobManager().fail("No remaining mining targets or exploration goal");
             // none in range
             // maybe say something in chat? (ahem impact)
             cancel();
@@ -184,9 +270,12 @@ public final class MineProcess extends BaritoneProcessHelper implements IMinePro
         if (!locs.isEmpty()) {
             CalculationContext context = new CalculationContext(baritone);
             List<BlockPos> locs2 = prune(context, new ArrayList<>(locs), filter, Baritone.settings().mineMaxOreLocationsCount.value, blacklist, droppedItemsScan());
+            knownOreLocations=locs2;
+            locs2=baritone.getNetwork().team().mineTargets(locs2);
+            if(locs2.isEmpty())return new PathingCommand(null,PathingCommandType.REQUEST_PAUSE);
+            final List<BlockPos> goals=locs2;
             // can't reassign locs, gotta make a new var locs2, because we use it in a lambda right here, and variables you use in a lambda must be effectively final
-            Goal goal = new GoalComposite(locs2.stream().map(loc -> coalesce(loc, locs2, context)).toArray(Goal[]::new));
-            knownOreLocations = locs2;
+            Goal goal = new GoalComposite(locs2.stream().map(loc -> coalesce(loc, goals, context)).toArray(Goal[]::new));
             return new PathingCommand(goal, legit ? PathingCommandType.FORCE_REVALIDATE_GOAL_AND_PATH : PathingCommandType.REVALIDATE_GOAL_AND_PATH);
         }
         // we don't know any ore locations at the moment
@@ -194,8 +283,25 @@ public final class MineProcess extends BaritoneProcessHelper implements IMinePro
             return null;
         }
         // only when we should explore for blocks or are in legit mode we do this
-        int y = Baritone.settings().legitMineYLevel.value;
+        int y = filter.has(Blocks.ANCIENT_DEBRIS) ? Math.max(5, Math.min(120, Baritone.settings().ancientDebrisYLevel.value))
+                : Baritone.settings().legitMineYLevel.value;
+        if (MiningRouteAccess.locations(ctx).zonesEnabled()) {
+            var zone = MiningRouteAccess.locations(ctx).zone(MiningRouteAccess.dimension(ctx));
+            if (zone == null) return null;
+            if (zoneExploration.isEmpty()) zoneExploration = zone.exploration(ctx.playerFeet().getX(), y, ctx.playerFeet().getZ());
+            while (zoneStep < zoneExploration.size()) {
+                int[] point = zoneExploration.get(zoneStep);
+                GoalNear goal = new GoalNear(new BlockPos(point[0],point[1],point[2]),1);
+                if (!goal.isInGoal(ctx.playerFeet())) return new PathingCommand(goal,PathingCommandType.REVALIDATE_GOAL_AND_PATH);
+                zoneStep++;
+            }
+            baritone.getJobManager().fail("No more known targets or exploration points in the mining zone");
+            return null;
+        }
         if (branchPoint == null) {
+            if (filter.has(Blocks.ANCIENT_DEBRIS) && ctx.playerFeet().getY() != y) {
+                return new PathingCommand(new GoalYLevel(y), PathingCommandType.REVALIDATE_GOAL_AND_PATH);
+            }
             /*if (!baritone.getPathingBehavior().isPathing() && playerFeet().y == y) {
                 // cool, path is over and we are at desired y
                 branchPoint = playerFeet();
@@ -207,6 +313,12 @@ public final class MineProcess extends BaritoneProcessHelper implements IMinePro
         }
         // TODO shaft mode, mine 1x1 shafts to either side
         // TODO also, see if the GoalRunAway with maintain Y at 11 works even from the surface
+        if(baritone.getNetwork().team().enabled()&&baritone.getNetwork().team().groupSize(Kind.MINE,null)>1){
+            double heading=baritone.getNetwork().team().heading(Kind.MINE,null);
+            BlockPos point=new BlockPos(branchPoint.getX()+(int)Math.round(Math.cos(heading)*96),y,branchPoint.getZ()+(int)Math.round(Math.sin(heading)*96));
+            if(ctx.playerFeet().distSqr(point)<64)branchPoint=ctx.playerFeet();
+            return new PathingCommand(new GoalNear(point,4),PathingCommandType.REVALIDATE_GOAL_AND_PATH);
+        }
         if (branchPointRunaway == null) {
             branchPointRunaway = new GoalRunAway(1, y, branchPoint) {
                 @Override
@@ -223,26 +335,23 @@ public final class MineProcess extends BaritoneProcessHelper implements IMinePro
         return new PathingCommand(branchPointRunaway, PathingCommandType.REVALIDATE_GOAL_AND_PATH);
     }
 
-    private void rescan(List<BlockPos> already, CalculationContext context) {
-        BlockOptionalMetaLookup filter = filterFilter();
-        if (filter == null) {
+    private void rescan(List<BlockPos> already, CalculationContext context, long epoch,
+                        BlockOptionalMetaLookup target, List<BlockPos> excluded, List<BlockPos> dropped) {
+        if (target == null || jobEpoch != epoch) {
             return;
         }
         if (Baritone.settings().legitMine.value) {
             return;
         }
-        List<BlockPos> dropped = droppedItemsScan();
-        List<BlockPos> locs = searchWorld(context, filter, Baritone.settings().mineMaxOreLocationsCount.value, already, blacklist, dropped);
+        List<BlockPos> locs = searchWorld(context, target, Baritone.settings().mineMaxOreLocationsCount.value, already, excluded, dropped);
         locs.addAll(dropped);
-        if (locs.isEmpty() && !Baritone.settings().exploreForBlocks.value) {
-            logDirect("No locations for " + filter + " known, cancelling");
-            if (Baritone.settings().notificationOnMineFail.value) {
-                logNotification("No locations for " + filter + " known, cancelling", true);
-            }
-            cancel();
-            return;
+        locs.removeIf(pos -> !context.insideMiningBoundary(pos.getX(),pos.getY(),pos.getZ()));
+        synchronized (this) {
+            // A scan from an old world/job cannot publish targets into the current mining job.
+            if (jobEpoch != epoch || filter == null) return;
+            scanFailed = locs.isEmpty() && !Baritone.settings().exploreForBlocks.value;
+            knownOreLocations = locs;
         }
-        knownOreLocations = locs;
     }
 
     private boolean internalMiningGoal(BlockPos pos, CalculationContext context, List<BlockPos> locs) {
@@ -438,6 +547,7 @@ public final class MineProcess extends BaritoneProcessHelper implements IMinePro
         List<BlockPos> locs = locs2
                 .stream()
                 .distinct()
+                .filter(pos -> ctx.insideMiningBoundary(pos.getX(),pos.getY(),pos.getZ()))
 
                 // remove any that are within loaded chunks that aren't actually what we want
                 .filter(pos -> !ctx.bsi.worldContainsLoadedChunk(pos.getX(), pos.getZ()) || filter.has(ctx.get(pos.getX(), pos.getY(), pos.getZ())) || dropped.contains(pos))
@@ -486,6 +596,9 @@ public final class MineProcess extends BaritoneProcessHelper implements IMinePro
 
     public static boolean plausibleToBreak(CalculationContext ctx, BlockPos pos) {
         BlockState state = ctx.bsi.get0(pos);
+        if (ctx.breakCostMultiplierAt(pos.getX(), pos.getY(), pos.getZ(), state) >= COST_INF) {
+            return false;
+        }
         if (MovementHelper.getMiningDurationTicks(ctx, pos.getX(), pos.getY(), pos.getZ(), state, true) >= COST_INF) {
             return false;
         }
@@ -499,24 +612,45 @@ public final class MineProcess extends BaritoneProcessHelper implements IMinePro
 
     @Override
     public void mineByName(int quantity, String... blocks) {
-        mine(quantity, new BlockOptionalMetaLookup(blocks));
+        mine(quantity, new BlockOptionalMetaLookup(Arrays.stream(blocks)
+                .map(name -> name.equalsIgnoreCase("netherite") || name.equalsIgnoreCase("minecraft:netherite")
+                        ? "minecraft:ancient_debris" : name).toArray(String[]::new)));
     }
 
     @Override
-    public void mine(int quantity, BlockOptionalMetaLookup filter) {
+    public synchronized void mine(int quantity, BlockOptionalMetaLookup filter) {
+        this.companionItem = null;
         this.filter = filter;
         if (this.filterFilter() == null) {
             this.filter = null;
         }
         this.desiredQuantity = quantity;
+        this.depositedQuantity = 0;
+        this.miningDimension = this.filter == null ? null : (this.filter.has(Blocks.ANCIENT_DEBRIS)
+                && Baritone.settings().mineTravelBetweenDimensions.value ? WorldRoutes.NETHER : MiningRouteAccess.dimension(ctx));
+        invalidateWorldTargets();
+    }
+
+    public synchronized void mineForCompanion(String item, int quantity, String dimension, List<String> blocks) {
+        mine(quantity, new BlockOptionalMetaLookup(blocks.toArray(String[]::new)));
+        if (filter == null) throw new IllegalStateException("Breaking the requested resource is disabled");
+        this.companionItem = item;
+        this.miningDimension = dimension;
+    }
+
+    /** Preserve the resource request and quantity credit, but discard every position from the previous world. */
+    public synchronized void invalidateWorldTargets() {
+        wasteCleanup.reset();
+        zoneExploration = List.of(); zoneStep = 0;
+        jobEpoch++;
+        needsRescan = filter != null;
+        scanFailed = false;
+        tickCount = 0;
         this.knownOreLocations = new ArrayList<>();
         this.blacklist = new ArrayList<>();
         this.branchPoint = null;
         this.branchPointRunaway = null;
         this.anticipatedDrops = new HashMap<>();
-        if (filter != null) {
-            rescan(new ArrayList<>(), new CalculationContext(baritone));
-        }
     }
 
     private BlockOptionalMetaLookup filterFilter() {
@@ -535,5 +669,28 @@ public final class MineProcess extends BaritoneProcessHelper implements IMinePro
             return f;
         }
         return filter;
+    }
+
+    /** Count only transfers confirmed by the server, preserving quantity goals across chest trips. */
+    public void recordDeposit(ItemStack stack, int count) {
+        if (isActive() && companionItem == null && filter.has(stack)) {
+            depositedQuantity = (int) Math.min(Integer.MAX_VALUE, (long) depositedQuantity + count);
+            baritone.getJobManager().recordDeposit(depositedQuantity);
+        }
+    }
+
+    public boolean targetsAncientDebris() { return filter != null && filter.has(Blocks.ANCIENT_DEBRIS); }
+    public void restoreDepositCredit(int count) { depositedQuantity = Math.max(0, count); }
+    public int jobProgress() {
+        return depositedQuantity + (filter == null || ctx.player() == null ? 0 : ctx.player().getInventory().getNonEquipmentItems().stream()
+                .filter(filter::has).mapToInt(ItemStack::getCount).sum());
+    }
+
+    public BlockOptionalMetaLookup depositTargets() {
+        return filter;
+    }
+
+    public boolean isCleaningWaste() {
+        return wasteCleanup.isActive();
     }
 }

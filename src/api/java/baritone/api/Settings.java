@@ -27,6 +27,7 @@ import net.minecraft.client.multiplayer.chat.GuiMessageTag;
 import net.minecraft.core.Vec3i;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.item.Item;
+import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.Mirror;
@@ -231,7 +232,13 @@ public final class Settings {
             Blocks.DIRT.asItem(),
             Blocks.COBBLESTONE.asItem(),
             Blocks.NETHERRACK.asItem(),
-            Blocks.STONE.asItem()
+            Blocks.STONE.asItem(),
+            Blocks.COBBLED_DEEPSLATE.asItem(),
+            Blocks.DEEPSLATE.asItem(),
+            Blocks.GRANITE.asItem(),
+            Blocks.DIORITE.asItem(),
+            Blocks.ANDESITE.asItem(),
+            Blocks.TUFF.asItem()
     )));
 
     /**
@@ -262,6 +269,196 @@ public final class Settings {
      * this multiplies the break speed, if set above 1 it's "encourage breaking" instead
      */
     public final Setting<Double> avoidBreakingMultiplier = new Setting<>(.1);
+
+    /** Prefer a detour over breaking blocks commonly used in player buildings. This is a heuristic, not placement history. */
+    public final Setting<Boolean> preferAvoidConstruction = new Setting<>(true);
+
+    /** Extra path cost, in ticks, for each suspected construction block that would be broken. */
+    public final Setting<Double> constructionBreakPenalty = new Setting<>(1000D);
+
+    /** Additional blocks to treat as construction, including blocks added by other mods. */
+    public final Setting<List<Block>> additionalConstructionBlocks = new Setting<>(new ArrayList<>());
+
+    /** Never break storage containers for a shortcut, even when a construction detour is expensive. */
+    public final Setting<Boolean> protectContainers = new Setting<>(true);
+
+    /** Return to the saved deposit chest when the mining inventory is nearly full. */
+    public final Setting<Boolean> mineAutoDeposit = new Setting<>(true);
+
+    /** Start a mining deposit trip when at most this many main-inventory slots are empty. */
+    public final Setting<Integer> mineDepositFreeSlots = new Setting<>(2);
+
+    /** Drop excess ordinary waste blocks when mining inventory space runs low. Disabled until explicitly enabled. */
+    public final Setting<Boolean> mineDiscardWaste = new Setting<>(false);
+
+    /** Number of building stacks to retain across the inventory and hotbar, not per block type. */
+    public final Setting<Integer> mineWasteKeepStacks = new Setting<>(2);
+
+    /** Only these block items may be discarded; mining targets, named/custom items, and reserved supplies are always kept. */
+    public final Setting<List<Item>> mineWasteItems = new Setting<>(new ArrayList<>(List.of(
+            Blocks.COBBLESTONE.asItem(), Blocks.COBBLED_DEEPSLATE.asItem(), Blocks.DEEPSLATE.asItem(),
+            Blocks.DIRT.asItem(), Blocks.STONE.asItem(), Blocks.NETHERRACK.asItem(),
+            Blocks.GRANITE.asItem(), Blocks.DIORITE.asItem(), Blocks.ANDESITE.asItem(), Blocks.TUFF.asItem()
+    )));
+
+    /** Keep hotbar items during ordinary deposits; deposit all explicitly overrides this. */
+    public final Setting<Boolean> depositKeepHotbar = new Setting<>(true);
+
+    /** Keep damageable equipment, food, and equippable items during ordinary deposits. */
+    public final Setting<Boolean> depositKeepSupplies = new Setting<>(true);
+
+    /** Extra supplies to retain during ordinary deposits. Worn equipment is never transferred. */
+    public final Setting<List<Item>> depositKeepItems = new Setting<>(new ArrayList<>(List.of(
+            Items.TORCH, Items.WATER_BUCKET, Items.BUCKET, Items.SHIELD
+    )));
+
+    /** Block-breaking protection around a saved deposit chest. Does not prevent walking through the area. */
+    public final Setting<Integer> depositProtectionRadius = new Setting<>(3);
+
+    /** Route ancient debris mining through a known Nether portal when started in the Overworld. */
+    public final Setting<Boolean> mineTravelBetweenDimensions = new Setting<>(true);
+
+    /** Exploration height for ancient debris when no known debris targets are available. */
+    public final Setting<Integer> ancientDebrisYLevel = new Setting<>(15);
+
+    /** Maximum time to wait inside a Nether portal for the server to change dimensions. */
+    public final Setting<Long> miningPortalTimeoutMS = new Setting<>(45000L);
+
+    /** Temporarily retreat from nearby hostile mobs and actual attackers while bot tasks are active. */
+    public final Setting<Boolean> fleeConflicts = new Setting<>(true);
+
+    /** Distance at which nearby hostile mobs trigger a retreat; neutral mobs require aggression or an actual attack. */
+    public final Setting<Integer> conflictMobRadius = new Setting<>(12);
+
+    /** Desired separation during retreat; wardens require at least 64 blocks. */
+    public final Setting<Integer> conflictFleeDistance = new Setting<>(32);
+
+    /** Prefer paths outside sensor/shrieker zones; prohibit automated breaking and placing near them. */
+    public final Setting<Boolean> mineAvoidSculk = new Setting<>(true);
+    public final Setting<Integer> sculkAvoidRadius = new Setting<>(12);
+    public final Setting<Double> sculkPathPenalty = new Setting<>(5000D);
+
+    /** Pause mining for food, health, tool durability, inventory space, and building supplies. */
+    public final Setting<Boolean> botSurvival = new Setting<>(true);
+    public final Setting<Boolean> botAutoResupply = new Setting<>(true);
+    public final Setting<Integer> botMinimumHealth = new Setting<>(12);
+    public final Setting<Integer> botEatAtHunger = new Setting<>(16);
+    public final Setting<Integer> botMinimumFood = new Setting<>(4);
+    public final Setting<Integer> botRestockFood = new Setting<>(16);
+    public final Setting<Integer> botMinimumBlocks = new Setting<>(16);
+    public final Setting<Integer> botRestockBlocks = new Setting<>(128);
+    public final Setting<Integer> botToolReserve = new Setting<>(32);
+    /** Only these foods may be automatically eaten or withdrawn. */
+    public final Setting<List<Item>> botFoodItems = new Setting<>(new ArrayList<>(List.of(
+            Items.COOKED_BEEF, Items.COOKED_PORKCHOP, Items.COOKED_CHICKEN, Items.COOKED_MUTTON,
+            Items.COOKED_RABBIT, Items.COOKED_COD, Items.COOKED_SALMON, Items.BREAD,
+            Items.BAKED_POTATO, Items.CARROT, Items.GOLDEN_CARROT, Items.APPLE)));
+    /** FLEE is the default. DEFEND permits short, close retaliation only against a confirmed attacker. */
+    public final Setting<String> botConflictMode = new Setting<>("flee");
+
+    /** Companion commands use normal movement and only positions received by this client. */
+    public final Setting<Integer> recoveryMaxAttempts = new Setting<>(3);
+    public final Setting<Integer> recoverySearchRadius = new Setting<>(16);
+    public final Setting<Long> companionTaskTimeoutMS = new Setting<>(1800000L);
+    public final Setting<Boolean> deliveryRequireHandoff = new Setting<>(true);
+    public final Setting<Integer> deliveryApproachDistance = new Setting<>(3);
+    public final Setting<Integer> escortDistance = new Setting<>(5);
+    public final Setting<Boolean> escortDefendOwner = new Setting<>(true);
+    public final Setting<Boolean> repairToolsBeforeReplace = new Setting<>(true);
+    public final Setting<Integer> repairAtDurability = new Setting<>(64);
+    public final Setting<Integer> repairTargetPercent = new Setting<>(90);
+    public final Setting<Long> repairNoProgressTimeoutMS = new Setting<>(120000L);
+    public final Setting<Integer> gatherMaxActions = new Setting<>(4096);
+
+    /** Approximate horizontal observation distance for stalk; bounded to 16-128 blocks, with four blocks of tolerance. */
+    public final Setting<Integer> stalkDistance = new Setting<>(40);
+
+    /** Maximum local search radius when a stalk target has no visible position. Does not reveal remote coordinates. */
+    public final Setting<Integer> stalkSearchRadius = new Setting<>(256);
+
+    /** Duration of one local search pass before regrouping and retrying; stalking itself does not time out. */
+    public final Setting<Long> stalkSearchTimeoutMS = new Setting<>(120000L);
+
+    /** Stealth tracking does not alter terrain or operate closed doors. These restrictions are scoped to the task. */
+    public final Setting<Integer> stalkTerrainPenalty = new Setting<>(80);
+    public final Setting<Boolean> stalkMinimalEvidence = new Setting<>(true);
+    public final Setting<Boolean> stalkPreferOpenAir = new Setting<>(true);
+    /** Distance tolerance around an established viewing spot; bounded to 4-32 blocks. */
+    public final Setting<Integer> stalkPositionTolerance = new Setting<>(12);
+    /** Brief obstructions do not cause repositioning; bounded to 20-600 ticks. */
+    public final Setting<Integer> stalkLostSightTicks = new Setting<>(100);
+    /** Delay between failed stalking attempts; repeated failures back off up to 30 seconds. */
+    public final Setting<Long> stalkRetryDelayMS = new Setting<>(5000L);
+    public final Setting<Boolean> stalkSneakWhileMoving = new Setting<>(true);
+
+    /** Crouch and walk only while another player could hear (within this many blocks) or possibly see the bot. */
+    public final Setting<Integer> stalkSneakHearingRange = new Setting<>(16);
+
+    /** Half-angle of another player's possible field of view used for that crouch decision; bounded to 30-90 degrees. */
+    public final Setting<Integer> stalkSneakViewAngle = new Setting<>(80);
+
+    /** Drink a hotbar invisibility potion before an ambush approach and before re-approaching after being spotted. */
+    public final Setting<Boolean> stalkUseInvisibility = new Setting<>(true);
+    public final Setting<Integer> stalkVerticalRange = new Setting<>(5);
+    public final Setting<Integer> stalkViewConeDegrees = new Setting<>(18);
+    public final Setting<Integer> stalkGazeTicks = new Setting<>(40);
+    public final Setting<Integer> stalkScatterTicks = new Setting<>(240);
+    public final Setting<Boolean> stalkReportSightings = new Setting<>(true);
+    public final Setting<Long> stalkReportIntervalMS = new Setting<>(120000L);
+    public final Setting<Integer> stalkMemoryDays = new Setting<>(30);
+
+    /** Connection endpoints and keys remain in the per-server bot-network.properties file, managed with #network. */
+    /** Automatically scout between tasks. Manual stop/pause overrides this. */
+    public final Setting<Boolean> botAutoRoam = new Setting<>(true);
+    /** Standalone autonomous-client lifecycle, private reporting, and long-distance flight. */
+    public final Setting<Boolean> botAutoRespawn = new Setting<>(true);
+    public final Setting<Long> botRespawnDelayMS = new Setting<>(2000L);
+    public final Setting<Boolean> botPersistentTracking = new Setting<>(true);
+    public final Setting<Boolean> botPeriodicReports = new Setting<>(true);
+    public final Setting<Boolean> botReportAllTrusted = new Setting<>(true);
+    public final Setting<Long> botReportIntervalMS = new Setting<>(300000L);
+    public final Setting<Boolean> botUseElytra = new Setting<>(true);
+    public final Setting<Integer> botFlightMinimumDistance = new Setting<>(256);
+    public final Setting<Integer> botFlightRocketReserve = new Setting<>(8);
+    public final Setting<Integer> botFlightRoamDistance = new Setting<>(768);
+    public final Setting<Boolean> networkShareSightings = new Setting<>(true);
+    public final Setting<Boolean> networkShareExploration = new Setting<>(true);
+    public final Setting<Long> networkSightingIntervalMS = new Setting<>(5000L);
+    /** Search hints expire quickly; the separate atlas retains historical observations for up to 30 days. */
+    public final Setting<Long> networkSightingTTLMS = new Setting<>(120000L);
+    public final Setting<Boolean> networkRenderSightings = new Setting<>(false);
+
+    /** Explicit named-player ambush uses normal client attacks; all timers and attempts are bounded. */
+    public final Setting<Boolean> killAllowTrustedTargets = new Setting<>(false);
+    public final Setting<Integer> killMinimumHealth = new Setting<>(16);
+    public final Setting<Integer> killMaxAttempts = new Setting<>(3);
+    public final Setting<Long> killWatchMinimumMS = new Setting<>(1000L);
+    public final Setting<Long> killWatchMaximumMS = new Setting<>(3000L);
+
+    /** An engaged fight resets to stalking after this long without a confirmed hit on the target. */
+    public final Setting<Long> killAttackTimeoutMS = new Setting<>(30000L);
+
+    /** Once engaged, retreat only below this health (half of it while holding a totem) or when outnumbered. */
+    public final Setting<Integer> killRetreatHealth = new Setting<>(8);
+
+    /** Retreat once this many non-trusted players, including the target, are close to the fight; at least two. */
+    public final Setting<Integer> killRetreatPlayers = new Setting<>(2);
+
+    /** Keep a totem of undying from the inventory in the offhand during a hunt's approach, fight, and retreat. */
+    public final Setting<Boolean> killUseTotems = new Setting<>(true);
+    public final Setting<Long> killTimeoutMS = new Setting<>(600000L);
+    public final Setting<String> killCombatStyle = new Setting<>("auto");
+    public final Setting<Integer> killMaximumSelfDamage = new Setting<>(14);
+    public final Setting<Integer> killMinimumBlastDamage = new Setting<>(1);
+    public final Setting<Integer> killBlastHealthReserve = new Setting<>(4);
+    public final Setting<Integer> killExplosiveDelayTicks = new Setting<>(1);
+    public final Setting<Boolean> killUseBlastCover = new Setting<>(true);
+    /** Combat can place up to two obsidian support blocks to reach an uneven or side-mounted blast spot. */
+    public final Setting<Integer> killMaxSupportBlocks = new Setting<>(2);
+    /** Move toward a useful blast position and give a pursuing opponent time to follow. */
+    public final Setting<Boolean> killLureOpponent = new Setting<>(true);
+    public final Setting<Long> killLureTimeoutMS = new Setting<>(8000L);
+
 
     /**
      * A list of blocks to be treated as if they're air.
@@ -558,9 +755,9 @@ public final class Settings {
 
     /**
      * How far are you allowed to fall onto solid ground (with a water bucket)?
-     * It's not that reliable, so I've set it below what would kill an unarmored player (23)
+     * MLG falls arm the bucket and aim early; require a clear solid landing and water-compatible dimension.
      */
-    public final Setting<Integer> maxFallHeightBucket = new Setting<>(20);
+    public final Setting<Integer> maxFallHeightBucket = new Setting<>(256);
 
     /**
      * Is it okay to sprint through a descend followed by a diagonal?

@@ -87,11 +87,17 @@ public final class InputOverrideHandler extends Behavior implements IInputOverri
         if (event.getType() == TickEvent.Type.OUT) {
             return;
         }
+        if (baritone.getRoamProcess().terrainLocked()) {
+            setInputForceState(Input.CLICK_LEFT, false);
+            if(!ctx.player().getMainHandItem().is(net.minecraft.world.item.Items.WATER_BUCKET)&&!ctx.player().getMainHandItem().is(net.minecraft.world.item.Items.BUCKET))setInputForceState(Input.CLICK_RIGHT, false);
+        }
+        if (baritone.getStalkProcess().quietMovement()) setInputForceState(Input.SPRINT, false);
         if (isInputForcedDown(Input.CLICK_LEFT)) {
             setInputForceState(Input.CLICK_RIGHT, false);
         }
         blockBreakHelper.tick(isInputForcedDown(Input.CLICK_LEFT));
-        blockPlaceHelper.tick(isInputForcedDown(Input.CLICK_RIGHT));
+        if (!baritone.getSurvivalProcess().holdsUse() && !baritone.getConflictProcess().holdsUse() && !baritone.getStalkProcess().holdsUse())
+            blockPlaceHelper.tick(isInputForcedDown(Input.CLICK_RIGHT));
 
         if (inControl()) {
             if (ctx.player().input.getClass() != PlayerMovementInput.class) {

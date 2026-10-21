@@ -37,13 +37,20 @@ public class BlockPlaceHelper {
     }
 
     public void tick(boolean rightClickRequested) {
-        if (rightClickTimer > 0) {
+        if (baritone.api.BaritoneAPI.getProvider().getBaritoneForPlayer(ctx.player()) instanceof Baritone bot && bot.getRoamProcess().terrainLocked()&&!ctx.player().getMainHandItem().is(net.minecraft.world.item.Items.WATER_BUCKET)&&!ctx.player().getMainHandItem().is(net.minecraft.world.item.Items.BUCKET)) return;
+        if (rightClickTimer > 0 && !(ctx.player().getMainHandItem().is(net.minecraft.world.item.Items.WATER_BUCKET)&&!ctx.player().onGround()&&ctx.player().getDeltaMovement().y<-.2)) {
             rightClickTimer--;
             return;
         }
         HitResult mouseOver = ctx.objectMouseOver();
         if (!rightClickRequested || ctx.player().isHandsBusy() || mouseOver == null || mouseOver.getType() != HitResult.Type.BLOCK) {
             return;
+        }
+        if (Baritone.settings().mineAvoidSculk.value && baritone.api.BaritoneAPI.getProvider().getBaritoneForPlayer(ctx.player()) instanceof Baritone bot) {
+            var target = ((BlockHitResult) mouseOver).getBlockPos();
+            var placed = target.relative(((BlockHitResult) mouseOver).getDirection());
+            if (bot.getSculkProcess().snapshot().contains(target.getX(), target.getY(), target.getZ())
+                    || bot.getSculkProcess().snapshot().contains(placed.getX(), placed.getY(), placed.getZ())) return;
         }
         rightClickTimer = Baritone.settings().rightClickSpeed.value - BASE_PLACE_DELAY;
         for (InteractionHand hand : InteractionHand.values()) {
