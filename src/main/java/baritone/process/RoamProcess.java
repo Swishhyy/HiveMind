@@ -49,7 +49,7 @@ public final class RoamProcess extends BaritoneProcessHelper implements baritone
     }
     @Override public boolean isActive(){
         if(ctx.player()==null||ctx.world()==null||ctx.minecraft().getConnection()==null)return false;
-        load();return RoamPolicy.eligible(Baritone.settings().botAutoRoam.value,held,ctx.player().isAlive(),BotWork.foreground(baritone),baritone.getJobManager().hasQueuedJobs(),ctx.minecraft().screen!=null);
+        load();return RoamPolicy.eligible(Baritone.settings().botAutoRoam.value,held,ctx.player().isAlive(),BotWork.foreground(baritone),baritone.getJobManager().hasQueuedJobs(),ctx.minecraft().gui.screen()!=null);
     }
     public boolean parked(){load();return held;}
     public BlockPos destination(){return destination;}

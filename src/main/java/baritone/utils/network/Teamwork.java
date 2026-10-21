@@ -24,6 +24,9 @@ import java.util.*;
 
 /** Host arbitrates ore-vein leases; deterministic roles and spacing use the same authenticated plan. */
 public final class Teamwork {
+    private final long notBefore;
+    public Teamwork(){this(0);}
+    public Teamwork(long notBefore){this.notBefore=notBefore;}
     private final Map<UUID,Intent> intents=new HashMap<>();
     private final Map<UUID,Lease> leases=new HashMap<>();
     public void accept(Intent intent,long now){
@@ -43,7 +46,7 @@ public final class Teamwork {
             if(intent.kind()!=Kind.MINE||intent.work()==null)continue;
             Lease existing=leases.get(intent.reporter());
             if(existing!=null){leases.put(intent.reporter(),new Lease(existing.point(),now+4000));continue;}
-            if(leases.size()<64&&leases.values().stream().noneMatch(lease->near(lease.point(),intent.work(),6)))leases.put(intent.reporter(),new Lease(intent.work(),now+4000));
+            if(now>=notBefore&&leases.size()<64&&leases.values().stream().noneMatch(lease->near(lease.point(),intent.work(),6)))leases.put(intent.reporter(),new Lease(intent.work(),now+4000));
         }
         return new Plan(host.id(),host.name(),members,ordered,leases,now);
     }

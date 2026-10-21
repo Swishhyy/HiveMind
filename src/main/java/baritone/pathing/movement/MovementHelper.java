@@ -506,7 +506,7 @@ public interface MovementHelper extends ActionCosts, Helper {
     }
 
     static boolean canUseFrostWalker(IPlayerContext ctx, BlockPos pos) {
-        if (BaritoneAPI.getProvider().getBaritoneForPlayer(ctx.player()) instanceof Baritone bot && bot.getStalkProcess().terrainLocked()) return false;
+        if (BaritoneAPI.getProvider().getBaritoneForPlayer(ctx.player()) instanceof Baritone bot && (bot.getRoamProcess().terrainLocked()||bot.getStalkProcess().terrainPenalty()>0)) return false;
         boolean hasFrostWalker = false;
         OUTER: for (EquipmentSlot slot : EquipmentSlot.values()) {
             ItemEnchantments itemEnchantments = ctx

@@ -39,7 +39,9 @@ public final class NetworkSettings {
     }
     private static final Map<String, Spec> SPECS = new LinkedHashMap<>();
     static {
-        bool("Movement", "allowBreak allowPlace allowSprint allowParkour");
+        bool("Movement", "allowBreak allowPlace allowSprint allowParkour allowWaterBucketFall");
+        number("Movement","integer",3,1024,"maxFallHeightBucket");
+        number("Stalking","integer",0,10000,"stalkTerrainPenalty");
         bool("Mining", "mineAutoDeposit mineDiscardWaste mineTravelBetweenDimensions preferAvoidConstruction protectContainers mineAvoidSculk");
         number("Mining","integer",0,16,"mineWasteKeepStacks");
         number("Mining","integer",1,64,"sculkAvoidRadius");

@@ -18,6 +18,7 @@
 package baritone.behavior;
 
 import baritone.Baritone;
+import baritone.utils.bot.BotWork;
 import baritone.api.event.events.TickEvent;
 import baritone.api.utils.Helper;
 import baritone.utils.ToolSet;
@@ -30,6 +31,7 @@ import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.inventory.ContainerInput;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.Item;
+import net.minecraft.world.item.Items;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.context.BlockPlaceContext;
 import net.minecraft.world.item.context.UseOnContext;
@@ -79,6 +81,10 @@ public final class InventoryBehavior extends Behavior implements Helper {
         int pick = bestToolAgainst(Blocks.STONE);
         if (pick >= 9) {
             requestSwapWithHotBar(pick, 0);
+        }
+        if(Baritone.settings().allowWaterBucketFall.value&&ctx.player().onGround()&&BotWork.active(baritone)){
+            int bucket=ctx.player().getInventory().findSlotMatchingItem(new ItemStack(Items.WATER_BUCKET));
+            if(bucket>=9)attemptToPutOnHotbar(bucket,index->!ctx.player().getInventory().getItem(index).isEmpty());
         }
         if (lastTickRequestedMove != null) {
             logDebug("Remembering to move " + lastTickRequestedMove[0] + " " + lastTickRequestedMove[1] + " from a previous tick");

@@ -119,6 +119,7 @@ public final class NetworkCommand extends Command {
                 "Bots must use the same Minecraft server address or explicit scope. Keys, endpoints, and page settings are saved per server.",
                 "Only real visual sightings are shared. Peers' recent marks help stalk searches but never count as firsthand base evidence.",
                 "The page saves visited chunks and a bounded 30-day sighting history, including reporting bots and frequent areas.",
-                "The local page can issue quick commands, change trust, and apply settings to one bot or all bots.");
+                "Connected bots recognize teammates and coordinate mining/hunts. Idle scouts roam automatically; roam on/off/status controls it.",
+                "The page renders sampled terrain and base markers, issues quick commands, changes trust, and applies settings to one bot or all bots.");
     }
 }

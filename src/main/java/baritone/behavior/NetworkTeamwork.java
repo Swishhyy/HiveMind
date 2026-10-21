@@ -41,7 +41,7 @@ public final class NetworkTeamwork {
     NetworkTeamwork(NetworkBehavior parent,Baritone bot){this.parent=parent;this.bot=bot;}
     public boolean enabled(){return parent.transport()!=null;}
     public boolean ready(){return !enabled()||plan!=null&&plan.valid(System.currentTimeMillis())&&(parent.transport().isHost()||parent.transport().connected());}
-    public void reset(boolean forget){host=new Teamwork();plan=null;mineClaim=null;nextSend=0;if(forget)allies.clear();}
+    public void reset(boolean forget){host=new Teamwork(System.currentTimeMillis()+4000+NetworkProtocol.CLOCK_SKEW_MS);plan=null;mineClaim=null;nextSend=0;if(forget)allies.clear();}
     public boolean ally(UUID id){
         if(id==null||!enabled())return false;
         if(id.equals(parent.localIdentity().id()))return true;
@@ -97,6 +97,10 @@ public final class NetworkTeamwork {
         return Math.floorMod(ctx.player().getUUID().hashCode(),360)*Math.PI/180;
     }
     public int groupSize(Kind kind,UUID target){return !ready()||plan==null?1:Math.max(1,Teamwork.group(plan,kind,target,MiningRouteAccess.dimension(bot.getPlayerContext())).size());}
+    public boolean yieldWatch(BlockPos point,UUID target){
+        if(!ready()||plan==null)return false;var ctx=bot.getPlayerContext();UUID self=ctx.player().getUUID();
+        return plan.intents().stream().anyMatch(p->p.reporter().toString().compareTo(self.toString())<0&&Objects.equals(p.target(),target)&&p.work()!=null&&Teamwork.near(p.work(),MiningRouteAccess.endpoint(ctx,point),6));
+    }
     public double watchPenalty(BlockPos point,UUID target){
         if(!ready()||plan==null)return 0;
         var ctx=bot.getPlayerContext();double penalty=0;
@@ -108,6 +112,14 @@ public final class NetworkTeamwork {
         if(!enabled()||!ready()||plan==null)return false;
         UUID lead=Teamwork.blastLeader(plan,target,MiningRouteAccess.dimension(bot.getPlayerContext()));
         return lead!=null&&!lead.equals(bot.getPlayerContext().player().getUUID());
+    }
+    public int supportDistance(UUID target){
+        if(!enabled()||!ready()||plan==null)return 0;
+        if(blastSupport(target))return 16;
+        if(Teamwork.blastLeader(plan,target,MiningRouteAccess.dimension(bot.getPlayerContext()))!=null)return 0;
+        var hunters=Teamwork.group(plan,Kind.HUNT,target,MiningRouteAccess.dimension(bot.getPlayerContext()));
+        UUID lead=hunters.stream().filter(Intent::engaged).map(Intent::reporter).findFirst().orElse(null);
+        return lead!=null&&!lead.equals(bot.getPlayerContext().player().getUUID())?5:0;
     }
     public boolean alliedExplosive(Entity entity){
         if(!(entity instanceof EndCrystal)||plan==null||!ready())return false;
@@ -125,7 +137,7 @@ public final class NetworkTeamwork {
     public String status(){
         if(!enabled())return "Solo";if(!ready())return "Team: waiting for host";
         UUID target=bot.getStalkProcess().target();
-        if(target!=null&&bot.getStalkProcess().hunting())return blastSupport(target)?"Team: blast support":"Team: attack";
+        if(target!=null&&bot.getStalkProcess().hunting())return supportDistance(target)>0?"Team: "+(blastSupport(target)?"blast":"melee")+" support":"Team: attack";
         return "Team: "+plan.members().size()+" allies"+(mineClaim!=null?"; mining claim "+(plan.leases().containsKey(bot.getPlayerContext().player().getUUID())&&plan.leases().get(bot.getPlayerContext().player().getUUID()).until()>System.currentTimeMillis()?"held":"pending"):"");
     }
 }

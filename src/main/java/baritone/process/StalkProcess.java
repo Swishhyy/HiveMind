@@ -109,7 +109,7 @@ public final class StalkProcess extends BaritoneProcessHelper implements IBehavi
     public UUID target(){return targetId;}
     public BlockPos teamPoint(){BlockPos blast=explosives.teamPoint();return blast!=null?blast:vantage!=null?vantage:ctx.player()==null?null:ctx.playerFeet().immutable();}
     public boolean teamExplosives(){return hunting()&&!meleeFallback&&combatStyle!=CombatStyle.MELEE&&phase!=Phase.SCATTER&&equipmentReady(combatStyle)&&ctx.player().getHealth()>Baritone.settings().killRetreatHealth.value;}
-    public boolean terrainLocked() { return isActive()&&Baritone.settings().stalkMinimalEvidence.value; }
+    public double terrainPenalty(){return TraversalPolicy.evidencePenalty(isActive(),hunt,Baritone.settings().stalkMinimalEvidence.value,Baritone.settings().stalkTerrainPenalty.value);}
     /** Quiet (no sprint, crouch where allowed) only while another player could hear or possibly see the bot. */
     public boolean quietMovement() { return isActive()&&perceptible&&quietPhase()&&!baritone.getConflictProcess().isActive(); }
     private boolean quietPhase() { return phase==Phase.SEARCH||phase==Phase.WATCH||phase==Phase.DRINK||phase==Phase.APPROACH&&!reachedRear; }
@@ -188,7 +188,7 @@ public final class StalkProcess extends BaritoneProcessHelper implements IBehavi
         }
         if(baritone.getNetwork().isTeammate(selected))throw new IllegalStateException("Connected bots are teammates and cannot be stalked or hunted");
         if(selected.equals(ctx.player().getUUID()))throw new IllegalStateException("The bot cannot target itself");
-        if(Baritone.settings().stalkMinimalEvidence.value)for(EquipmentSlot slot:EquipmentSlot.values())
+        if(!kill&&Baritone.settings().stalkMinimalEvidence.value)for(EquipmentSlot slot:EquipmentSlot.values())
             if(ctx.player().getItemBySlot(slot).getEnchantments().keySet().stream().anyMatch(holder->holder.is(Enchantments.FROST_WALKER)))
                 throw new IllegalStateException("Remove Frost Walker equipment for minimal-evidence tracking");
         if(kill) {
@@ -303,7 +303,7 @@ public final class StalkProcess extends BaritoneProcessHelper implements IBehavi
             if(phase==Phase.DRINK)return drink(target,safe);
             if(hunt&&target!=null&&committedCombat()){
                 if(!baritone.getNetwork().team().ready())return watch(target,safe);
-                if(baritone.getNetwork().team().blastSupport(targetId))return support(target,safe);
+                int spacing=baritone.getNetwork().team().supportDistance(targetId);if(spacing>0)return support(target,safe,spacing);
             }
             if(target==null) {
                 if(phase==Phase.ATTACK)return stop("Target left client view during combat; a kill was not confirmed");
@@ -337,6 +337,7 @@ public final class StalkProcess extends BaritoneProcessHelper implements IBehavi
         boolean sight=ctx.player().hasLineOfSight(target);
         quietTicks=sight&&!viewed?quietTicks+1:0;
         if(hunt) { PathingCommand ambush=ambush(target,sight,safe);if(ambush!=null)return ambush; }
+        if(baritone.getNetwork().team().yieldWatch(ctx.playerFeet(),targetId)){watchStation.reset();failedVantages.add(ctx.playerFeet().immutable());}
         // Once settled, small movements, head turns, and brief occlusions do not start another path.
         if(watchStation.hold(sight,watchRange(target,true),Baritone.settings().stalkLostSightTicks.value)) {
             retryCount=0;retryAt=0;return watch(target,safe);
@@ -378,12 +379,12 @@ public final class StalkProcess extends BaritoneProcessHelper implements IBehavi
         return retry(Phase.WATCH,"No concealed sight line is reachable yet; staying put and retrying",safe);
     }
 
-    private PathingCommand support(Player target,boolean safe){
+    private PathingCommand support(Player target,boolean safe,int spacing){
         lastProgress=approachStarted=System.currentTimeMillis();
         if(safe){baritone.getInputOverrideHandler().clearAllKeys();ctx.playerController().resetBlockRemoving();}
         double range=ctx.player().distanceToSqr(target);
-        if(range<14*14)return path(new GoalRetreat(List.of(new GoalRetreat.Threat(target.blockPosition(),16))));
-        if(range>24*24)return path(new GoalNear(target.blockPosition(),18));
+        if(range<spacing*spacing)return path(new GoalRetreat(List.of(new GoalRetreat.Threat(target.blockPosition(),spacing+2))));
+        if(range>(spacing+10)*(spacing+10))return path(new GoalNear(target.blockPosition(),spacing+3));
         return watch(target,safe);
     }
     private boolean watchRange(Player target,boolean settled) {

@@ -40,6 +40,7 @@ public final class BotNetwork implements AutoCloseable {
     private final BlockingQueue<Packet> controls = new ArrayBlockingQueue<>(128);
     private final Map<UUID,State> states = new ConcurrentHashMap<>();
     private volatile Defaults defaults;
+    private volatile long connectionEpoch;
     private final NetworkAtlas cache = new NetworkAtlas();
     private final TerrainStore terrain = new TerrainStore();
     private volatile ServerSocket listener;
@@ -70,6 +71,7 @@ public final class BotNetwork implements AutoCloseable {
     }
     public int boundPort() { return boundPort; }
     public List<Identity> peers() { return peers.values().stream().map(peer -> peer.channel.remote()).sorted(Comparator.comparing(Identity::name)).toList(); }
+    public long connectionEpoch(){return connectionEpoch;}
     public boolean connected() { return !peers.isEmpty(); }
     public String status() {
         if (closed) return "Network off";
@@ -111,7 +113,7 @@ public final class BotNetwork implements AutoCloseable {
             if(packet instanceof Defaults current)defaults=current;
             if(!controls.offer(packet))throw new IOException("Control inbox is full; action was not queued");
             // Requests reach the host's client thread for validation before any bot is told to execute them.
-            if(host&&!(packet instanceof Request))for(Peer peer:peers.values())if(peer!=sender)peer.offer(packet);
+            if(host&&!(packet instanceof Request)&&!(packet instanceof TeamPackets.Intent))for(Peer peer:peers.values())if(peer!=sender)peer.offer(packet);
             return;
         }
         if (!report.valid(System.currentTimeMillis())) return;
@@ -161,7 +163,7 @@ public final class BotNetwork implements AutoCloseable {
     private synchronized void register(Peer peer) throws IOException {
         UUID id = peer.channel.remote().id();
         if (closed || peers.size() >= MAX_PEERS || peers.containsKey(id)) throw new IOException("Network full or duplicate bot UUID");
-        peer.socket.setSoTimeout(20000); peers.put(id, peer); peer.registered = true;
+        peer.socket.setSoTimeout(20000); peers.put(id, peer); peer.registered = true;connectionEpoch++;
         try { io.execute(peer::write); }
         catch (RejectedExecutionException e) { peer.close(); throw new IOException("Network shutting down", e); }
         error = "";

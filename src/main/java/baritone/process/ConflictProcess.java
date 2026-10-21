@@ -55,7 +55,7 @@ public final class ConflictProcess extends BaritoneProcessHelper implements IBeh
     private boolean active;
     private int quietTicks;
     private int failedPaths;
-    private UUID attackerId;
+    private UUID attackerId,protectedVictim;
     private long defendUntil;
     private long stalkRetreatRetryAt;
     private boolean protectingEscort;
@@ -79,7 +79,7 @@ public final class ConflictProcess extends BaritoneProcessHelper implements IBeh
         if (baritone.getStalkProcess().handlesCombatAgainst(attacker)) return;
         if (observedWorld != ctx.world()) { onLostControl(); observedWorld = ctx.world(); }
         quietTicks = 0;
-        protectingEscort = false;
+        protectingEscort = false;protectedVictim=null;
         if (!attacker.getUUID().equals(attackerId)) { attackerId = attacker.getUUID(); defendUntil = System.currentTimeMillis() + 10000; }
         remember(attacker, true);
         begin();
@@ -87,15 +87,17 @@ public final class ConflictProcess extends BaritoneProcessHelper implements IBeh
 
     public void onProtectedDamage(int victimId, DamageSource source) {
         UUID escorted = baritone.getCompanionProcess().escortedPlayer();
-        if (escorted == null || !Baritone.settings().escortDefendOwner.value || !Baritone.settings().fleeConflicts.value
-                || ctx.world() == null || ctx.player() == null) return;
+        if (!Baritone.settings().fleeConflicts.value||ctx.world()==null||ctx.player()==null) return;
         Entity victim = ctx.world().getEntity(victimId);
+        boolean teammate=victim!=null&&baritone.getNetwork().isTeammate(victim.getUUID());
+        if(!teammate&&(escorted==null||!Baritone.settings().escortDefendOwner.value))return;
         Entity attacker = source.getEntity() == null ? source.getDirectEntity() : source.getEntity();
-        if (victim == null || !escorted.equals(victim.getUUID()) || victim.distanceToSqr(ctx.player()) > 256
-                || attacker == null || attacker == ctx.player() || attacker.getUUID().equals(escorted)) return;
+        if (victim == null || !teammate&&!escorted.equals(victim.getUUID()) || victim.distanceToSqr(ctx.player()) > 256
+                || attacker == null || attacker == ctx.player() || baritone.getNetwork().isTeammate(attacker.getUUID()) || baritone.getNetwork().team().alliedExplosive(attacker) || attacker.getUUID().equals(escorted)) return;
+        if(baritone.getStalkProcess().handlesCombatAgainst(attacker))return;
         if (observedWorld != ctx.world()) { onLostControl(); observedWorld = ctx.world(); }
         if (!attacker.getUUID().equals(attackerId)) { attackerId = attacker.getUUID(); defendUntil = System.currentTimeMillis() + 10000; }
-        protectingEscort = true; quietTicks = 0; remember(attacker, true); begin();
+        protectingEscort = true;protectedVictim=victim.getUUID(); quietTicks = 0; remember(attacker, true); begin();
     }
 
     private void remember(Entity entity, boolean attacked) {
@@ -242,7 +244,7 @@ public final class ConflictProcess extends BaritoneProcessHelper implements IBeh
     private PathingCommand escortDefenseApproach(boolean failed, boolean safe) {
         if (!protectingEscort || failed || !safe || !"defend".equalsIgnoreCase(Baritone.settings().botConflictMode.value)
                 || System.currentTimeMillis() > defendUntil || baritone.getSculkProcess().isActive()) return null;
-        UUID escorted = baritone.getCompanionProcess().escortedPlayer();
+        UUID escorted = protectedVictim;
         Entity owner = ctx.entitiesStream().filter(entity -> entity.getUUID().equals(escorted)).findFirst().orElse(null);
         Entity target = ctx.entitiesStream().filter(entity -> entity.getUUID().equals(attackerId)).findFirst().orElse(null);
         if (owner == null || !(target instanceof LivingEntity) || !target.isAlive() || target.distanceToSqr(owner) > 64
@@ -294,7 +296,7 @@ public final class ConflictProcess extends BaritoneProcessHelper implements IBeh
         var id = BuiltInRegistries.ENTITY_TYPE.getKey(entity.getType());
         return id != null && id.getNamespace().equals("minecraft") && id.getPath().equals(path);
     }
-    @Override public void onLostControl() { releaseShield(); active = protectingEscort = false; quietTicks = failedPaths = attackDelay = 0; threats.clear(); attackerId = null; defendUntil = stalkRetreatRetryAt = 0; }
+    @Override public void onLostControl() { releaseShield(); active = protectingEscort = false;protectedVictim=null; quietTicks = failedPaths = attackDelay = 0; threats.clear(); attackerId = protectedVictim = null; defendUntil = stalkRetreatRetryAt = 0; }
     @Override public void onPlayerDeath() { onLostControl(); }
     @Override public String displayName0() { return "Retreating from conflict"; }
 }

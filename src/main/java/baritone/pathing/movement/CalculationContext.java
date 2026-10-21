@@ -18,6 +18,7 @@
 package baritone.pathing.movement;
 
 import baritone.Baritone;
+import baritone.utils.social.TraversalPolicy;
 import baritone.utils.bot.SculkPolicy;
 import baritone.utils.social.StealthPolicy;
 import baritone.utils.bot.MiningZone;
@@ -135,13 +136,14 @@ public class CalculationContext {
         this.additionalConstructionBlocks = new ArrayList<>(Baritone.settings().additionalConstructionBlocks.value);
         this.bsi = new BlockStateInterface(baritone.getPlayerContext(), forUseOnAnotherThread);
         this.toolSet = new ToolSet(player);
-        this.stealth = ((Baritone) baritone).getStalkProcess().terrainLocked() || ((Baritone) baritone).getRoamProcess().terrainLocked();
+        this.stealth = ((Baritone) baritone).getRoamProcess().terrainLocked();
+        double trackingPenalty=((Baritone)baritone).getStalkProcess().terrainPenalty();
         this.stalkTarget = ((Baritone) baritone).getStalkProcess().avoidanceCenter();
         this.stalkClearance = Math.min(24,Math.max(8,Baritone.settings().stalkDistance.value-8));
         this.hasThrowaway = !stealth && Baritone.settings().allowPlace.value && ((Baritone) baritone).getInventoryBehavior().hasGenericThrowaway();
-        this.hasWaterBucket = !stealth && Baritone.settings().allowWaterBucketFall.value && Inventory.isHotbarSlot(player.getInventory().findSlotMatchingItem(STACK_BUCKET_WATER)) && world.dimension() != Level.NETHER;
+        this.hasWaterBucket = Baritone.settings().allowWaterBucketFall.value && Inventory.isHotbarSlot(player.getInventory().findSlotMatchingItem(STACK_BUCKET_WATER)) && world.dimension() != Level.NETHER;
         this.canSprint = !((Baritone) baritone).getStalkProcess().quietMovement() && !((Baritone) baritone).getSculkProcess().quiet() && Baritone.settings().allowSprint.value && player.getFoodData().getFoodLevel() > 6;
-        this.placeBlockCost = Baritone.settings().blockPlacementPenalty.value;
+        this.placeBlockCost = Baritone.settings().blockPlacementPenalty.value+trackingPenalty;
         this.allowBreak = !stealth && Baritone.settings().allowBreak.value;
         this.allowBreakAnyway = stealth ? List.of() : new ArrayList<>(Baritone.settings().allowBreakAnyway.value);
         this.allowParkour = !stealth && Baritone.settings().allowParkour.value;
@@ -163,13 +165,13 @@ public class CalculationContext {
                 }
             }
         }
-        this.frostWalker = stealth ? 0 : frostWalkerLevel;
+        this.frostWalker = stealth||trackingPenalty>0 ? 0 : frostWalkerLevel;
         this.allowDiagonalDescend = Baritone.settings().allowDiagonalDescend.value;
         this.allowDiagonalAscend = Baritone.settings().allowDiagonalAscend.value;
         this.allowDownward = Baritone.settings().allowDownward.value;
         this.minFallHeight = 3; // Minimum fall height used by MovementFall
         this.maxFallHeightNoWater = stealth ? Math.min(1, Baritone.settings().maxFallHeightNoWater.value) : Baritone.settings().maxFallHeightNoWater.value;
-        this.maxFallHeightBucket = Baritone.settings().maxFallHeightBucket.value;
+        this.maxFallHeightBucket = TraversalPolicy.bucketHeight(Baritone.settings().maxFallHeightBucket.value);
         float waterSpeedMultiplier = 1.0f;
         OUTER: for (EquipmentSlot slot : EquipmentSlot.values()) {
             ItemEnchantments itemEnchantments = baritone.getPlayerContext()
@@ -188,7 +190,7 @@ public class CalculationContext {
             }
         }
         this.waterWalkSpeed = ActionCosts.WALK_ONE_IN_WATER_COST * (1 - waterSpeedMultiplier) + ActionCosts.WALK_ONE_BLOCK_COST * waterSpeedMultiplier;
-        this.breakBlockAdditionalCost = Baritone.settings().blockBreakAdditionalPenalty.value;
+        this.breakBlockAdditionalCost = Baritone.settings().blockBreakAdditionalPenalty.value+trackingPenalty;
         this.backtrackCostFavoringCoefficient = Baritone.settings().backtrackCostFavoringCoefficient.value;
         this.jumpPenalty = Baritone.settings().jumpPenalty.value;
         this.walkOnWaterOnePenalty = Baritone.settings().walkOnWaterOnePenalty.value;

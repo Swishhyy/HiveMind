@@ -58,7 +58,7 @@ public final class BlockBreakHelper {
     }
 
     public void tick(boolean isLeftClick) {
-        if (BaritoneAPI.getProvider().getBaritoneForPlayer(ctx.player()) instanceof Baritone bot && bot.getStalkProcess().terrainLocked()) {
+        if (BaritoneAPI.getProvider().getBaritoneForPlayer(ctx.player()) instanceof Baritone bot && bot.getRoamProcess().terrainLocked()) {
             stopBreakingBlock(); return;
         }
         if (breakDelayTimer > 0) {

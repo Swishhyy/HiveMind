@@ -18,6 +18,8 @@
 package baritone.pathing.movement.movements;
 
 import baritone.Baritone;
+import baritone.utils.social.TraversalPolicy;
+import net.minecraft.core.registries.BuiltInRegistries;
 import baritone.api.IBaritone;
 import baritone.api.pathing.movement.MovementStatus;
 import baritone.api.utils.BetterBlockPos;
@@ -211,7 +213,11 @@ public class MovementDescend extends Movement {
                 res.cost = tentativeCost;
                 return false;
             }
-            if (reachedMinimum && context.hasWaterBucket && unprotectedFallHeight <= context.maxFallHeightBucket + 1) {
+            if (reachedMinimum && context.hasWaterBucket && unprotectedFallHeight <= context.maxFallHeightBucket + 1
+                    && TraversalPolicy.bucketLanding(context.world.dimension()!=net.minecraft.world.level.Level.NETHER,
+                    context.get(destX,newY+1,destZ).isAir(),ontoBlock.isCollisionShapeFullBlock(context.world,new BlockPos(destX,newY,destZ)),
+                    BuiltInRegistries.BLOCK.getKey(ontoBlock.getBlock()).getPath())
+                    && !context.isPossiblyProtected(destX,newY+1,destZ)) {
                 res.x = destX;
                 res.y = newY + 1;// this is the block we're falling onto, so dest is +1
                 res.z = destZ;

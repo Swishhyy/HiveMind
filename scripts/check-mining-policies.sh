@@ -29,6 +29,7 @@ fi
     src/main/java/baritone/utils/social/WatchPolicy.java \
     src/main/java/baritone/utils/social/CombatStyle.java \
     src/main/java/baritone/utils/social/BlastPolicy.java \
+    src/main/java/baritone/utils/social/TraversalPolicy.java \
     src/main/java/baritone/utils/social/CombatTerrainPolicy.java \
     src/main/java/baritone/utils/social/PlayerMemory.java \
     src/main/java/baritone/utils/network/NetworkProtocol.java \

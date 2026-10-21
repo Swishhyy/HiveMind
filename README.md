@@ -5,7 +5,7 @@ sculk-aware routes and quiet escapes, food/health/tool checks and automatic resu
 construction protection, optional waste cleanup, and Overworld–Nether travel for ancient debris.
 Conflict behavior defaults to retreat; optional defensive retaliation and distant crouching player observation are available.
 See [MINING.md](MINING.md) for setup, commands, settings, limitations, and gameplay checks.
-The optional [client network and localhost atlas](NETWORK.md) shares sightings/exploration between bots and provides browser commands, trust management, and global or individual settings. Keys are generated on first client launch.
+The optional [client network and localhost atlas](NETWORK.md) shares sightings/exploration between bots and provides browser commands, trust management, and global or individual settings. Keys are generated on first client launch. Connected bots recognize allies, coordinate hunt roles and mining veins, and scout while idle. The map renders sampled terrain in top-down/isometric views with base markers.
 
 <p align="center">
   <a href="https://github.com/cabaletta/baritone/releases/"><img src="https://img.shields.io/github/downloads/cabaletta/baritone/total.svg" alt="GitHub All Releases"/></a>

@@ -37,8 +37,8 @@ public class BlockPlaceHelper {
     }
 
     public void tick(boolean rightClickRequested) {
-        if (baritone.api.BaritoneAPI.getProvider().getBaritoneForPlayer(ctx.player()) instanceof Baritone bot && bot.getStalkProcess().terrainLocked()) return;
-        if (rightClickTimer > 0) {
+        if (baritone.api.BaritoneAPI.getProvider().getBaritoneForPlayer(ctx.player()) instanceof Baritone bot && bot.getRoamProcess().terrainLocked()&&!ctx.player().getMainHandItem().is(net.minecraft.world.item.Items.WATER_BUCKET)&&!ctx.player().getMainHandItem().is(net.minecraft.world.item.Items.BUCKET)) return;
+        if (rightClickTimer > 0 && !(ctx.player().getMainHandItem().is(net.minecraft.world.item.Items.WATER_BUCKET)&&!ctx.player().onGround()&&ctx.player().getDeltaMovement().y<-.2)) {
             rightClickTimer--;
             return;
         }

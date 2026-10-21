@@ -380,6 +380,7 @@ public final class Settings {
     public final Setting<Long> stalkSearchTimeoutMS = new Setting<>(120000L);
 
     /** Stealth tracking does not alter terrain or operate closed doors. These restrictions are scoped to the task. */
+    public final Setting<Integer> stalkTerrainPenalty = new Setting<>(80);
     public final Setting<Boolean> stalkMinimalEvidence = new Setting<>(true);
     public final Setting<Boolean> stalkPreferOpenAir = new Setting<>(true);
     /** Distance tolerance around an established viewing spot; bounded to 4-32 blocks. */
@@ -743,9 +744,9 @@ public final class Settings {
 
     /**
      * How far are you allowed to fall onto solid ground (with a water bucket)?
-     * It's not that reliable, so I've set it below what would kill an unarmored player (23)
+     * MLG falls arm the bucket and aim early; require a clear solid landing and water-compatible dimension.
      */
-    public final Setting<Integer> maxFallHeightBucket = new Setting<>(20);
+    public final Setting<Integer> maxFallHeightBucket = new Setting<>(256);
 
     /**
      * Is it okay to sprint through a descend followed by a diagonal?

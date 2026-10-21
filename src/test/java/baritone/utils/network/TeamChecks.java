@@ -42,6 +42,7 @@ public final class TeamChecks {
         long now=System.currentTimeMillis();Teamwork team=new Teamwork();List<Identity> online=List.of(A,B);
         team.accept(work(A,Kind.MINE,point(12),false,now),now);team.accept(work(B,Kind.MINE,point(13),false,now),now);
         Plan plan=team.plan(HOST,online,now);check(plan.leases().size()==1,"A contested vein has exactly one owner");
+        Teamwork restarting=new Teamwork(now+14000);restarting.accept(work(A,Kind.MINE,point(12),false,now),now);check(restarting.plan(HOST,List.of(A),now).leases().isEmpty(),"A fresh host waits out old grants before assigning contested resources");
         UUID holder=plan.leases().keySet().iterator().next();Identity owner=holder.equals(A.id())?A:B,other=holder.equals(A.id())?B:A;
         check(NetworkProtocol.decode(NetworkProtocol.encode(plan)).equals(plan),"Plan codec preserves roster, intents and lease expiry");
         check(NetworkProtocol.decode(NetworkProtocol.encode(work(A,Kind.MINE,point(12),false,now))).equals(work(A,Kind.MINE,point(12),false,now)),"Intent codec preserves provenance");
@@ -59,6 +60,10 @@ public final class TeamChecks {
         check(RoamPolicy.eligible(true,false,true,false,false,false),"Idle live bots scout by default");
         check(!RoamPolicy.eligible(true,true,true,false,false,false)&&!RoamPolicy.eligible(true,false,true,true,false,false)&&!RoamPolicy.eligible(true,false,true,false,true,false),"Stop, foreground work and pending jobs override roaming");
         check(RoamPolicy.frontierScore(false,64,0,false)<RoamPolicy.frontierScore(true,64,0,false)&&RoamPolicy.frontierScore(false,64,0,false)<RoamPolicy.frontierScore(false,64,0,true),"Scouts prefer unseen terrain away from another scout's destination");
+        check(baritone.utils.social.TraversalPolicy.evidencePenalty(true,false,true,80)==80&&baritone.utils.social.TraversalPolicy.evidencePenalty(true,true,true,80)==0,"Quiet stalks penalize terrain edits; hunts do not inherit that penalty");
+        check(baritone.utils.social.TraversalPolicy.armHeight(4.5,-3.9)>12,"Fast falls aim before the one-tick bucket placement window");
+        check(baritone.utils.social.TraversalPolicy.bucketLanding(true,true,true,"stone")&&!baritone.utils.social.TraversalPolicy.bucketLanding(false,true,true,"stone")&&!baritone.utils.social.TraversalPolicy.bucketLanding(true,true,true,"chest")&&!baritone.utils.social.TraversalPolicy.bucketLanding(true,false,true,"stone"),"Bucket falls reject water-disabled dimensions, containers and obstructed landings");
+        check(baritone.utils.social.TraversalPolicy.bucketHeight(50000)==1024,"Bucket height is bounded");
     }
     private static Tile tile(long now){return new Tile(A.id(),A.name(),"minecraft:overworld",-2,3,"639844".repeat(256),"0040".repeat(256),now);}
     private static void terrain()throws Exception{

@@ -2,7 +2,7 @@
 
 One Minecraft client hosts a small relay. Up to 16 other clients connect to it, share visual player reports and visited chunks, and keep a local history. The local webpage also controls commands, trust and settings for one bot or the group. The Minecraft server does not need a plugin. This is part of the Fabric 26.3 mod.
 
-Each client generates its own persistent network key on its first launch, before joining a world. Existing configured keys are preserved. You no longer need to generate a key before hosting. **Update every connected client to this build:** control messages use protocol version 2.
+Each client generates its own persistent network key on its first launch, before joining a world. Existing configured keys are preserved. You no longer need to generate a key before hosting. **Update every connected client to this build:** control messages use protocol version 3.
 
 ## Connect your bots
 
@@ -40,18 +40,32 @@ The page includes:
 - Frequent sighting areas grouped into 64 × 64 block regions, with return visits, observed time and reporting bots. Simultaneous reports and replay do not count as extra visits.
 - Player/source search, sighting-age filters, layer toggles, clickable reports and markers, fit/zoom controls, and pausable automatic updates.
 
-Coverage records where bots walked. It is not a rendered terrain map, a scan of every loaded chunk, or knowledge of unexplored terrain. A player marker is a dated observation, not a guarantee the player is still there. Frequent areas are observations, not proof of base ownership.
+The visited-chunk layer records where bots walked. The terrain layer separately renders block colors and surface heights from already-loaded chunks, with top-down and isometric views, height shading, pan/zoom and markers. It never loads/generates terrain to fill the map. Old coverage has no terrain pixels until a client samples those chunks again. A player marker is a dated observation, not a guarantee the player is still there. Frequent areas are observations, not proof of base ownership.
 
 The webpage has four tabs:
 
 - **Atlas** retains the exploration map, player reports and frequent sighting areas.
 - **Commands** selects one bot or all connected bots, shows live bot health/food/task status, and offers Stop, Pause, Resume, Deposit and Status buttons. Task forms support mining, stalking, named hunts and escorts. A command line supports the normal trusted bot-command set. Action responses show each bot's acceptance or error; an accepted task is not a claim that the task has finished.
 - **Trust** adds or revokes whisper controllers by online name or exact UUID. It shows the actual trusted players on the selected bots. A global choice also applies to future bots; individual choices can differ.
-- **Settings** edits 79 typed movement/mining/survival/stalking/combat/companion/sharing settings. Choose All bots for a saved group default, or select one bot for an individual override. Mixed values are shown clearly. Applying a setting/player to All bots replaces individual overrides for that same value. Unsaved field edits survive automatic refresh.
+- **Settings** edits 83 typed movement/mining/survival/stalking/combat/companion/sharing settings. Choose All bots for a saved group default, or select one bot for an individual override. Mixed values are shown clearly. Applying a setting/player to All bots replaces individual overrides for that same value. Unsaved field edits survive automatic refresh.
 
 Group defaults and individual overrides live on the host and sync to newly connected bots. Settings/trust choices can be saved for an offline bot; quick commands are only sent to online bots and are never saved for later replay. Per-bot responses distinguish queued requests, applied changes and failures. Managed web settings are persisted per server and restored when that client returns; leaving the server restores its ordinary runtime settings. In-game commands and Mods > Baritone > Configure remain available.
 
 The page binds only to `127.0.0.1`, requires its separate random access token for reads and writes, and blocks unrelated browser origins/hostnames. Only authenticated form requests enter a bounded client-thread queue; HTTP/socket workers never modify Minecraft state. Clients sharing the host's network key belong to the same control group; keep that key with your bot clients. The Trust tab manages human whisper controllers separately from network membership. The page contains no external scripts, fonts, trackers or hosted service. `#network web off` stops it. With the peer network off, the webpage can control its own local bot.
+
+## Teamwork and idle scouting
+
+Connected clients automatically recognize authenticated group members as teammates, separately from human whisper trust. They do not randomly select teammates for stalking, accept teammate hunt targets, retaliate against teammate hits, or count teammates as extra opponents/observers. Nearby damage to an ally can trigger the configured flee/defend response. Group membership never grants human whisper permissions.
+
+Bots exchange fresh structured task intent; only the host issues team plans. Multiple miners reserve separate ore veins (six-block separation), keep claims while travelling, and use different exploration headings. A contested claim waits rather than canceling or blacklisting the ore. Explicit release is immediate; disconnected claims expire with a clock-skew grace period. A freshly started relay waits 14 seconds before issuing claims that could overlap its previous session. No task/claim history is replayed.
+
+Hunters sharing a target choose one explosive attacker; support bots stay outside its blast radius. With melee, one engaged bot has the close attack lane and others hold a nearby support distance, taking over when that bot withdraws. Sweeping attacks and strikes through teammates are avoided. Detonation still checks every bystander. Watchers yield crowded stations deterministically and prefer separate viewpoints without continuously orbiting.
+
+`botAutoRoam=true` is the default. With no foreground task, queued job or open screen, the bot scouts unexplored directions, avoids other scouts' destinations, and records the same terrain/sightings as other work. Care and conflict handling retain priority. Roaming does not break or place blocks; planned bucket falls remain available. `#roam on`, `#roam off` and `#roam status` are also available in trusted messages and web commands. `#stop` parks roaming persistently for that Minecraft server; `#resume` or `#roam on` releases it. Death parks the bot for attention. Pause continues to pause everything.
+
+Scouts mark visible containers, beds and workstations as **Possible base**, including coordinates, source and evidence. These may be generated structures; ownership is not inferred. Markers appear on the terrain map and in Bases & built sites. `#stalk base <player>` confirmation also creates a confirmed map marker. Weak automatic evidence cannot overwrite a manual confirmation.
+
+Terrain/site history is bounded to 4,096 terrain chunks and 512 markers for up to 30 days, in `bot-network-terrain.properties`. Tiles are 16 × 16 block colors/heights, not a texture-pack renderer or complete server-side Dynmap. Nether samples below the roof show a local cavern surface. Clients share terrain through the same authenticated relay and replay it to late joins. Terrain API reads require the webpage token and matching origin/hostname. Mapping runs in small batches on the client thread; persistence and network/HTTP work run off-thread.
 
 ## How observations work
 
@@ -93,4 +107,4 @@ These options are also in **Mods > Baritone > Configure** and `#set`:
 | `networkSightingTTLMS` | `120000` | Live search-mark lifetime, bounded 10 seconds–10 minutes |
 | `networkRenderSightings` | `false` | Optional cyan in-world boxes at recent shared positions in the current dimension |
 
-Connection modes, ports, keys, scope and viewer enablement are local per-server configuration managed by the commands above. Sharing toggles affect this bot's outgoing observations; an active relay still forwards its peers' reports, and the local viewer can still record local observations.
+`botAutoRoam` can also be changed in the Settings tab or Mod Menu config. Connection modes, ports, keys, scope and viewer enablement are local per-server configuration managed by the commands above. Sharing toggles affect this bot's outgoing observations; an active relay still forwards its peers' reports, and the local viewer can still record local observations.

@@ -46,7 +46,8 @@ final class NetworkControls {
     private final Map<String,Receipt> applied=new LinkedHashMap<>();
     private final Map<UUID,Long> lastSync=new HashMap<>();
     private Defaults group;
-    private long appliedVersion,lastState;
+    private long appliedVersion,lastState,lastReplayEpoch=-1;
+    private final Deque<Receipt> replayReceipts=new ArrayDeque<>();
     private volatile boolean closed;
     NetworkControls(NetworkBehavior parent,Baritone bot,Path root){
         this.parent=parent;this.bot=bot;settingsFile=root.resolve("bot-web-settings.properties");
@@ -61,7 +62,7 @@ final class NetworkControls {
     private Identity who(){return parent.localIdentity();}
     private boolean authority(){return parent.config().options().mode()!=NetworkConfig.Mode.JOIN;}
     private void publish(Packet packet){BotNetwork wire=parent.transport();if(wire!=null)wire.publish(packet);}
-    void connectionChanged(){appliedVersion=lastState=0;lastSync.clear();group=null;}
+    void connectionChanged(){appliedVersion=lastState=0;lastReplayEpoch=-1;replayReceipts.clear();lastSync.clear();group=null;}
     void accept(Packet packet,long now){
         if(!packet.valid(now))return;
         if(packet instanceof Request request){
@@ -145,7 +146,15 @@ final class NetworkControls {
             }
         }
         // A lost connection never replays commands. Only their already-produced receipts are repeated briefly.
-        applied.values().stream().filter(receipt->receipt.valid(now)).skip(Math.max(0,applied.size()-16)).forEach(this::publish);
+        BotNetwork wire=parent.transport();
+        if(wire!=null&&!wire.isHost()&&wire.connected()){
+            if(lastReplayEpoch!=wire.connectionEpoch()){
+                lastReplayEpoch=wire.connectionEpoch();replayReceipts.clear();
+                applied.values().stream().filter(receipt->receipt.valid(now)).skip(Math.max(0,applied.size()-16)).forEach(replayReceipts::add);
+            }
+            // Pace reconnection receipts so a large team cannot overflow every peer's priority queue.
+            for(int i=0;i<2&&!replayReceipts.isEmpty();i++){Receipt receipt=replayReceipts.poll();if(receipt.valid(now))publish(receipt);}
+        }
     }
     private static boolean actionTarget(WebControlAction action,UUID id){return action.target()==null||action.target().equals(id);}
     private UUID resolve(String name){
