@@ -14,7 +14,7 @@ The autonomous controller also supports saved offline-player watch/hunt orders, 
 
 Requires Minecraft 26.3, Fabric Loader 0.19.5 or newer, and Java 25. [Mod Menu](https://modrinth.com/mod/modmenu) 21.0.0 is optional and adds a settings screen under **Mods > HiveMind > Configure**.
 
-Download the jar from the latest successful [build run](https://github.com/Swishhyy/baritone-but-better/actions/workflows/gradle_build.yml) (artifact **HiveMind**) and put `hivemind-<version>.jar` in your `mods` folder.
+Download the jar from the latest successful [build run](https://github.com/Swishhyy/HiveMind/actions/workflows/gradle_build.yml) (artifact **HiveMind**) and put `hivemind-<version>.jar` in your `mods` folder.
 
 To build it yourself, run `./gradlew build`; the jar is written to `fabric/build/libs/`.
 
