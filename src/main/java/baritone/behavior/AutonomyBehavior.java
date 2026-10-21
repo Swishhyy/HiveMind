@@ -19,6 +19,7 @@ package baritone.behavior;
 
 import baritone.Baritone;
 import baritone.api.utils.Helper;
+import baritone.utils.social.CombatStyle;
 import baritone.api.event.events.TickEvent;
 import baritone.api.event.events.type.EventState;
 import baritone.utils.bot.*;
@@ -83,8 +84,8 @@ public final class AutonomyBehavior extends Behavior {
             if(world!=ctx.world()){world=ctx.world();online=Set.of();seenPlayer=null;seenPoint=null;seenAt=0;lastRoster=0;nextTry=Math.max(nextTry,now+3000);}
             if(!ctx.player().isAlive()){
                 if(deadAt==0){deadAt=now;nextRespawn=now+AutonomyPolicy.respawnDelay(Baritone.settings().botRespawnDelayMS.value);}
-                if(Baritone.settings().botAutoRespawn.value&&!store.paused()&&now>=nextRespawn&&respawnRequests<6&&ctx.minecraft().gui.screen() instanceof DeathScreen){
-                    ctx.player().respawn();nextRespawn=now+10000;respawnRequests++;reason="Respawn requested";
+                if(Baritone.settings().botAutoRespawn.value&&!store.paused()&&now>=nextRespawn&&ctx.minecraft().gui.screen() instanceof DeathScreen){
+                    ctx.player().respawn();respawnRequests=Math.min(10,respawnRequests+1);nextRespawn=now+Math.min(30000,10000+respawnRequests*2000L);reason="Respawn requested";
                 }
                 return;
             }
@@ -92,12 +93,13 @@ public final class AutonomyBehavior extends Behavior {
             if(now-lastRoster>=500){roster(now);lastRoster=now;}
             if(now>=nextReport){report(now);nextReport=now+AutonomyPolicy.reportInterval(Baritone.settings().botReportIntervalMS.value);}
             Order order=store.order();
-            if(order==null||store.paused()||!Baritone.settings().botPersistentTracking.value||now<nextTry||baritone.getStalkProcess().isActive()||BotWork.foreground(baritone)||baritone.getElytraProcess().isActive()||ctx.minecraft().gui.screen()!=null)return;
+            if(order==null||store.paused()||!Baritone.settings().botPersistentTracking.value||now<nextTry||baritone.getStalkProcess().isActive()||BotWork.foreground(baritone)||baritone.getConflictProcess().isActive()||baritone.getSculkProcess().isActive()||baritone.getElytraProcess().isActive()||ctx.minecraft().gui.screen()!=null)return;
             if(order.owner()!=null&&!baritone.getBotControl().isTrusted(order.owner())){clear();reason="Order removed: controller is no longer trusted";return;}
             Order requested=order;
             var info=order.target()==null?ctx.minecraft().getConnection().getOnlinePlayers().stream().filter(p->p.getProfile().name().equalsIgnoreCase(requested.name())).findFirst().orElse(null):ctx.minecraft().getConnection().getPlayerInfo(order.target());
             if(info!=null&&order.target()==null){store.set(order.resolved(info.getProfile().id(),info.getProfile().name()));order=store.order();}
             if(order.target()==null){reason="Waiting for "+order.name()+" to join; identity/location not observed yet";nextTry=now+2000;return;}
+            if(order.hunt()&&baritone.getStalkProcess().prepareSupplies(CombatStyle.parse(order.style()))){reason="Preparing combat hotbar";nextTry=now+500;return;}
             if(baritone.getSurvivalProcess().beforeMining()){reason="Preparing supplies: "+baritone.getSurvivalProcess().status();nextTry=now+5000;return;}
             try{baritone.getStalkProcess().resume(order);reason="Tracking active";nextTry=now+5000;}
             catch(IllegalStateException e){defer(e.getMessage(),10000);}

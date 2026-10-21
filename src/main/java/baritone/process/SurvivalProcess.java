@@ -92,12 +92,13 @@ public final class SurvivalProcess extends BaritoneProcessHelper implements IBeh
         releaseFood(); stage = Stage.IDLE; ticks = swapDelay = careTicks = 0; reason = "Checking supplies again";
     }
     public void supplyFailed(String message) { releaseFood(); waitForHelp("Resupply failed: " + message); }
+    private boolean persistentCare(){return baritone.getStalkProcess().isActive()&&!baritone.getStalkProcess().hunting()||baritone.getAutonomy().order()!=null;}
     private void waitForHelp(String message) {
         stage = Stage.WAIT; reason = message;
-        boolean watching = baritone.getStalkProcess().isActive() && !baritone.getStalkProcess().hunting();
+        boolean watching = persistentCare();
         stalkCareRetryAt = watching ? System.currentTimeMillis() + 30000 : 0;
         baritone.getJobManager().fail(message);
-        logDirect("Survival paused: " + message + (watching ? ". Stalking stays active; checking care again in 30 seconds." : ". Use survival retry after fixing it."));
+        logDirect("Survival paused: " + message + (watching ? ". Tracking order remains; checking care again in 30 seconds." : ". Use survival retry after fixing it."));
     }
     @Override public PathingCommand onTick(boolean failed, boolean safe) {
         if (!Baritone.settings().botSurvival.value || ctx.player() == null || !ctx.player().isAlive()) { onLostControl(); return null; }
@@ -107,7 +108,7 @@ public final class SurvivalProcess extends BaritoneProcessHelper implements IBeh
         if (!safe) return pause();
         baritone.getInputOverrideHandler().clearAllKeys(); ctx.playerController().resetBlockRemoving();
         if (stage == Stage.WAIT) {
-            if (!baritone.getStalkProcess().isActive() || baritone.getStalkProcess().hunting()
+            if (!persistentCare()
                     || stalkCareRetryAt == 0 || System.currentTimeMillis() < stalkCareRetryAt) return pause();
             stage = Stage.CARE; ticks = careTicks = 0; stalkCareRetryAt = 0;
         }

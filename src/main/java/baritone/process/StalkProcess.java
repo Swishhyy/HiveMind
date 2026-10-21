@@ -101,6 +101,7 @@ public final class StalkProcess extends BaritoneProcessHelper implements IBehavi
     private String retryReason="";
     private Order restoring;
     private boolean retainOrder,offlineWaiting;
+    private long nextSupplyMove;
     private long searchStarted,taskStarted,ambushAt,approachStarted,attackStarted,lastProgress,lastStrike,lastRecorded,lastReport,nextMemoryError;
     private float lastTargetHealth;
     private int attackCount;
@@ -204,15 +205,14 @@ public final class StalkProcess extends BaritoneProcessHelper implements IBehavi
                 throw new IllegalStateException("Use crystal, melee, or auto here; explosive anchor combat is supported in the Overworld and End");
             if(!Baritone.settings().killAllowTrustedTargets.value&&baritone.getBotControl().isTrusted(selected))
                 throw new IllegalStateException("Trusted controllers are protected from kill; change killAllowTrustedTargets locally to opt in");
-            if(restoring!=null&&(!equipmentReady(style)||!canStart(style)))throw new IllegalStateException("Waiting for health, food and usable "+style.name().toLowerCase(Locale.ROOT)+" combat supplies");
         }
         UUID controller=restoring==null?baritone.getJobManager().requestOwner():restoring.owner();
         if(restoring==null){
             baritone.getPathingBehavior().cancelEverything();
             if(!checkOnly&&Baritone.settings().botPersistentTracking.value)baritone.getAutonomy().arm(new Order(name,selected,kill,style.name().toLowerCase(Locale.ROOT),controller,System.currentTimeMillis()));
         }
-        if(selected==null||kill&&(!equipmentReady(style)||!canStart(style))){
-            String message=selected==null?"Waiting for "+name+" to join; no identity or global coordinates are available":"Waiting for health, food and usable combat supplies";
+        if(selected==null){
+            String message="Waiting for "+name+" to join; no identity or global coordinates are available";
             baritone.getAutonomy().defer(message,2000);logDirect("Order saved: "+message);return;
         }
         owner=controller;targetId=selected;targetName=name;hunt=kill;combatStyle=style;meleeFallback=style==CombatStyle.AUTO&&!explosives.supplies(CombatStyle.AUTO);checkingMemoryOnly=checkOnly;observedWorld=ctx.world();
@@ -259,6 +259,24 @@ public final class StalkProcess extends BaritoneProcessHelper implements IBehavi
         return StealthPolicy.mayStartCombat(ctx.player().getHealth(),ctx.player().getFoodData().getFoodLevel(),
                 Baritone.settings().killMinimumHealth.value,equipmentReady(style));
     }
+    /** Restore needed supplies displaced by flight; one normal inventory swap at a time. */
+    public boolean prepareSupplies(CombatStyle style){
+        if(!Baritone.settings().allowInventory.value||ctx.player()==null||!ctx.player().isAlive()||ctx.minecraft().gameMode==null||baritone.getConflictProcess().isActive()||baritone.getSculkProcess().isActive()||baritone.getElytraProcess().isActive()||ctx.player().containerMenu!=ctx.player().inventoryMenu||!ctx.player().inventoryMenu.getCarried().isEmpty())return false;
+        long now=System.currentTimeMillis();if(now<nextSupplyMove)return true;
+        List<java.util.function.Predicate<ItemStack>> needs=new ArrayList<>();
+        needs.add(stack->(stack.is(ItemTags.SWORDS)||stack.is(ItemTags.AXES))&&(!stack.isDamageableItem()||stack.getMaxDamage()-stack.getDamageValue()>Math.max(1,Baritone.settings().botToolReserve.value)));
+        if(style==CombatStyle.AUTO||style==CombatStyle.CRYSTAL){needs.add(stack->stack.is(Items.END_CRYSTAL));needs.add(stack->stack.is(Items.OBSIDIAN));}
+        if(style==CombatStyle.AUTO||style==CombatStyle.ANCHOR){needs.add(stack->stack.is(Items.RESPAWN_ANCHOR));needs.add(stack->stack.is(Items.GLOWSTONE));}
+        for(var need:needs){
+            boolean ready=false;for(int i=0;i<9;i++)if(need.test(ctx.player().getInventory().getItem(i))){ready=true;break;}if(ready)continue;
+            int source=-1;for(int i=9;i<36;i++)if(need.test(ctx.player().getInventory().getItem(i))){source=i;break;}if(source<0)continue;
+            int destination=-1;for(int i=1;i<8;i++)if(ctx.player().getInventory().getItem(i).isEmpty()){destination=i;break;}
+            if(destination<0)for(int i=7;i>=1;i--){ItemStack stack=ctx.player().getInventory().getItem(i);if(needs.stream().noneMatch(test->test.test(stack))){destination=i;break;}}
+            if(destination<0)return false;
+            ctx.playerController().windowClick(ctx.player().inventoryMenu.containerId,source,destination,ContainerInput.SWAP,ctx.player());nextSupplyMove=now+500;return true;
+        }
+        return false;
+    }
     private boolean totemReady() { return ctx.player().getOffhandItem().is(Items.TOTEM_OF_UNDYING)||ctx.player().getMainHandItem().is(Items.TOTEM_OF_UNDYING); }
     private int opponentsNear(Player target) {
         int count=0;
@@ -304,6 +322,7 @@ public final class StalkProcess extends BaritoneProcessHelper implements IBehavi
             if(ctx.player()==null||ctx.world()==null||!ctx.player().isAlive()||ctx.world()!=observedWorld||ctx.minecraft().getConnection()==null)
                 return stop("Bot or world changed");
             if(baritone.getNetwork().isTeammate(targetId)){baritone.getAutonomy().clear();return stop("Target is a connected teammate");}
+            if(hunt&&!committedCombat()&&safe&&prepareSupplies(combatStyle))return pause();
             if(phase==Phase.SEARCH&&!targetMissing&&waitingToRetry(safe))return pause();
             if(phase!=Phase.DRINK)releaseUse();
             if(ctx.minecraft().getConnection().getPlayerInfo(targetId)==null&&!checkingMemoryOnly)return offlineWait(safe);
