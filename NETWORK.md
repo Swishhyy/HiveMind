@@ -12,7 +12,7 @@ On the client that will host:
 #network web
 ```
 
-The first command generates and displays a random key. Copy it to your other bot clients:
+The first command generates and displays a random key. Click the key itself or **[Copy key]** in chat to copy just the key to your clipboard. Set it on your other bot clients:
 
 ```text
 #network key <the-key-from-the-host>
@@ -31,7 +31,7 @@ All peers must have the same key and be playing on the same Minecraft server. Se
 
 ## Open the local webpage
 
-`#network web` prints a complete localhost address with a random access token. Open that address on the computer running that client. The default web port is **28767**; `#network web 28768` uses another port, useful when multiple clients run on one computer. The token changes when the page server restarts; run the command again for the current address.
+`#network web` prints a clickable localhost address. Click it in chat to open the atlas in your browser, or click **[Copy link]** to copy the complete address, including its random access token. Open it on the computer running that client. The displayed address is kept short; both actions include the full access token. Key/link messages always appear in chat so their actions remain available even with toast logging enabled. The default web port is **28767**; `#network web 28768` uses another port, useful when multiple clients run on one computer. The token changes when the page server restarts; run the command again for the current address.
 
 The page includes:
 

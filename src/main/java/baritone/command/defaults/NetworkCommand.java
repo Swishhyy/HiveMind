@@ -25,6 +25,12 @@ import baritone.api.command.exception.*;
 import baritone.api.command.helpers.TabCompleteHelper;
 import baritone.utils.network.NetworkConfig;
 import baritone.utils.network.NetworkProtocol;
+import net.minecraft.ChatFormatting;
+import net.minecraft.network.chat.ClickEvent;
+import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.HoverEvent;
+import net.minecraft.network.chat.MutableComponent;
+import java.net.URI;
 import java.util.*;
 import java.util.stream.Stream;
 
@@ -41,7 +47,10 @@ public final class NetworkCommand extends Command {
                 case "key" -> {
                     String value = args.hasAny() ? args.getString() : options.key().isEmpty() ? "new" : options.key(); args.requireMax(0);
                     if (value.equalsIgnoreCase("new")) value = NetworkProtocol.newKey();
-                    network.configure(options.key(value)); logDirect("Network key (copy to your other bots): " + value);
+                    network.configure(options.key(value));
+                    logDirect(false, Component.literal("Network key: ").withStyle(ChatFormatting.GRAY)
+                            .append(copy(value, value, "Click to copy the network key"))
+                            .append(" ").append(copy("[Copy key]", value, "Copy the key to your clipboard")));
                 }
                 case "host" -> {
                     int port = args.hasAny() ? args.getAs(Integer.class) : NetworkConfig.DEFAULT_PORT; args.requireMax(0);
@@ -55,7 +64,16 @@ public final class NetworkCommand extends Command {
                 case "web", "map" -> {
                     String port = args.hasAny() ? args.getString() : options.webPort() == 0 ? "28767" : "" + options.webPort(); args.requireMax(0);
                     network.configure(options.web(port.equalsIgnoreCase("off") ? 0 : Integer.parseInt(port)));
-                    logDirect(port.equalsIgnoreCase("off") ? "Local atlas page stopped" : "Local atlas: " + network.pageUrl());
+                    if (port.equalsIgnoreCase("off")) logDirect("Local atlas page stopped");
+                    else {
+                        String url = network.pageUrl(); URI uri = URI.create(url);
+                        MutableComponent link = Component.literal(uri.resolve("/").toString()).withStyle(style -> style
+                                .withColor(ChatFormatting.AQUA).withUnderlined(true)
+                                .withClickEvent(new ClickEvent.OpenUrl(uri))
+                                .withHoverEvent(new HoverEvent.ShowText(Component.literal("Open the local atlas in your browser"))));
+                        logDirect(false, Component.literal("Local atlas: ").withStyle(ChatFormatting.GRAY).append(link)
+                                .append(" ").append(copy("[Copy link]", url, "Copy the complete atlas address, including its access token")));
+                    }
                 }
                 case "peers" -> {
                     args.requireMax(0); var peers = network.peers(); logDirect(peers.isEmpty() ? "No directly connected peers" : "Authenticated direct peers:");
@@ -74,16 +92,21 @@ public final class NetworkCommand extends Command {
             }
         } catch (IllegalArgumentException | IllegalStateException e) { throw new CommandInvalidStateException(e.getMessage()); }
     }
+    private MutableComponent copy(String label, String value, String hint) {
+        return Component.literal(label).withStyle(style -> style.withColor(ChatFormatting.GREEN).withUnderlined(true)
+                .withClickEvent(new ClickEvent.CopyToClipboard(value))
+                .withHoverEvent(new HoverEvent.ShowText(Component.literal(hint))));
+    }
     @Override public Stream<String> tabComplete(String label, IArgConsumer args) throws CommandException {
         return args.hasAtMostOne() ? new TabCompleteHelper().append("status", "key", "host", "join", "connect", "off", "peers", "sightings", "web", "bind", "scope", "reload", "clear").filterPrefix(args.getString()).stream() : Stream.empty();
     }
     @Override public String getShortDesc() { return "Connect bot clients, share visual sightings, and open a local exploration atlas"; }
     @Override public List<String> getLongDesc() {
-        return List.of("network key [key|new] - Generate/show a key locally, or copy the same key onto another bot.",
+        return List.of("network key [key|new] - Generate/show a key locally; click the key or [Copy key] to copy it.",
                 "network host [port] - Run a relay in this client (default TCP 28766).",
                 "network join <host> [port] - Join that relay; reconnects automatically.",
                 "network status/peers/sightings [player] - Inspect connections and recent marks.",
-                "network web [port|off] - Start a read-only localhost exploration/sighting page (default 28767); prints its access address.",
+                "network web [port|off] - Start the localhost atlas (default 28767); click its address to open it or [Copy link] to copy it.",
                 "network off - Disconnect and disable automatic networking for this Minecraft server; keeps the atlas.",
                 "network bind <address>; network scope <server-label|auto>; network reload; network clear.",
                 "Bots must use the same Minecraft server address or explicit scope. Keys, endpoints, and page settings are saved per server.",
