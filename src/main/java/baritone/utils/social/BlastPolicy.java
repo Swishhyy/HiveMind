@@ -38,6 +38,12 @@ public final class BlastPolicy {
         double armored=raw*(1-reduction/25);
         return armored*(1-Math.max(0,Math.min(20,protection))/25.0);
     }
+    public static double afterResistance(double damage,int amplifier) {
+        if(!Double.isFinite(damage)||damage<0)return Double.POSITIVE_INFINITY;
+        return damage*(1-Math.max(0,Math.min(5,(long)amplifier+1))*0.2);
+    }
+    /** A small relative reserve buffer must not turn a one-point chip into three points of damage. */
+    public static double damageMargin(double damage) { return Math.min(1,Math.max(0,damage)*0.05+0.25); }
     public static boolean blockedByCube(double x,double y,double z,double ax,double ay,double az,double bx,double by,double bz) {
         double enter=0,exit=1;double[] minimum={x+0.0001,y+0.0001,z+0.0001},maximum={x+0.9999,y+0.9999,z+0.9999};
         double[] from={ax,ay,az},delta={bx-ax,by-ay,bz-az};
@@ -52,9 +58,9 @@ public final class BlastPolicy {
     public static boolean mayBlast(double selfDamage,double targetDamage,float selfHealth,float absorption,float targetHealth,
                                    int maximumSelf,int minimumTarget,int reserve,boolean bystanders,boolean protectedArea) {
         return Double.isFinite(selfDamage)&&Double.isFinite(targetDamage)&&selfDamage>=0&&targetDamage>=0
-                &&!bystanders&&!protectedArea&&selfDamage<=StealthPolicy.bounded(maximumSelf,1,16)
-                &&targetDamage>=StealthPolicy.bounded(minimumTarget,1,20)
-                &&selfHealth+Math.max(0,absorption)-selfDamage>=StealthPolicy.bounded(reserve,2,16)
+                &&!bystanders&&!protectedArea&&selfDamage<=StealthPolicy.bounded(maximumSelf,1,20)
+                &&(targetDamage>=StealthPolicy.bounded(minimumTarget,1,20)||targetHealth>0&&targetDamage>=targetHealth)
+                &&selfHealth+Math.max(0,absorption)-selfDamage-damageMargin(selfDamage)>=StealthPolicy.bounded(reserve,2,16)
                 &&(targetDamage>=selfDamage*0.8||targetDamage>=targetHealth);
     }
 }

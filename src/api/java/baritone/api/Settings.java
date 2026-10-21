@@ -426,11 +426,16 @@ public final class Settings {
     public final Setting<Boolean> killUseTotems = new Setting<>(true);
     public final Setting<Long> killTimeoutMS = new Setting<>(600000L);
     public final Setting<String> killCombatStyle = new Setting<>("auto");
-    public final Setting<Integer> killMaximumSelfDamage = new Setting<>(10);
-    public final Setting<Integer> killMinimumBlastDamage = new Setting<>(4);
-    public final Setting<Integer> killBlastHealthReserve = new Setting<>(6);
+    public final Setting<Integer> killMaximumSelfDamage = new Setting<>(14);
+    public final Setting<Integer> killMinimumBlastDamage = new Setting<>(1);
+    public final Setting<Integer> killBlastHealthReserve = new Setting<>(4);
     public final Setting<Integer> killExplosiveDelayTicks = new Setting<>(1);
     public final Setting<Boolean> killUseBlastCover = new Setting<>(true);
+    /** Combat can place up to two obsidian support blocks to reach an uneven or side-mounted blast spot. */
+    public final Setting<Integer> killMaxSupportBlocks = new Setting<>(2);
+    /** Move toward a useful blast position and give a pursuing opponent time to follow. */
+    public final Setting<Boolean> killLureOpponent = new Setting<>(true);
+    public final Setting<Long> killLureTimeoutMS = new Setting<>(8000L);
 
 
     /**

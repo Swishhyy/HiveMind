@@ -226,7 +226,7 @@ public final class StalkProcess extends BaritoneProcessHelper implements IBehavi
                 &&other.distanceToSqr(target)<144&&!baritone.getBotControl().isTrusted(other.getUUID()));
     }
     private boolean equipmentReady(CombatStyle style) {
-        return style==CombatStyle.MELEE?weapon()>=0:explosives.inProgress()||explosives.supplies(style)||(style==CombatStyle.AUTO&&weapon()>=0);
+        return style==CombatStyle.MELEE?weapon()>=0:explosives.inProgress()||explosives.carries(style)||explosives.supplies(style)||(style==CombatStyle.AUTO&&weapon()>=0);
     }
     private boolean canStart(CombatStyle style) {
         return StealthPolicy.mayStartCombat(ctx.player().getHealth(),ctx.player().getFoodData().getFoodLevel(),
@@ -548,21 +548,28 @@ public final class StalkProcess extends BaritoneProcessHelper implements IBehavi
         float health=target.getHealth()+target.getAbsorptionAmount();
         if(health<lastTargetHealth&&now-lastStrike<1500)progress(now); // health drops right after the bot's own hit or blast
         lastTargetHealth=health;
-        if(failed&&++failedPaths>=4)return scatter(target,"Cannot reach the target; returning to stalking",false);
+        if(failed) {
+            explosives.routeFailed();
+            if(++failedPaths>=4)return scatter(target,"Cannot reach the target; returning to stalking",false);
+        }
         if(!damageConfirmed&&(attackCount>=4||explosives.confirmedCycles()>=2)&&now-attackStarted>6000)
             return scatter(target,"No confirmed damage; PvP may be disabled or blocked",true);
         if(now-lastProgress>StealthPolicy.bounded(Baritone.settings().killAttackTimeoutMS.value,5000L,600000L))
             return scatter(target,"No hit landed for a while; returning to stalking",false);
+        if(combatStyle!=CombatStyle.MELEE&&safe&&explosives.stock(combatStyle))return pause();
+        if(combatStyle!=CombatStyle.MELEE&&meleeFallback&&weapon()<0&&explosives.supplies(combatStyle))meleeFallback=false;
         if(combatStyle!=CombatStyle.MELEE&&meleeFallback&&++explosiveRecheck>=explosiveBackoff) {
             explosiveRecheck=0;
             if(explosives.available(target,combatStyle)) { meleeFallback=false;tell("A blast position opened up; switching back to explosives"); }
+            else {
+                var move=explosives.relocate(target,combatStyle);
+                if(move!=null) { meleeFallback=false;return path(move.goal()); }
+            }
         }
         if(combatStyle!=CombatStyle.MELEE&&!meleeFallback) {
-            if(safe&&explosives.stock(combatStyle))return pause();
             if(!explosives.inProgress()&&!explosives.supplies(combatStyle)&&weapon()>=0)fallBackToMelee("Out of explosive supplies");
         }
         if(combatStyle!=CombatStyle.MELEE&&!meleeFallback) {
-            if(target.distanceToSqr(ctx.player())>36)return path(new GoalNear(target.blockPosition(),4));
             if(!safe||ctx.minecraft().gameMode==null)return pause();
             baritone.getInputOverrideHandler().clearAllKeys();ctx.playerController().resetBlockRemoving();
             if(previousSlot<0)previousSlot=ctx.player().getInventory().getSelectedSlot();
@@ -572,6 +579,8 @@ public final class StalkProcess extends BaritoneProcessHelper implements IBehavi
             String warning=explosives.takeWarning();if(warning!=null&&!warning.equals(lastWarning)) { lastWarning=warning;tell(warning); }
             if(step.problem()==null&&!step.fallback())return step.goal()==null?pause():path(step.goal());
             String reason=step.problem()!=null?step.problem():"No eligible explosive position/supply remains";
+            var move=explosives.relocate(target,combatStyle);
+            if(move!=null)return path(move.goal());
             if(weapon()>=0)fallBackToMelee(reason);
             else if(explosives.supplies(combatStyle)) { // keep pressing without a melee weapon
                 if(!reason.equals(lastWarning)) { lastWarning=reason;tell(reason+"; retrying explosives (no melee weapon)"); }
@@ -789,6 +798,6 @@ public final class StalkProcess extends BaritoneProcessHelper implements IBehavi
     @Override public String displayName0() {
         String waiting=retryAt>System.currentTimeMillis()?"; retry in "+Math.max(1,(retryAt-System.currentTimeMillis()+999)/1000)+"s: "+retryReason:"";
         return (hunt?"Hunt ["+(meleeFallback?"melee":combatStyle.name().toLowerCase(Locale.ROOT))+"] ":"Stalk ")+targetName+": "+phase.name().toLowerCase(Locale.ROOT)
-                +(watchStation.settled()?" (holding viewing spot)":"")+" (view distance "+distance()+")"+waiting;
+                +(watchStation.settled()?" (holding viewing spot)":"")+(hunt&&explosives.positioning()?" (moving toward a blast position)":"")+" (view distance "+distance()+")"+waiting;
     }
 }

@@ -26,10 +26,11 @@ import java.util.*;
 /** Checks gaze geometry, ambush eligibility, and persistent evidence without a running game. */
 public final class StealthChecks {
     public static void main(String[] args) throws Exception {
-        runAll();System.out.println("Stealth/combat checks passed: stationary watching, concealment, persistent retries, gaze, ambush gates, memory, crystal/anchor damage");
+        runAll();System.out.println("Stealth/combat checks passed: stationary watching, concealment, retries, memory, chip trades, Resistance, terrain supports, lure bounds, crystal/anchor damage");
     }
     public static void runAll() throws Exception {
         watchingChecks();
+        terrainCombatChecks();
         check(StealthPolicy.gazeDot(0,0,1,0,0,40)==1,"Normalize the target's facing vector");
         check(StealthPolicy.gazeDot(0,0,1,0,0,-40)==-1,"Rear positions are outside the facing cone");
         check(StealthPolicy.gazeDot(1,0,0,0,0,40)==0,"Perpendicular positions do not count as a stare");
@@ -131,6 +132,38 @@ public final class StealthChecks {
         } finally {
             try(var files=Files.walk(root)) { for(Path file:files.sorted(Comparator.reverseOrder()).toList())Files.deleteIfExists(file); }
         }
+    }
+    private record Cell(int x,int y,int z) {
+        List<Cell> neighbors() { return List.of(new Cell(x,y-1,z),new Cell(x-1,y,z),new Cell(x+1,y,z),new Cell(x,y,z-1),new Cell(x,y,z+1),new Cell(x,y+1,z)); }
+    }
+    private static void terrainCombatChecks() {
+        check(BlastPolicy.mayBlast(1,2,20,0,20,1,1,4,false,false),"One point of self damage at the configured cap remains an eligible trade");
+        check(BlastPolicy.mayBlast(0.2,1,20,0,20,14,1,4,false,false),"Small chip damage does not require a four-point hit on an armored opponent");
+        check(BlastPolicy.mayBlast(0.5,0.6,20,0,0.5f,14,1,4,false,false),"A lethal finishing hit can be below the normal target-damage minimum");
+        check(!BlastPolicy.mayBlast(10,2,20,0,12,14,1,4,false,false),"Low visible health plus absorption is not mistaken for a lethal trade");
+        check(BlastPolicy.mayBlast(14,16,20,0,20,14,1,4,false,false),"A worthwhile survivable hit is allowed under the combat preset");
+        check(!BlastPolicy.mayBlast(16,20,20,0,20,20,1,4,false,false),"The health reserve still prevents a near-lethal detonation");
+        check(!BlastPolicy.mayBlast(14.1,20,20,0,20,14,1,4,false,false),"A custom maximum self-damage setting remains a real limit");
+        check(BlastPolicy.mayBlast(12,14,8,10,20,14,1,4,false,false),"Absorption can absorb part of a survivable trade");
+        check(BlastPolicy.afterResistance(10,-1)==10&&Math.abs(BlastPolicy.afterResistance(10,0)-8)<1e-9
+                &&BlastPolicy.afterResistance(10,4)==0,"Known Resistance effects reduce the estimate without inventing armor");
+        check(BlastPolicy.afterResistance(Double.NaN,0)==Double.POSITIVE_INFINITY,"Resistance cannot make invalid damage eligible");
+        Cell high=new Cell(0,2,0);
+        List<Cell> vertical=CombatTerrainPolicy.supports(high,2,Cell::neighbors,cell->true,cell->cell.equals(new Cell(0,0,0)));
+        check(vertical.equals(List.of(new Cell(0,0,0),new Cell(0,1,0))),"An elevated blast base gets a bottom-first two-block support chain");
+        check(CombatTerrainPolicy.supports(high,1,Cell::neighbors,cell->true,cell->cell.equals(new Cell(0,0,0)))==null,"A support budget cannot silently grow into a tower");
+        check(CombatTerrainPolicy.supports(high,2,Cell::neighbors,cell->!cell.equals(new Cell(0,1,0)),cell->cell.equals(new Cell(0,0,0)))==null,"Occupied or reserved crystal space cannot be used as a support");
+        Cell side=new Cell(2,1,0),ledge=new Cell(1,1,0);
+        check(CombatTerrainPolicy.supports(side,1,Cell::neighbors,cell->true,cell->cell.equals(ledge)).equals(List.of(ledge)),"A side-mounted base can extend from a legal wall face");
+        check(CombatTerrainPolicy.supports(side,0,Cell::neighbors,cell->true,cell->cell.equals(side)).isEmpty(),"An already reachable slab or wall face needs no support blocks");
+        check(CombatTerrainPolicy.supports(side,0,Cell::neighbors,cell->true,cell->cell.equals(ledge))==null,"Disabling supports retains ordinary placement-face requirements");
+        int[] explored={0};
+        check(CombatTerrainPolicy.supports(high,2,Cell::neighbors,cell->true,cell->{explored[0]++;return false;})==null&&explored[0]<=43,"Empty terrain and cycles have a finite support search");
+        check(CombatTerrainPolicy.lureRange(16,64)&&!CombatTerrainPolicy.lureRange(1,64)&&!CombatTerrainPolicy.lureRange(65,64)
+                &&!CombatTerrainPolicy.lureRange(16,4)&&!CombatTerrainPolicy.lureRange(16,197),"A lure changes position locally while keeping normal combat separation");
+        check(!CombatTerrainPolicy.lureRange(Double.NaN,64),"Invalid coordinates cannot start tactical movement");
+        check(CombatTerrainPolicy.crystalTopReachable(1,1.62)&&!CombatTerrainPolicy.crystalTopReachable(2,1.62),"A normal jump can reach a raised base top, but cannot justify a useless three-block pillar");
+        check(CombatTerrainPolicy.crystalTopReachable(2,2.62)&&!CombatTerrainPolicy.crystalTopReachable(1,Double.NaN),"Higher terrain can make a raised crystal base usable");
     }
     private static void watchingChecks() {
         check(WatchPolicy.inRange(51,6,40,12,5,true),"A settled watcher tolerates ordinary target movement without orbiting");
