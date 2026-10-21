@@ -18,6 +18,7 @@
 package baritone.behavior;
 
 import baritone.Baritone;
+import baritone.api.utils.Helper;
 import baritone.api.event.events.TickEvent;
 import baritone.api.event.events.type.EventState;
 import baritone.utils.bot.*;
@@ -49,7 +50,7 @@ public final class AutonomyBehavior extends Behavior {
     }
     public Order order(){load();return store.order();}
     public void arm(Order order){load();store.clear();store.set(order);nextTry=0;reason="Order saved for "+order.name();}
-    public void clear(){if(store!=null){store.clear();nextTry=0;reason="No tracking order";}}
+    public void clear(){if(ctx.world()!=null&&ctx.player()!=null)load();if(store!=null){store.clear();nextTry=0;reason="No tracking order";}}
     public void pause(boolean held){load();store.pause(held);}
     public boolean paused(){load();return store.paused();}
     public void defer(String message,long delay){reason=message;nextTry=System.currentTimeMillis()+Math.max(1000,delay);}
@@ -61,6 +62,7 @@ public final class AutonomyBehavior extends Behavior {
     public void replaceWork(){load();clear();baritone.getFlight().cancel();}
     private boolean workCommand(String label,String first){
         if(Set.of("status","list","history","sightings","report","supported").contains(first))return false;
+        if(label.equals("job"))return Set.of("resume","start").contains(first);
         return Set.of("mine","follow","goto","path","explore","farm","build","gettoblock","deposit","deliver","escort","recover","gather","repair","elytra").contains(label);
     }
     public void beforeCommand(String label,String first){if(workCommand(label,first)||Set.of("stalk","kill","stop","cancel").contains(label)&&!Set.of("status","history","sightings","report","base","forget").contains(first))baritone.getFlight().cancel();}
@@ -82,11 +84,11 @@ public final class AutonomyBehavior extends Behavior {
             if(!ctx.player().isAlive()){
                 if(deadAt==0){deadAt=now;nextRespawn=now+AutonomyPolicy.respawnDelay(Baritone.settings().botRespawnDelayMS.value);}
                 if(Baritone.settings().botAutoRespawn.value&&!store.paused()&&now>=nextRespawn&&respawnRequests<6&&ctx.minecraft().gui.screen() instanceof DeathScreen){
-                    ctx.player().respawn();ctx.minecraft().gui.setScreen(null);nextRespawn=now+10000;respawnRequests++;reason="Respawn requested";
+                    ctx.player().respawn();nextRespawn=now+10000;respawnRequests++;reason="Respawn requested";
                 }
                 return;
             }
-            if(deadAt!=0){deadAt=0;respawnRequests=0;nextTry=Math.max(nextTry,now+3000);reason="Respawned; checking supplies before resuming";}
+            if(deadAt!=0){if(ctx.minecraft().gui.screen() instanceof DeathScreen)ctx.minecraft().gui.setScreen(null);deadAt=0;respawnRequests=0;nextTry=Math.max(nextTry,now+3000);reason="Respawned; checking supplies before resuming";}
             if(now-lastRoster>=500){roster(now);lastRoster=now;}
             if(now>=nextReport){report(now);nextReport=now+AutonomyPolicy.reportInterval(Baritone.settings().botReportIntervalMS.value);}
             Order order=store.order();
@@ -121,9 +123,10 @@ public final class AutonomyBehavior extends Behavior {
         if(!Baritone.settings().botPeriodicReports.value)return;
         String task=baritone.getPathingControlManager().mostRecentInControl().map(p->p.displayName()).orElse("Idle");
         if(store.order()!=null&&!baritone.getStalkProcess().isActive())task=status();
+        if(task.length()>100)task=task.substring(0,97)+"...";
         String d=MiningRouteAccess.dimension(ctx).replace("minecraft:","");String message=task+" | "+d+" "+ctx.playerFeet().getX()+" "+ctx.playerFeet().getY()+" "+ctx.playerFeet().getZ()+" | HP "+Math.round(ctx.player().getHealth())+", food "+ctx.player().getFoodData().getFoodLevel();
         Set<UUID> recipients=Baritone.settings().botReportAllTrusted.value?baritone.getBotControl().config().players():store.order()!=null&&store.order().owner()!=null?Set.of(store.order().owner()):Set.of();
         for(UUID recipient:recipients)if(ctx.minecraft().getConnection().getPlayerInfo(recipient)!=null)baritone.getBotControl().report(recipient,message,now);
     }
-    private void error(RuntimeException e){if(System.currentTimeMillis()>=nextError){logDirect("Autonomy: "+e.getMessage());nextError=System.currentTimeMillis()+30000;}nextTry=System.currentTimeMillis()+10000;}
+    private void error(RuntimeException e){if(System.currentTimeMillis()>=nextError){Helper.HELPER.logDirect("Autonomy: "+e.getMessage());nextError=System.currentTimeMillis()+30000;}nextTry=System.currentTimeMillis()+10000;}
 }

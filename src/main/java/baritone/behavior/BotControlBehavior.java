@@ -115,7 +115,7 @@ public final class BotControlBehavior extends Behavior {
                     try {String first=expanded.second().isEmpty()?"":expanded.second().get(0).getValue().toLowerCase(Locale.ROOT);baritone.getAutonomy().beforeCommand(label,first);target.execute(label, args);baritone.getAutonomy().afterCommand(label,first);} catch (Exception e) { throw new IllegalArgumentException(e.getMessage(), e); }
                 });
             }
-            reply(player, "Accepted #" + command + "; " + baritone.getJobManager().status());
+            reply(player, "Accepted #" + command + "; " + baritone.getAutonomy().status());
         } catch (Exception e) { reply(player, "Command failed: " + e.getMessage()); }
     }
     public void reply(UUID player, String message) {

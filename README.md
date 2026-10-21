@@ -153,3 +153,5 @@ We thank them for granting Baritone an OSS license so that we can make our softw
 ## Why is it called Baritone?
 
 It's named for FitMC's deep sultry voice.
+
+The standalone autonomous controller also supports saved offline-player watch/hunt orders, automatic respawning, elytra scouting/search travel, shared logout/death/waypoint marks and periodic private status reports. See [NETWORK.md](NETWORK.md#autonomous-client-orders-flight-and-reporting).

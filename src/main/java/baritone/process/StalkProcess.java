@@ -308,6 +308,7 @@ public final class StalkProcess extends BaritoneProcessHelper implements IBehavi
             if(phase!=Phase.DRINK)releaseUse();
             if(ctx.minecraft().getConnection().getPlayerInfo(targetId)==null&&!checkingMemoryOnly)return offlineWait(safe);
             if(offlineWaiting){offlineWaiting=false;phase=Phase.SEARCH;searchGoal=null;taskStarted=searchStarted=System.currentTimeMillis();retryAt=0;targetMissing=true;tell(targetName+" is online again; resuming search");}
+            if(hunt&&!committedCombat()&&System.currentTimeMillis()-taskStarted>StealthPolicy.bounded(Baritone.settings().killTimeoutMS.value,60000L,3600000L))return stop("Search pass timed out; retrying the saved order");
             if(hunt&&phase==Phase.ATTACK) {
                 Player entity=ctx.world().players().stream().filter(player->player.getUUID().equals(targetId)).findFirst().orElse(null);
                 if(entity!=null&&(!entity.isAlive()||entity.getHealth()<=0)){baritone.getAutonomy().complete();return scatter(entity,"Target death observed; withdrawing",true);}

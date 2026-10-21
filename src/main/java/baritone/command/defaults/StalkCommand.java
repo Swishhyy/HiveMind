@@ -98,12 +98,12 @@ public final class StalkCommand extends Command {
                 "stalk check <player> - Check saved places, including when that player is offline; no global coordinates are revealed.",
                 "stalk base <player> [x y z] - Locally confirm a base at supplied or previously observed coordinates.",
                 "stalk forget <player|all>; stalk report <trusted-player|off|status> - Local memory/report configuration.",
-                "kill <player> [auto|melee|crystal|anchor] - Stalk, approach an isolated player looking away, and engage using carried supplies.",
+                "kill <player> [auto|melee|crystal|anchor] - Save a named order, wait if offline, and engage when found and supplied.",
                 "An engaged fight only retreats on low health or a second nearby player; a totem is kept in the offhand.",
                 "Crystal uses obsidian/bedrock bases and real end crystals; anchor places, charges, and detonates outside respawn dimensions.",
-                "Explosive combat can leave craters/obsidian and uses blast-exposure, health, bystander, and protected-area checks.",
+                "Orders survive death/disconnect/restart by default; stop or replacement work removes them. Elytra can carry long search legs.",
                 "kill status/stop; stalk status/stop - Inspect or cancel. Global pause/stop still apply.",
-                "Hunts have health, weapon, approach, combat, and attempt limits. Trusted controllers are protected by default.",
+                "Live combat attempts have health, weapon and time limits; saved orders retry until a death is observed or the order is stopped.",
                 "A configured client network supplies recent search hints; peer reports stay separate from firsthand base evidence.",
                 "Possible bases are inferences; they do not establish ownership. Use network web for the local shared atlas.");
     }

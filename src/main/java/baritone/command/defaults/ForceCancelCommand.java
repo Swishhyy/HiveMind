@@ -18,6 +18,7 @@
 package baritone.command.defaults;
 
 import baritone.api.IBaritone;
+import baritone.Baritone;
 import baritone.api.behavior.IPathingBehavior;
 import baritone.api.command.Command;
 import baritone.api.command.argument.IArgConsumer;
@@ -36,6 +37,7 @@ public class ForceCancelCommand extends Command {
     @Override
     public void execute(String label, IArgConsumer args) throws CommandException {
         args.requireMax(0);
+        if(baritone instanceof Baritone bot){bot.getAutonomy().clear();bot.getFlight().cancel();bot.getRoamProcess().hold(true);}
         IPathingBehavior pathingBehavior = baritone.getPathingBehavior();
         pathingBehavior.cancelEverything();
         pathingBehavior.forceCancel();
