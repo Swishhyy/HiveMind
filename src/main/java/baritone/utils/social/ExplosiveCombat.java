@@ -193,12 +193,12 @@ public final class ExplosiveCombat {
         switch(stage) {
             case SELECT -> {
                 if(target.distanceToSqr(ctx.player())>256)return new Step(blastRange(target.blockPosition()),false,null);
-                if(selectDelay-->0) { Step move=relocate(target,requested);return move==null?waitStep():move; }
+                if(selectDelay-->0) { Step move=relocate(target,requested);return move==null?new Step(blastRange(target.blockPosition()),false,null):move; }
                 plan=choose(target,requested);
                 if(plan==null) {
                     selectDelay=4;
                     Step move=relocate(target,requested);if(move!=null)return move;
-                    if(++idleTicks>=30)return problem(lastProblem,requested);
+                    if(++idleTicks>=6)return problem(lastProblem,requested);
                     return new Step(blastRange(target.blockPosition()),false,null);
                 }
                 idleTicks=supportIndex=0;lurePoint=firingPoint=null;lureUntil=firingUntil=0;
@@ -680,7 +680,7 @@ public final class ExplosiveCombat {
     private Step problem(String reason,CombatStyle requested) {
         warning=remaining();
         if(plan!=null)rejected.add(plan.style());else rejected.addAll(List.of(CombatStyle.CRYSTAL,CombatStyle.ANCHOR));
-        lastProblem=reason;stage=Stage.SELECT;plan=null;ticks=idleTicks=0;
+        lastProblem=reason;stage=Stage.SELECT;plan=null;ticks=idleTicks=supportIndex=0;firingPoint=null;firingUntil=0;
         if(requested==CombatStyle.AUTO) {
             boolean remaining=List.of(CombatStyle.CRYSTAL,CombatStyle.ANCHOR).stream().anyMatch(style->!rejected.contains(style)&&supplies(style));
             return new Step(null,!remaining,null);
