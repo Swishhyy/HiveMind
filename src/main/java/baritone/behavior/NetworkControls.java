@@ -169,13 +169,14 @@ final class NetworkControls {
         if(label.equals("status")){args.requireMax(0);return status();}
         if(label.equals("mine")&&expanded.second().size()>=2&&expanded.second().get(0).getValue().matches("[1-9][0-9]*")){
             int quantity=args.getAs(Integer.class);List<String> blocks=new ArrayList<>();while(args.hasAny())blocks.add(args.getString());
-            long id=bot.getJobManager().submit(quantity,blocks);return "Queued mining job #"+id;
+            long id=bot.getJobManager().submit(quantity,blocks);bot.getAutonomy().afterCommand(label,"start");return "Queued mining job #"+id;
         }
         var target=bot.getCommandManager().getCommand(label);if(target==null)throw new IllegalArgumentException("Unknown bot command");
-        target.execute(label,args);return "Accepted #"+command+"; "+status();
+        String first=expanded.second().isEmpty()?"":expanded.second().get(0).getValue().toLowerCase(Locale.ROOT);bot.getAutonomy().beforeCommand(label,first);
+        target.execute(label,args);bot.getAutonomy().afterCommand(label,first);return "Accepted #"+command+"; "+status();
     }
     private String status(){
-        return shorten(bot.getJobManager().status()+" · "+bot.getCompanionProcess().status()+" · "+bot.getStalkProcess().status()+" · "+bot.getNetwork().team().status()+" · "+bot.getRoamProcess().status(),500);
+        return shorten(bot.getAutonomy().status()+" · "+bot.getStalkProcess().status()+" · "+bot.getFlight().status()+" · "+bot.getJobManager().status()+" · "+bot.getCompanionProcess().status()+" · "+bot.getNetwork().team().status()+" · "+bot.getRoamProcess().status(),500);
     }
     private static String shorten(String text,int length){return text.replaceAll("[\\p{Cntrl}]"," ").substring(0,Math.min(length,text.length()));}
     private Settings.Setting<?> setting(String name){

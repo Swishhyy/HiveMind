@@ -46,7 +46,7 @@ public final class StalkCommand extends Command {
             if(kill&&!args.hasAny())throw new IllegalStateException("Use kill <player>, status, or stop");
             String first=args.hasAny()?args.getString():"random";String action=first.toLowerCase(Locale.ROOT);
             if(action.equals("status")) { args.requireMax(0);report(process.status());return; }
-            if(action.equals("stop")) { args.requireMax(0);process.onLostControl();bot().getPathingBehavior().softCancelIfSafe();report("Tracking and ambush stopped");return; }
+            if(action.equals("stop")) { args.requireMax(0);bot().getAutonomy().clear();bot().getFlight().cancel();process.onLostControl();bot().getPathingBehavior().softCancelIfSafe();report("Tracking and ambush order removed");return; }
             if(kill) { CombatStyle style=CombatStyle.parse(args.hasAny()?args.getString():Baritone.settings().killCombatStyle.value);args.requireMax(0);process.startHunt(first,style);return; }
             switch(action) {
                 case "sightings","history" -> {

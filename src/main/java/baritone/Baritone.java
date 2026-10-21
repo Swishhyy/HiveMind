@@ -85,6 +85,8 @@ public class Baritone implements IBaritone {
     private final JobManager jobManager;
     private final BotControlBehavior botControl;
     private final NetworkBehavior network;
+    private final AutonomyBehavior autonomy;
+    private final FlightBehavior flight;
     private final StalkProcess stalkProcess;
     private final GetToBlockProcess getToBlockProcess;
     private final CustomGoalProcess customGoalProcess;
@@ -154,6 +156,8 @@ public class Baritone implements IBaritone {
         this.selectionManager = new SelectionManager(this);
         this.botControl = new BotControlBehavior(this);
         this.network = new NetworkBehavior(this);
+        this.flight = new FlightBehavior(this);
+        this.autonomy = new AutonomyBehavior(this);
         this.commandManager = new CommandManager(this);
         this.registerBehavior(this.roamProcess);
         this.registerBehavior(this.portalTravelProcess);
@@ -165,6 +169,8 @@ public class Baritone implements IBaritone {
         this.registerBehavior(this.jobManager);
         this.registerBehavior(this.botControl);
         this.registerBehavior(this.network);
+        this.registerBehavior(this.flight);
+        this.registerBehavior(this.autonomy);
     }
 
     public void registerBehavior(IBehavior behavior) {
@@ -256,6 +262,8 @@ public class Baritone implements IBaritone {
     public BotControlBehavior getBotControl() { return this.botControl; }
     public RoamProcess getRoamProcess(){return roamProcess;}
     public NetworkBehavior getNetwork() { return this.network; }
+    public AutonomyBehavior getAutonomy(){return autonomy;}
+    public FlightBehavior getFlight(){return flight;}
 
     public StalkProcess getStalkProcess() { return this.stalkProcess; }
 

@@ -92,7 +92,8 @@ public final class TeamChecks {
                 await(()->{received.addAll(b.drain(128));return received.contains(plan);},"Another bot did not receive the same plan");
                 Plan forgery=new Plan(A.id(),A.name(),Map.of(A.id(),A.name()),List.of(),Map.of(),System.currentTimeMillis());check(!a.publish(forgery),"A client cannot publish a forged roster/assignment");
                 Tile tile=tile(System.currentTimeMillis());a.publish(tile);await(()->{received.addAll(b.drain(128));return received.contains(tile);},"Terrain tile did not relay between bots");
-                try(BotNetwork late=BotNetwork.join(who("Late"),key,"127.0.0.1",host.boundPort())){List<Message> history=new ArrayList<>();await(()->{history.addAll(late.drain(128));return history.contains(tile);},"Terrain did not replay to late join");check(history.stream().noneMatch(p->p instanceof Plan||p instanceof Intent),"Stale task assignments and claims never replay as history");}
+                Marker marker=new Marker(A.id(),A.name(),UUID.randomUUID(),"logout",point(42),"Host logout","Last visible location",HOST.id(),now-1000,false,now);a.publish(marker);await(()->{received.addAll(b.drain(128));return received.contains(marker);},"Logout marker did not relay between bots");
+                try(BotNetwork late=BotNetwork.join(who("Late"),key,"127.0.0.1",host.boundPort())){List<Message> history=new ArrayList<>();await(()->{history.addAll(late.drain(128));return history.contains(tile)&&history.contains(marker);},"Terrain and markers did not replay to late join");check(history.stream().noneMatch(p->p instanceof Plan||p instanceof Intent),"Stale task assignments and claims never replay as history");}
             }
         }
     }

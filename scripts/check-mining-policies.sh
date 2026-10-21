@@ -13,6 +13,8 @@ fi
     src/main/java/baritone/utils/bot/StorageRule.java \
     src/main/java/baritone/utils/bot/AtomicProperties.java \
     src/main/java/baritone/utils/bot/TrustedControl.java \
+    src/main/java/baritone/utils/bot/AutonomyPolicy.java \
+    src/main/java/baritone/utils/bot/TrackingOrderStore.java \
     src/main/java/baritone/utils/bot/JobStore.java \
     src/main/java/baritone/utils/bot/SurvivalPolicy.java \
     src/main/java/baritone/utils/bot/SculkPolicy.java \
@@ -22,6 +24,7 @@ fi
     src/main/java/baritone/utils/bot/CompanionPolicy.java \
     src/test/java/baritone/utils/bot/CompanionPolicyChecks.java \
     src/test/java/baritone/utils/bot/BotPolicyChecks.java \
+    src/test/java/baritone/utils/bot/AutonomyChecks.java \
     src/main/java/baritone/utils/mining/WorldRoutes.java \
     src/main/java/baritone/utils/mining/WastePolicy.java \
     src/main/java/baritone/utils/social/SocialPolicy.java \
@@ -69,3 +72,5 @@ java -cp "$task_classes:src/main/resources" baritone.utils.network.NetworkChecks
 java -cp "$task_classes:src/main/resources" baritone.utils.network.ControlChecks
 
 java -cp "$task_classes:src/main/resources" baritone.utils.network.TeamChecks
+
+java -cp "$task_classes:src/main/resources" baritone.utils.bot.AutonomyChecks

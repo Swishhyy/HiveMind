@@ -140,6 +140,18 @@ public final class NetworkBehavior extends Behavior {
     public void confirmSite(net.minecraft.core.BlockPos point,String name){
         config();var who=localIdentity();record(new TerrainPackets.Site(who.id(),who.name(),MiningRouteAccess.endpoint(ctx,point),name+" base","Manually confirmed by a controller",true,System.currentTimeMillis()));
     }
+    public List<TerrainPackets.Marker> markers(){config();return terrain.markers(System.currentTimeMillis());}
+    public TerrainPackets.Marker addMarker(String kind,String label,String detail,baritone.utils.mining.WorldRoutes.Endpoint point,UUID subject,long seenAt){
+        config();var who=localIdentity();long now=System.currentTimeMillis();
+        UUID id=kind.equals("logout")?UUID.nameUUIDFromBytes(("logout:"+subject+":"+point.dimension()).getBytes(java.nio.charset.StandardCharsets.UTF_8)):UUID.randomUUID();
+        var marker=new TerrainPackets.Marker(who.id(),who.name(),id,kind,point,label,detail,subject,seenAt,false,now);record(marker);saveTerrain();return marker;
+    }
+    public void removeMarker(UUID id){
+        config();var who=localIdentity();var old=terrain.marker(who.id(),id);
+        if(old==null||old.deleted())throw new IllegalArgumentException("No marker with that ID belongs to this bot; select its source bot");
+        record(new TerrainPackets.Marker(who.id(),who.name(),id,old.kind(),old.point(),old.label(),old.detail(),old.subject(),old.seenAt(),true,Math.max(System.currentTimeMillis(),old.observedAt()+1)));saveTerrain();
+    }
+    public TerrainPackets.Marker logout(UUID player){return markers().stream().filter(p->p.kind().equals("logout")&&player.equals(p.subject())&&p.point().dimension().equals(MiningRouteAccess.dimension(ctx))).findFirst().orElse(null);}
     private void saveTerrain(){
         TerrainStore current=terrain;if(current==null||!current.dirty()||savingTerrain)return;savingTerrain=true;
         saves.execute(()->{try{current.save();}catch(RuntimeException error){storageError=error.getMessage();}finally{savingTerrain=false;}});

@@ -20,6 +20,7 @@ package baritone.utils.mining;
 import org.junit.Test;
 
 public final class MiningPoliciesTest {
+    @Test public void autonomousOrdersMarkersAndReportsSurviveOnlyIntendedInterruptions() throws Exception {baritone.utils.bot.AutonomyChecks.runAll();}
     @Test
     public void miningPoliciesPreserveSuppliesAndContainerBoundaries() {
         MiningPolicyChecks.runAll();

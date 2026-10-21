@@ -92,7 +92,7 @@ public final class BotNetwork implements AutoCloseable {
             if(packet instanceof Defaults current)defaults=current;
             boolean delivered=true;for(Peer peer:peers.values())delivered&=peer.offer(packet);return delivered;
         }
-        if (!(report instanceof TerrainPackets.Tile||report instanceof TerrainPackets.Site?terrain.accept(report,System.currentTimeMillis()):cache.accept(report, System.currentTimeMillis()))) return false;
+        if (!(report instanceof TerrainPackets.Tile||report instanceof TerrainPackets.Site||report instanceof TerrainPackets.Marker?terrain.accept(report,System.currentTimeMillis()):cache.accept(report, System.currentTimeMillis()))) return false;
         for (Peer peer : peers.values()) peer.offer(report);
         return true;
     }
@@ -117,7 +117,7 @@ public final class BotNetwork implements AutoCloseable {
             return;
         }
         if (!report.valid(System.currentTimeMillis())) return;
-        if (!(report instanceof TerrainPackets.Tile||report instanceof TerrainPackets.Site?terrain.accept(report,System.currentTimeMillis()):cache.accept(report, System.currentTimeMillis()))) return;
+        if (!(report instanceof TerrainPackets.Tile||report instanceof TerrainPackets.Site||report instanceof TerrainPackets.Marker?terrain.accept(report,System.currentTimeMillis()):cache.accept(report, System.currentTimeMillis()))) return;
         if (!received.offer(report)) { received.poll(); received.offer(report); }
         if (host) for (Peer peer : peers.values()) if (peer != sender) peer.offer(report);
     }

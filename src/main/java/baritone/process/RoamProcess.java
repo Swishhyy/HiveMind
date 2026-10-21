@@ -66,7 +66,7 @@ public final class RoamProcess extends BaritoneProcessHelper implements baritone
         if(destination==null){
             blocked.values().removeIf(until->until<now);double best=Double.POSITIVE_INFINITY;
             double initial=baritone.getNetwork().team().heading(Kind.ROAM,null)+leg*.37;
-            for(int radius:new int[]{64,96,144})for(int step=0;step<16;step++){
+            for(int radius:baritone.getFlight().capable()?new int[]{Math.max(256,Math.min(8192,Baritone.settings().botFlightRoamDistance.value))}:new int[]{64,96,144})for(int step=0;step<16;step++){
                 double angle=initial+step*Math.PI/8;BlockPos point=ctx.playerFeet().offset((int)Math.round(Math.cos(angle)*radius),0,(int)Math.round(Math.sin(angle)*radius));
                 if(blocked.containsKey(point)||!ctx.world().getWorldBorder().isWithinBounds(point))continue;
                 boolean visited=baritone.getNetwork().visited(point),occupied=baritone.getNetwork().team().roamOccupied(point);
@@ -75,11 +75,12 @@ public final class RoamProcess extends BaritoneProcessHelper implements baritone
                 if(score<best){best=score;destination=point;}
             }
             if(destination==null){retryAt=now+5000;return new PathingCommand(null,PathingCommandType.REQUEST_PAUSE);}
-            deadline=now+120000;
+            deadline=now+300000;
         }
+        if(baritone.getFlight().travel(this,destination))return new PathingCommand(null,PathingCommandType.REQUEST_PAUSE);
         return new PathingCommand(new GoalXZ(destination.getX(),destination.getZ()),PathingCommandType.REVALIDATE_GOAL_AND_PATH);
     }
     @Override public void onLostControl(){destination=null;deadline=0;}
-    @Override public void onPlayerDeath(){hold(true);onLostControl();}
+    @Override public void onPlayerDeath(){if(!Baritone.settings().botAutoRespawn.value)hold(true);onLostControl();}
     @Override public String displayName0(){return status();}
 }

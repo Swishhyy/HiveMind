@@ -19,6 +19,7 @@ package baritone.process;
 
 import baritone.Baritone;
 import baritone.utils.network.TeamPackets.Kind;
+import baritone.utils.bot.TrackingOrderStore.Order;
 import baritone.api.behavior.IBehavior;
 import baritone.api.event.events.TickEvent;
 import baritone.api.event.events.BlockChangeEvent;
@@ -98,6 +99,8 @@ public final class StalkProcess extends BaritoneProcessHelper implements IBehavi
     private int retryCount;
     private long retryAt,lastRetryReport;
     private String retryReason="";
+    private Order restoring;
+    private boolean retainOrder,offlineWaiting;
     private long searchStarted,taskStarted,ambushAt,approachStarted,attackStarted,lastProgress,lastStrike,lastRecorded,lastReport,nextMemoryError;
     private float lastTargetHealth;
     private int attackCount;
@@ -123,7 +126,7 @@ public final class StalkProcess extends BaritoneProcessHelper implements IBehavi
         if(!isActive()||ctx.world()==null||phase==Phase.APPROACH||phase==Phase.ATTACK)return null;
         Player target=loaded(targetId);return target==null?null:target.blockPosition().immutable();
     }
-    public String status() { return isActive()?displayName0():lastResult; }
+    public String status() { return isActive()?displayName0():baritone.getAutonomy()!=null&&ctx.world()!=null?baritone.getAutonomy().status():lastResult; }
     private int distance() { return SocialPolicy.stalkDistance(Baritone.settings().stalkDistance.value); }
     private int retention() { return StealthPolicy.bounded(Baritone.settings().stalkMemoryDays.value,1,90); }
 
@@ -153,6 +156,8 @@ public final class StalkProcess extends BaritoneProcessHelper implements IBehavi
         memory().confirm(id,canonical,MiningRouteAccess.endpoint(ctx,point),System.currentTimeMillis(),retention());
         baritone.getNetwork().confirmSite(point,canonical);
     }
+    public void resume(Order order) { restoring=order;try{start(order.name(),order.hunt(),false,CombatStyle.parse(order.style()));}finally{restoring=null;} }
+    public void transported(){searchStarted=taskStarted=System.currentTimeMillis();}
     public void start(String requested) { start(requested,false,false,CombatStyle.MELEE); }
     public void startHunt(String requested) { startHunt(requested,CombatStyle.parse(Baritone.settings().killCombatStyle.value)); }
     public void startHunt(String requested,CombatStyle style) { start(requested,true,false,style); }
@@ -169,7 +174,8 @@ public final class StalkProcess extends BaritoneProcessHelper implements IBehavi
         UUID selected;String name;
         boolean random=requested==null||requested.equalsIgnoreCase("random");
         if(kill&&random)throw new IllegalStateException("Name one player explicitly: kill <player>");
-        if(checkOnly) {
+        if(restoring!=null){selected=restoring.target();name=restoring.name();}
+        else if(checkOnly) {
             selected=identity(requested);
             var known=memory().places(selected,MiningRouteAccess.dimension(ctx),System.currentTimeMillis(),retention());
             Sighting shared=baritone.getNetwork().hint(selected,MiningRouteAccess.dimension(ctx));
@@ -182,12 +188,14 @@ public final class StalkProcess extends BaritoneProcessHelper implements IBehavi
                 List<PlayerInfo> pool=nearby.isEmpty()?online:nearby;
                 if(pool.isEmpty())throw new IllegalStateException("No other players are online");
                 profile=pool.get(ThreadLocalRandom.current().nextInt(pool.size()));
-            } else profile=online.stream().filter(info->info.getProfile().name().equalsIgnoreCase(requested)).findFirst()
-                    .orElseThrow(()->new IllegalStateException("That player is not online; use stalk check <name> for saved places"));
-            selected=profile.getProfile().id();name=profile.getProfile().name();
+            } else profile=online.stream().filter(info->info.getProfile().name().equalsIgnoreCase(requested)).findFirst().orElse(null);
+            if(profile==null){
+                if(!requested.matches("[A-Za-z0-9_]{1,16}"))throw new IllegalStateException("Use a valid player name");
+                selected=memory().resolve(requested,System.currentTimeMillis(),retention());if(selected==null)selected=baritone.getNetwork().resolve(requested);name=requested;
+            }else{selected=profile.getProfile().id();name=profile.getProfile().name();}
         }
         if(baritone.getNetwork().isTeammate(selected))throw new IllegalStateException("Connected bots are teammates and cannot be stalked or hunted");
-        if(selected.equals(ctx.player().getUUID()))throw new IllegalStateException("The bot cannot target itself");
+        if(ctx.player().getUUID().equals(selected))throw new IllegalStateException("The bot cannot target itself");
         if(!kill&&Baritone.settings().stalkMinimalEvidence.value)for(EquipmentSlot slot:EquipmentSlot.values())
             if(ctx.player().getItemBySlot(slot).getEnchantments().keySet().stream().anyMatch(holder->holder.is(Enchantments.FROST_WALKER)))
                 throw new IllegalStateException("Remove Frost Walker equipment for minimal-evidence tracking");
@@ -196,10 +204,17 @@ public final class StalkProcess extends BaritoneProcessHelper implements IBehavi
                 throw new IllegalStateException("Use crystal, melee, or auto here; explosive anchor combat is supported in the Overworld and End");
             if(!Baritone.settings().killAllowTrustedTargets.value&&baritone.getBotControl().isTrusted(selected))
                 throw new IllegalStateException("Trusted controllers are protected from kill; change killAllowTrustedTargets locally to opt in");
-            if(!equipmentReady(style))throw new IllegalStateException("Carry usable hotbar supplies for "+style.name().toLowerCase(Locale.ROOT)+" combat; anchor needs anchors, glowstone, and a non-glowstone trigger hand");
-            if(!canStart(style))throw new IllegalStateException("Recover health and hunger before an ambush");
+            if(restoring!=null&&(!equipmentReady(style)||!canStart(style)))throw new IllegalStateException("Waiting for health, food and usable "+style.name().toLowerCase(Locale.ROOT)+" combat supplies");
         }
-        UUID controller=baritone.getJobManager().requestOwner();baritone.getPathingBehavior().cancelEverything();
+        UUID controller=restoring==null?baritone.getJobManager().requestOwner():restoring.owner();
+        if(restoring==null){
+            baritone.getPathingBehavior().cancelEverything();
+            if(!checkOnly&&Baritone.settings().botPersistentTracking.value)baritone.getAutonomy().arm(new Order(name,selected,kill,style.name().toLowerCase(Locale.ROOT),controller,System.currentTimeMillis()));
+        }
+        if(selected==null||kill&&(!equipmentReady(style)||!canStart(style))){
+            String message=selected==null?"Waiting for "+name+" to join; no identity or global coordinates are available":"Waiting for health, food and usable combat supplies";
+            baritone.getAutonomy().defer(message,2000);logDirect("Order saved: "+message);return;
+        }
         owner=controller;targetId=selected;targetName=name;hunt=kill;combatStyle=style;meleeFallback=style==CombatStyle.AUTO&&!explosives.supplies(CombatStyle.AUTO);checkingMemoryOnly=checkOnly;observedWorld=ctx.world();
         taskStarted=searchStarted=System.currentTimeMillis();searchAnchor=ctx.playerFeet().immutable();
         rememberedPlaces=memory().places(targetId,MiningRouteAccess.dimension(ctx),taskStarted,retention());
@@ -288,33 +303,32 @@ public final class StalkProcess extends BaritoneProcessHelper implements IBehavi
         try {
             if(ctx.player()==null||ctx.world()==null||!ctx.player().isAlive()||ctx.world()!=observedWorld||ctx.minecraft().getConnection()==null)
                 return stop("Bot or world changed");
-            if(baritone.getNetwork().isTeammate(targetId))return stop("Target is a connected teammate");
+            if(baritone.getNetwork().isTeammate(targetId)){baritone.getAutonomy().clear();return stop("Target is a connected teammate");}
             if(phase==Phase.SEARCH&&!targetMissing&&waitingToRetry(safe))return pause();
             if(phase!=Phase.DRINK)releaseUse();
-            if(hunt&&!committedCombat()&&System.currentTimeMillis()-taskStarted>StealthPolicy.bounded(Baritone.settings().killTimeoutMS.value,60000L,3600000L))
-                return stop("Hunt timed out; no kill is assumed");
+            if(ctx.minecraft().getConnection().getPlayerInfo(targetId)==null&&!checkingMemoryOnly)return offlineWait(safe);
+            if(offlineWaiting){offlineWaiting=false;phase=Phase.SEARCH;searchGoal=null;taskStarted=searchStarted=System.currentTimeMillis();retryAt=0;targetMissing=true;tell(targetName+" is online again; resuming search");}
             if(hunt&&phase==Phase.ATTACK) {
                 Player entity=ctx.world().players().stream().filter(player->player.getUUID().equals(targetId)).findFirst().orElse(null);
-                if(entity!=null&&(!entity.isAlive()||entity.getHealth()<=0))return scatter(entity,"Target death observed; withdrawing",true);
+                if(entity!=null&&(!entity.isAlive()||entity.getHealth()<=0)){baritone.getAutonomy().complete();return scatter(entity,"Target death observed; withdrawing",true);}
             }
             Player target=loaded(targetId);
             if(phase==Phase.SCATTER)return scatterTick(target,failed,safe);
-            if(hunt&&!checkingMemoryOnly&&ctx.minecraft().getConnection().getPlayerInfo(targetId)==null)return stop("Target left the server; no kill is assumed");
             if(phase==Phase.DRINK)return drink(target,safe);
             if(hunt&&target!=null&&committedCombat()){
                 if(!baritone.getNetwork().team().ready())return watch(target,safe);
                 int spacing=baritone.getNetwork().team().supportDistance(targetId);if(spacing>0)return support(target,safe,spacing);
             }
             if(target==null) {
-                if(phase==Phase.ATTACK)return stop("Target left client view during combat; a kill was not confirmed");
+                if(phase==Phase.ATTACK){explosives.abandon();restoreWeapon();tell("Target left client view; searching again without assuming a kill");}
                 targetMissing=true;
                 if(!hunt&&watchStation.hold(false,true,Baritone.settings().stalkLostSightTicks.value))return watch(null,safe);
                 watchStation.reset();
                 phase=Phase.SEARCH;quietTicks=0;ambushAt=0;return search(failed,safe);
             }
-            if(hunt&&(target.isCreative()||target.isSpectator()))return stop("Target is not a survival-mode opponent");
+            if(hunt&&(target.isCreative()||target.isSpectator()))return stop("Target is not currently a survival-mode opponent");
             if(hunt&&!Baritone.settings().killAllowTrustedTargets.value&&baritone.getBotControl().isTrusted(targetId))
-                return stop("Target became a trusted controller");
+                {baritone.getAutonomy().clear();return stop("Target became a trusted controller");}
             if(ctx.player().hasLineOfSight(target))record(target);
             searchAnchor=target.blockPosition().immutable();searchStarted=System.currentTimeMillis();searchGoal=null;
             legTicks=siteWait=searchStep=0;checkedLastSeen=false;memoryStep=0;
@@ -715,6 +729,18 @@ public final class StalkProcess extends BaritoneProcessHelper implements IBehavi
         return (ctx.player().getX()-(src.x+0.5))*(dest.x-src.x)+(ctx.player().getZ()-(src.z+0.5))*(dest.z-src.z)>=0.25;
     }
 
+    private PathingCommand offlineWait(boolean safe){
+        if(!offlineWaiting){
+            offlineWaiting=true;phase=Phase.SEARCH;explosives.abandon();releaseUse();restoreWeapon();watchStation.reset();searchGoal=null;vantage=null;retryAt=0;
+            var logout=baritone.getNetwork().logout(targetId);
+            BlockPos point=logout!=null?MiningRouteAccess.position(logout.point()):seen.containsKey(targetId)?seen.get(targetId).position():rememberedPlaces.isEmpty()?null:MiningRouteAccess.position(rememberedPlaces.get(0).point());
+            if(point!=null)searchGoal=new GoalStandoff(point,distance());
+            tell(targetName+" is offline; order remains active"+(point==null?"; waiting for sightings":"; watching the last known area"));
+        }
+        taskStarted=searchStarted=System.currentTimeMillis();
+        if(searchGoal!=null&&!searchGoal.isInGoal(ctx.playerFeet()))return path(searchGoal);
+        if(safe)baritone.getInputOverrideHandler().clearAllKeys();return pause();
+    }
     private PathingCommand search(boolean failed,boolean safe) {
         long now=System.currentTimeMillis();Seen local=seen.get(targetId);
         Sighting shared=baritone.getNetwork().hint(targetId,MiningRouteAccess.dimension(ctx));
@@ -784,7 +810,14 @@ public final class StalkProcess extends BaritoneProcessHelper implements IBehavi
         if(previousSlot>=0&&ctx.player()!=null) { ctx.player().getInventory().setSelectedSlot(previousSlot);if(ctx.minecraft().gameMode!=null)ctx.playerController().syncHeldItem(); }
         previousSlot=-1;
     }
-    private PathingCommand path(Goal goal) { return new PathingCommand(goal,PathingCommandType.REVALIDATE_GOAL_AND_PATH); }
+    private PathingCommand path(Goal goal) {
+        if(phase==Phase.SEARCH&&loaded(targetId)==null){
+            BlockPos point=goal instanceof GoalXZ g?new BlockPos(g.getX(),ctx.playerFeet().getY(),g.getZ()):goal instanceof GoalStandoff g?g.target():null;
+            if(point!=null&&goal instanceof GoalStandoff){double dx=ctx.player().getX()-point.getX(),dz=ctx.player().getZ()-point.getZ(),length=Math.max(1,Math.hypot(dx,dz));point=point.offset((int)(dx/length*96),0,(int)(dz/length*96));}
+            if(point!=null&&baritone.getFlight().travel(this,point))return pause();
+        }
+        return new PathingCommand(goal,PathingCommandType.REVALIDATE_GOAL_AND_PATH);
+    }
     private PathingCommand pause() { return new PathingCommand(null,PathingCommandType.REQUEST_PAUSE); }
     private PathingCommand retry(Phase next,String reason,boolean safe) {
         phase=next;watching=false;watchedPlayer=null;retryReason=reason;
@@ -801,7 +834,10 @@ public final class StalkProcess extends BaritoneProcessHelper implements IBehavi
         return true;
     }
     private PathingCommand stop(String reason) {
-        tell((hunt?"Hunt":"Stalk")+" stopped: "+reason);lastResult=reason;onLostControl();return new PathingCommand(null,PathingCommandType.CANCEL_AND_SET_GOAL);
+        retainOrder=Baritone.settings().botPersistentTracking.value&&baritone.getAutonomy().order()!=null;
+        tell((hunt?"Hunt":"Stalk")+(retainOrder?" waiting: ":" stopped: ")+reason);lastResult=reason;
+        if(retainOrder)baritone.getAutonomy().defer(reason,30000);
+        onLostControl();return new PathingCommand(null,PathingCommandType.CANCEL_AND_SET_GOAL);
     }
     @Override public void onTick(TickEvent event) {
         if(event.getType()==TickEvent.Type.OUT||ctx.world()==null||ctx.player()==null) { onLostControl();seen.clear();observedWorld=null;return; }
@@ -822,6 +858,8 @@ public final class StalkProcess extends BaritoneProcessHelper implements IBehavi
     }
     @Override public void onBlockChange(BlockChangeEvent event) { explosives.onBlockChange(event); }
     @Override public void onLostControl() {
+        if(isActive()&&baritone.getAutonomy()!=null&&!retainOrder&&ctx.player()!=null&&ctx.player().isAlive()&&ctx.world()!=null&&ctx.world()==observedWorld)baritone.getAutonomy().clear();
+        retainOrder=false;offlineWaiting=false;
         if(isActive()) { String remaining=explosives.remaining();if(remaining!=null)tell(remaining); }
         releaseUse();restoreWeapon();explosives.reset();combatStyle=CombatStyle.MELEE;meleeFallback=false;targetId=owner=null;targetName=null;hunt=checkingMemoryOnly=watching=endAfterScatter=reachedRear=checkedLastSeen=false;
         perceptible=drinkStarted=invisibilityFailed=damageConfirmed=stalkSneak=false;drinkTicks=drinkWait=totemDelay=explosiveRecheck=0;explosiveBackoff=20;lastProgress=lastStrike=0;lastWarning=null;afterDrink=Phase.SEARCH;
@@ -832,10 +870,10 @@ public final class StalkProcess extends BaritoneProcessHelper implements IBehavi
         peerSearch=null;peerSearchAt=0;
         baritone.getInputOverrideHandler().setInputForceState(Input.SNEAK,false);baritone.getInputOverrideHandler().setInputForceState(Input.SPRINT,false);
     }
-    @Override public void onPlayerDeath() { onLostControl(); }
+    @Override public void onPlayerDeath() { retainOrder=true;onLostControl(); }
     @Override public String displayName0() {
         String waiting=retryAt>System.currentTimeMillis()?"; retry in "+Math.max(1,(retryAt-System.currentTimeMillis()+999)/1000)+"s: "+retryReason:"";
-        return (hunt?"Hunt ["+(meleeFallback?"melee":combatStyle.name().toLowerCase(Locale.ROOT))+"] ":"Stalk ")+targetName+": "+phase.name().toLowerCase(Locale.ROOT)
+        return (hunt?"Hunt ["+(meleeFallback?"melee":combatStyle.name().toLowerCase(Locale.ROOT))+"] ":"Stalk ")+targetName+": "+(offlineWaiting?"waiting for login":phase.name().toLowerCase(Locale.ROOT))
                 +(watchStation.settled()?" (holding viewing spot)":"")+(hunt&&explosives.positioning()?" (moving toward a blast position)":"")+" (view distance "+distance()+")"+waiting;
     }
 }

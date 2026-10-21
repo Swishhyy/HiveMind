@@ -29,6 +29,7 @@ public final class GoalStandoff implements Goal {
         this.target = target.immutable();
         this.distance = SocialPolicy.stalkDistance(distance);
     }
+    public BlockPos target(){return target;}
     @Override public boolean isInGoal(int x, int y, int z) {
         return SocialPolicy.inBand((double) x - target.getX(), (double) y - target.getY(), (double) z - target.getZ(), distance);
     }

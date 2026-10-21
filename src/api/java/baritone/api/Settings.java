@@ -410,6 +410,17 @@ public final class Settings {
     /** Connection endpoints and keys remain in the per-server bot-network.properties file, managed with #network. */
     /** Automatically scout between tasks. Manual stop/pause overrides this. */
     public final Setting<Boolean> botAutoRoam = new Setting<>(true);
+    /** Standalone autonomous-client lifecycle, private reporting, and long-distance flight. */
+    public final Setting<Boolean> botAutoRespawn = new Setting<>(true);
+    public final Setting<Long> botRespawnDelayMS = new Setting<>(2000L);
+    public final Setting<Boolean> botPersistentTracking = new Setting<>(true);
+    public final Setting<Boolean> botPeriodicReports = new Setting<>(true);
+    public final Setting<Boolean> botReportAllTrusted = new Setting<>(true);
+    public final Setting<Long> botReportIntervalMS = new Setting<>(300000L);
+    public final Setting<Boolean> botUseElytra = new Setting<>(true);
+    public final Setting<Integer> botFlightMinimumDistance = new Setting<>(256);
+    public final Setting<Integer> botFlightRocketReserve = new Setting<>(8);
+    public final Setting<Integer> botFlightRoamDistance = new Setting<>(768);
     public final Setting<Boolean> networkShareSightings = new Setting<>(true);
     public final Setting<Boolean> networkShareExploration = new Setting<>(true);
     public final Setting<Long> networkSightingIntervalMS = new Setting<>(5000L);

@@ -23,6 +23,7 @@ import baritone.api.event.events.TickEvent;
 import baritone.command.argument.ArgConsumer;
 import baritone.command.manager.CommandManager;
 import baritone.utils.bot.TrustedControl;
+import baritone.utils.bot.AutonomyPolicy;
 import baritone.utils.mining.MiningRouteAccess;
 import com.mojang.authlib.GameProfile;
 import net.minecraft.network.chat.ChatType;
@@ -32,18 +33,19 @@ import java.util.*;
 
 /** Remote commands never reach the general command interpreter without sender, channel, and command checks. */
 public final class BotControlBehavior extends Behavior {
-    private record Reply(UUID player, String message) {}
+    private record Reply(UUID player, String message,long queued) {}
     private Path root;
     private TrustedControl config;
     private final Map<UUID, Long> lastCommand = new LinkedHashMap<>();
     private final Set<String> received = new LinkedHashSet<>();
     private final Deque<Reply> replies = new ArrayDeque<>();
+    private final Deque<Reply> reports = new ArrayDeque<>();
     private long nextReply;
     private long nextError;
     public BotControlBehavior(Baritone bot) { super(bot); }
     public TrustedControl config() {
         Path here = MiningRouteAccess.root(ctx);
-        if (!here.equals(root)) { TrustedControl next = new TrustedControl(here); next.players(); config = next; root = here; lastCommand.clear(); received.clear(); replies.clear(); }
+        if (!here.equals(root)) { TrustedControl next = new TrustedControl(here); next.players(); config = next; root = here; lastCommand.clear(); received.clear(); replies.clear(); reports.clear(); }
         return config;
     }
     public boolean isTrusted(UUID id) {
@@ -103,13 +105,14 @@ public final class BotControlBehavior extends Behavior {
                 while (args.hasAny()) blocks.add(args.getString());
                 long[] id = new long[1];
                 baritone.getJobManager().withOwner(player, () -> id[0] = baritone.getJobManager().submit(quantity, blocks));
+                baritone.getAutonomy().afterCommand(label,expanded.second().get(0).getValue().toLowerCase(Locale.ROOT));
                 reply(player, "Queued mining job #" + id[0] + ": " + quantity + " " + String.join(" ", blocks));
                 return;
             } else {
                 var target = baritone.getCommandManager().getCommand(label);
                 if (target == null) throw new IllegalArgumentException("Unknown remote command");
                 baritone.getJobManager().withOwner(player, () -> {
-                    try { target.execute(label, args); } catch (Exception e) { throw new IllegalArgumentException(e.getMessage(), e); }
+                    try {String first=expanded.second().isEmpty()?"":expanded.second().get(0).getValue().toLowerCase(Locale.ROOT);baritone.getAutonomy().beforeCommand(label,first);target.execute(label, args);baritone.getAutonomy().afterCommand(label,first);} catch (Exception e) { throw new IllegalArgumentException(e.getMessage(), e); }
                 });
             }
             reply(player, "Accepted #" + command + "; " + baritone.getJobManager().status());
@@ -118,21 +121,26 @@ public final class BotControlBehavior extends Behavior {
     public void reply(UUID player, String message) {
         if (replies.size() >= 16) replies.removeFirst();
         String clean = message == null ? "Unknown error" : message.replaceAll("[\\p{Cntrl}]", " ");
-        replies.addLast(new Reply(player, clean.substring(0, Math.min(190, clean.length()))));
+        replies.addLast(new Reply(player, clean.substring(0, Math.min(190, clean.length())),System.currentTimeMillis()));
+    }
+    public void report(UUID player,String message,long now){
+        config();if(!config.trusted(player))return;reports.removeIf(p->p.player().equals(player));
+        if(reports.size()>=128)reports.removeFirst();String clean=message.replaceAll("[\\p{Cntrl}]"," ");reports.addLast(new Reply(player,clean.substring(0,Math.min(190,clean.length())),now));
     }
     @Override public void onTick(TickEvent event) {
         if (event.getType() == TickEvent.Type.OUT || ctx.world() == null || ctx.player() == null) {
-            if (!baritone.getPortalTravelProcess().canPreserveTransition(null)) { root = null; config = null; replies.clear(); lastCommand.clear(); received.clear(); }
+            if (!baritone.getPortalTravelProcess().canPreserveTransition(null)) { root = null; config = null; replies.clear(); reports.clear(); lastCommand.clear(); received.clear(); }
             return;
         }
-        if (replies.isEmpty() || System.currentTimeMillis() < nextReply || ctx.minecraft().getConnection() == null) return;
+        if ((replies.isEmpty()&&reports.isEmpty()) || System.currentTimeMillis() < nextReply || ctx.minecraft().getConnection() == null) return;
         try {
             config();
-            if (replies.isEmpty()) return;
-            Reply reply = replies.removeFirst();
+            if (replies.isEmpty()&&reports.isEmpty()) return;
+            Reply reply = replies.isEmpty()?reports.removeFirst():replies.removeFirst();
             if (!config.trusted(reply.player())) return;
             var info = ctx.minecraft().getConnection().getPlayerInfo(reply.player());
             if (info == null || !info.getProfile().name().matches("[A-Za-z0-9_]{1,16}")) return;
+            if(!AutonomyPolicy.mayReport(config.trusted(reply.player()),true,System.currentTimeMillis(),reply.queued()))return;
             ctx.minecraft().getConnection().sendCommand("msg " + info.getProfile().name() + " [Bot] " + reply.message());
             nextReply = System.currentTimeMillis() + 1000;
         } catch (RuntimeException e) { reportError(e); }

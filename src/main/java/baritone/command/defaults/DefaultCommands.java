@@ -55,6 +55,7 @@ public final class DefaultCommands {
                 new FollowCommand(baritone),
                 new StalkCommand(baritone),
                 new NetworkCommand(baritone),
+                new MapMarkerCommand(baritone),
                 new RoamCommand(baritone),
                 new PickupCommand(baritone),
                 new ExploreFilterCommand(baritone),
