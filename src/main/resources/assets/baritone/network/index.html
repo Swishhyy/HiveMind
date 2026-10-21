@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Baritone · Field Atlas</title>
+<style>
+:root{color-scheme:dark;--bg:#101619;--panel:#182125;--line:#2c393e;--ink:#e4eeeb;--muted:#9caeae;--mint:#8de9bb;--orange:#f4b66c;--blue:#87caff;--pink:#dca3d7}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}
+button,input,select{font:inherit;color:inherit}button,select,input{border:1px solid var(--line);background:#1a2428;border-radius:6px}
+button{cursor:pointer}button:hover{background:#26363c;border-color:#527268}button:focus-visible,input:focus-visible,select:focus-visible,canvas:focus-visible{outline:2px solid var(--mint);outline-offset:3px}
+.mono,.eyebrow,.stat strong,.coords{font-family:ui-monospace,SFMono-Regular,Consolas,monospace}
+header{border-bottom:1px solid var(--line);padding:22px 32px;display:flex;align-items:center;justify-content:space-between;gap:20px}
+.brand{display:flex;align-items:center;gap:12px}.logo{width:34px;height:34px;display:grid;grid-template-columns:repeat(2,1fr);gap:4px;transform:rotate(-4deg)}.logo i{background:var(--mint)}.logo i:nth-child(2){opacity:.4}.logo i:nth-child(3){opacity:.65}
+h1,h2,p{margin:0}h1{font-size:17px;letter-spacing:.02em}h1 span{font-weight:400;color:var(--muted)}h2{font-size:15px;font-weight:600}
+.eyebrow{font-size:10px;letter-spacing:.13em;text-transform:uppercase;color:var(--muted)}.status{display:flex;align-items:center;gap:9px;font-size:12px;color:var(--muted)}.dot{width:7px;height:7px;background:var(--mint);border-radius:50%;box-shadow:0 0 10px #8de9bb40}.dot.off{background:var(--orange);box-shadow:none}
+main{max-width:1700px;padding:27px 32px 20px;margin:auto}.intro{display:flex;justify-content:space-between;gap:15px;align-items:end;margin-bottom:20px}.intro h2{font-size:25px;font-weight:500;letter-spacing:-.04em}.intro p{color:var(--muted);margin-top:4px;font-size:13px}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px}.stat{border:1px solid var(--line);border-radius:8px;padding:14px 18px;background:var(--panel)}.stat strong{font-size:27px;font-weight:500;display:block;line-height:1.3}.stat .eyebrow{margin-bottom:6px}
+.toolbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:16px}select,input{padding:9px 12px}input[type=search]{width:225px;margin-right:auto}select{max-width:240px}.toolbar button{padding:9px 12px}.toolbar label{font-size:12px;color:var(--muted)}.update{font-size:11px;color:var(--muted)}
+.layout{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:16px}.panel{border:1px solid var(--line);border-radius:9px;background:var(--panel);overflow:hidden}
+.panel-head{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:15px 18px;border-bottom:1px solid var(--line)}.panel-head span{font-size:11px;color:var(--muted)}.map-wrap{position:relative;height:530px;background:#111c1e}canvas{display:block;width:100%;height:100%;touch-action:none;cursor:grab}
+.map-tools{position:absolute;right:14px;top:14px;display:flex;gap:5px}.map-tools button{min-width:32px;height:32px;background:#1a2428ed}.map-tools .fit{padding:0 12px}.map-empty{position:absolute;inset:0;display:grid;place-content:center;text-align:center;pointer-events:none;color:var(--muted);padding:35px}.map-empty strong{color:var(--ink);font-weight:500;font-size:18px}.map-empty p{margin-top:8px;max-width:330px}.map-empty.hidden{display:none}
+.map-bottom{display:flex;gap:12px;flex-wrap:wrap;justify-content:space-between;position:absolute;bottom:12px;left:14px;right:14px;pointer-events:none}.map-bottom span{background:#172327eb;padding:5px 9px;border:1px solid var(--line);border-radius:5px;font:10px ui-monospace,monospace;color:var(--muted)}
+.legend{padding:12px 17px;display:flex;gap:17px;flex-wrap:wrap;font-size:11px;color:var(--muted)}.legend label{display:flex;align-items:center;gap:5px;cursor:pointer}.legend input{accent-color:var(--mint);margin:0 3px 0 0}.swatch{width:8px;height:8px;display:inline-block;background:var(--mint)}.swatch.bot{background:var(--blue);border-radius:50%}.swatch.player{background:var(--orange);transform:rotate(45deg)}.swatch.area{background:transparent;border:1px solid var(--pink);border-radius:50%}
+.side{display:flex;flex-direction:column;gap:16px}.list{overflow:auto;max-height:340px;padding:5px 10px}.entry{border:0;border-bottom:1px solid var(--line);border-radius:0;width:100%;padding:12px 7px;background:transparent;text-align:left;display:block}.entry:last-child{border-bottom:0}.entry .row{display:flex;justify-content:space-between;gap:8px;align-items:center}.name{font-size:13px;font-weight:600;overflow-wrap:anywhere}.age{font-size:10px;color:var(--muted);white-space:nowrap}.coords{display:block;color:var(--muted);font-size:11px;margin-top:4px}.source{font-size:11px;color:var(--muted);display:block;margin-top:3px}.entry:hover{background:#223138}.empty{padding:24px 10px;color:var(--muted);font-size:12px}.details{padding:17px 18px;font-size:12px;color:var(--muted);min-height:95px}.details strong{color:var(--ink)}
+.below{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px}.below .list{max-height:260px}.badge{border:1px solid #4b434f;color:var(--pink);font-size:10px;padding:2px 5px;border-radius:4px}
+.notice{padding:11px 15px;margin-bottom:15px;border:1px solid #64523a;background:#30291d;color:#f7d6a1;border-radius:6px;font-size:12px}.notice:empty{display:none}footer{padding-top:18px;color:var(--muted);font-size:11px;display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap}
+@media(max-width:1050px){.layout{grid-template-columns:minmax(0,1fr) 285px}.map-wrap{height:490px}main{padding:20px}.toolbar input[type=search]{width:180px}}
+@media(max-width:760px){header{padding:18px}.status{max-width:45%;font-size:10px}main{padding:18px 12px}.intro h2{font-size:23px}.stats{gap:7px}.stat{padding:12px 10px}.stat strong{font-size:23px}.stat .eyebrow{font-size:8px}.layout,.below{grid-template-columns:1fr}.map-wrap{height:430px}.side{display:grid;grid-template-columns:1fr}.toolbar input[type=search]{width:100%;order:1;margin:0}.toolbar select{max-width:48%}.intro>.eyebrow{display:none}.list{max-height:230px}}
+</style>
+</head>
+<body>
+<header><div class="brand"><div class="logo" aria-hidden="true"><i></i><i></i><i></i><i></i></div><div><div class="eyebrow">Baritone network</div><h1>Field Atlas <span>/ local</span></h1></div></div><div class="status"><i class="dot off" id="connection"></i><span id="status">Connecting to your client</span></div></header>
+<main>
+<div class="intro"><div><h2>What your bots have seen.</h2><p>Shared exploration, firsthand player reports, and places worth checking again.</p></div><span class="eyebrow">Observation map · X / Z</span></div>
+<div id="notice" class="notice" role="status"></div>
+<div class="stats">
+<div class="stat"><div class="eyebrow">Visited chunks</div><strong id="chunk-count">0</strong></div>
+<div class="stat"><div class="eyebrow">Recent bots</div><strong id="bot-count">0</strong></div>
+<div class="stat"><div class="eyebrow">Players seen</div><strong id="player-count">0</strong></div>
+<div class="stat"><div class="eyebrow">Frequent areas</div><strong id="area-count">0</strong></div>
+</div>
+<div class="toolbar">
+<label for="dimension">Dimension</label><select id="dimension" aria-label="Dimension"><option value="minecraft:overworld">Overworld</option></select>
+<label for="age">Sightings</label><select id="age" aria-label="Sighting age"><option value="120000">Last 2 minutes</option><option value="900000">Last 15 minutes</option><option value="86400000">Last 24 hours</option><option value="2592000000">Last 30 days</option></select>
+<input id="search" type="search" placeholder="Find a player or reporting bot" aria-label="Filter player or bot">
+<span class="update" id="updated">Waiting for data</span><button id="pause" type="button" aria-pressed="false">Pause updates</button>
+</div>
+<div class="layout">
+<section class="panel"><div class="panel-head"><h2>Exploration map</h2><span>Coverage shows chunks bots visited</span></div>
+<div class="map-wrap" id="map-wrap"><canvas id="map" tabindex="0" aria-label="Exploration map. Drag to pan, scroll to zoom, arrow keys to pan, plus or minus to zoom."></canvas>
+<div class="map-tools"><button id="zoom-out" aria-label="Zoom out">−</button><button id="zoom-in" aria-label="Zoom in">+</button><button class="fit" id="fit">Fit coverage</button></div>
+<div class="map-empty" id="map-empty"><strong>No observations here yet</strong><p>Move a bot through this dimension or connect another client to start building the atlas.</p></div>
+<div class="map-bottom"><span id="pointer">X 0 · Z 0</span><span>Drag to pan · Scroll to zoom · Click a marker</span></div></div>
+<div class="legend"><label><input id="show-chunks" type="checkbox" checked><i class="swatch"></i>Visited chunks</label><label><input id="show-bots" type="checkbox" checked><i class="swatch bot"></i>Bots</label><label><input id="show-players" type="checkbox" checked><i class="swatch player"></i>Sightings</label><label><input id="show-areas" type="checkbox" checked><i class="swatch area"></i>Frequent areas</label></div>
+</section>
+<aside class="side">
+<section class="panel"><div class="panel-head"><h2>Player sightings</h2><span id="sighting-label">0 reports</span></div><div class="list" id="sightings"></div></section>
+<section class="panel"><div class="panel-head"><h2>Selected observation</h2><span>Last known position</span></div><div class="details" id="details">Choose a marker or a report to inspect its coordinates and source.</div></section>
+</aside>
+</div>
+<div class="below">
+<section class="panel"><div class="panel-head"><h2>Bot positions</h2><span id="peer-label">0 direct peers</span></div><div class="list" id="bots"></div></section>
+<section class="panel"><div class="panel-head"><h2>Frequent sighting areas</h2><span>64 × 64 block areas</span></div><div class="list" id="areas"></div></section>
+</div>
+<footer><span>Read-only view · Control your bots with in-game commands.</span><span>Rolling history: 30 days, up to 8,192 chunks and 4,096 visual reports. Frequent areas do not establish base ownership.</span></footer>
+</main>
+<script>
+'use strict';
+const $=id=>document.getElementById(id), canvas=$('map'), ctx=canvas.getContext('2d');
+let data={now:0,status:'Waiting for data',dimension:'minecraft:overworld',peers:[],chunks:[],bots:[],sightings:[],hotspots:[]}, paused=false, fitted=false, selected=null;
+let width=800,height=530,center={x:0,z:0},scale=1,drag=null,markers=[];
+const token=location.hash.slice(1);
+const friendly=d=>({'minecraft:overworld':'Overworld','minecraft:the_nether':'Nether','minecraft:the_end':'The End'}[d]||d);
+const ago=t=>{const seconds=Math.max(0,Math.floor((Date.now()-t)/1000));return seconds<60?seconds+'s ago':seconds<3600?Math.floor(seconds/60)+'m ago':seconds<86400?Math.floor(seconds/3600)+'h ago':Math.floor(seconds/86400)+'d ago';};
+const fmt=n=>Number(n).toLocaleString();
+const dimension=()=>$('dimension').value;
+const matches=p=>{const q=$('search').value.toLowerCase();return !q||[p.name,p.source,...(p.sources||[])].filter(Boolean).some(s=>s.toLowerCase().includes(q));};
+function filtered(){const d=dimension(), now=Date.now(), age=Number($('age').value);return {chunks:data.chunks.filter(p=>p.d===d),bots:data.bots.filter(p=>p.d===d&&now-p.t<=120000&&matches(p)),players:data.sightings.filter(p=>p.d===d&&now-p.t<=age&&matches(p)),areas:data.hotspots.filter(p=>p.d===d&&now-p.t<=age&&matches(p))};}
+function element(tag,text,cls){const e=document.createElement(tag);if(text!==undefined)e.textContent=text;if(cls)e.className=cls;return e;}
+function entry(p,kind){const button=element('button',undefined,'entry'),row=element('span',undefined,'row');button.type='button';
+row.append(element('span',p.name,'name'),element('span',ago(p.t),'age'));button.append(row);
+button.append(element('span','X '+p.x+' · Y '+p.y+' · Z '+p.z,'coords'));
+button.append(element('span',kind==='area'?p.visits+' visit'+(p.visits===1?'':'s')+' · '+p.samples+' reports · '+p.sources.join(', '):kind==='bot'?'Actual bot position · '+friendly(p.d):'Seen by '+p.source,'source'));
+button.onclick=()=>{selected={...p,kind};center={x:p.x,z:p.z};scale=Math.max(.8,scale);details();draw();};return button;}
+function list(id,items,kind,empty){const root=$(id);root.replaceChildren();if(!items.length)root.append(element('p',empty,'empty'));else for(const p of items)root.append(entry(p,kind));}
+function details(){const root=$('details');root.replaceChildren();if(!selected){root.textContent='Choose a marker or a report to inspect its coordinates and source.';return;}
+const p=selected;root.append(element('strong',p.name),element('div','X '+p.x+' · Y '+p.y+' · Z '+p.z,'coords'));
+root.append(element('div',friendly(p.d)+' · '+ago(p.t),'source'));
+root.append(element('div',p.kind==='area'?'Area center; '+p.visits+' visits, '+Math.floor(p.dwell/60)+'m observed. Sources: '+p.sources.join(', '):p.kind==='bot'?'Position reported by this bot.':'Visual report from '+p.source+'. A report is not proof the player is still here.','source'));}
+function update(){const view=filtered();$('chunk-count').textContent=fmt(view.chunks.length);$('bot-count').textContent=fmt(view.bots.length);$('player-count').textContent=fmt(new Set(view.players.map(p=>p.id)).size);$('area-count').textContent=fmt(view.areas.length);
+$('sighting-label').textContent=view.players.length+' reports';$('peer-label').textContent=data.peers.length+' direct peers';
+list('sightings',view.players,'player','No player reports match these filters. Only actual visual observations are recorded.');
+list('bots',view.bots.sort((a,b)=>b.t-a.t),'bot','No bot position received in the last two minutes.');
+list('areas',view.areas,'area','Repeated sightings over time will appear here. Reports from multiple bots are combined.');
+$('map-empty').classList.toggle('hidden',Boolean(view.chunks.length||view.players.length||view.bots.length||view.areas.length));details();draw();}
+function resize(){const rect=canvas.getBoundingClientRect();width=rect.width;height=rect.height;const ratio=Math.min(devicePixelRatio||1,2);canvas.width=Math.round(width*ratio);canvas.height=Math.round(height*ratio);ctx.setTransform(ratio,0,0,ratio,0,0);draw();}
+function screen(x,z){return {x:width/2+(x-center.x)*scale,y:height/2+(z-center.z)*scale};}
+function world(x,y){return {x:center.x+(x-width/2)/scale,z:center.z+(y-height/2)/scale};}
+function fit(){const view=filtered(),points=[...view.chunks.map(p=>({x:p.x*16+8,z:p.z*16+8})),...view.bots,...view.players];if(!points.length){center={x:0,z:0};scale=1;return draw();}
+const xs=points.map(p=>p.x),zs=points.map(p=>p.z),minX=Math.min(...xs),maxX=Math.max(...xs),minZ=Math.min(...zs),maxZ=Math.max(...zs);center={x:(minX+maxX)/2,z:(minZ+maxZ)/2};scale=Math.max(.00001,Math.min(2,(width-100)/Math.max(96,maxX-minX+32),(height-100)/Math.max(96,maxZ-minZ+32)));draw();}
+function draw(){ctx.clearRect(0,0,width,height);ctx.fillStyle='#111c1e';ctx.fillRect(0,0,width,height);
+let step=16;while(step*scale<45)step*=2;while(step*scale>150&&step>16)step/=2;const top=world(0,0),bottom=world(width,height);ctx.lineWidth=1;ctx.strokeStyle='#223237';ctx.font='10px ui-monospace, monospace';ctx.fillStyle='#6e8688';
+for(let x=Math.floor(top.x/step)*step;x<=bottom.x;x+=step){const p=screen(x,0);ctx.beginPath();ctx.moveTo(p.x,0);ctx.lineTo(p.x,height);ctx.stroke();if(p.x>6&&p.x<width-45)ctx.fillText(fmt(x),p.x+4,15);}
+for(let z=Math.floor(top.z/step)*step;z<=bottom.z;z+=step){const p=screen(0,z);ctx.beginPath();ctx.moveTo(0,p.y);ctx.lineTo(width,p.y);ctx.stroke();if(p.y>35&&p.y<height-30)ctx.fillText(fmt(z),7,p.y-5);}
+const view=filtered();markers=[];
+if($('show-chunks').checked)for(const p of view.chunks){const a=screen(p.x*16,p.z*16),s=16*scale;if(a.x+s<0||a.y+s<0||a.x>width||a.y>height)continue;ctx.fillStyle='#36604d';ctx.globalAlpha=.6;ctx.fillRect(a.x+.5,a.y+.5,Math.max(1,s-1),Math.max(1,s-1));}ctx.globalAlpha=1;
+if($('show-areas').checked)for(const p of view.areas){const a=screen(p.x,p.z),r=Math.max(10,32*scale);ctx.strokeStyle='#dca3d7';ctx.fillStyle='#dca3d711';ctx.setLineDash([4,4]);ctx.beginPath();ctx.arc(a.x,a.y,r,0,Math.PI*2);ctx.fill();ctx.stroke();ctx.setLineDash([]);markers.push({...p,kind:'area',sx:a.x,sy:a.y});}
+if($('show-players').checked)for(const p of view.players){const a=screen(p.x,p.z);if(a.x<0||a.y<0||a.x>width||a.y>height)continue;ctx.globalAlpha=Date.now()-p.t<=120000?1:.5;ctx.fillStyle='#f4b66c';ctx.beginPath();ctx.moveTo(a.x,a.y-5);ctx.lineTo(a.x+5,a.y);ctx.lineTo(a.x,a.y+5);ctx.lineTo(a.x-5,a.y);ctx.closePath();ctx.fill();label(p.name,a,'#f4b66c');markers.push({...p,kind:'player',sx:a.x,sy:a.y});}ctx.globalAlpha=1;
+if($('show-bots').checked)for(const p of view.bots){const a=screen(p.x,p.z);ctx.fillStyle='#87caff';ctx.strokeStyle='#101619';ctx.lineWidth=2;ctx.beginPath();ctx.arc(a.x,a.y,5,0,Math.PI*2);ctx.fill();ctx.stroke();label(p.name,a,'#a5d8ff');markers.push({...p,kind:'bot',sx:a.x,sy:a.y});}
+if(selected&&selected.d===dimension()){const a=screen(selected.x,selected.z);ctx.strokeStyle='#e4eeeb';ctx.lineWidth=1;ctx.beginPath();ctx.arc(a.x,a.y,12,0,Math.PI*2);ctx.stroke();}}
+function label(text,p,color){ctx.font='11px ui-monospace, monospace';const w=ctx.measureText(text).width;ctx.fillStyle='#111c1ee8';ctx.fillRect(p.x+9,p.y-10,w+8,17);ctx.fillStyle=color;ctx.fillText(text,p.x+13,p.y+2);}
+function zoom(factor,x=width/2,y=height/2){const anchor=world(x,y);scale=Math.min(20,Math.max(.00001,scale*factor));center={x:anchor.x-(x-width/2)/scale,z:anchor.z-(y-height/2)/scale};draw();}
+canvas.addEventListener('wheel',e=>{e.preventDefault();const r=canvas.getBoundingClientRect();zoom(e.deltaY<0?1.18:1/1.18,e.clientX-r.left,e.clientY-r.top);},{passive:false});
+canvas.addEventListener('pointerdown',e=>{canvas.setPointerCapture(e.pointerId);drag={x:e.clientX,y:e.clientY,center:{...center},moved:false};canvas.style.cursor='grabbing';});
+canvas.addEventListener('pointermove',e=>{const r=canvas.getBoundingClientRect(),p=world(e.clientX-r.left,e.clientY-r.top);$('pointer').textContent='X '+Math.floor(p.x)+' · Z '+Math.floor(p.z);if(drag){const dx=e.clientX-drag.x,dy=e.clientY-drag.y;if(Math.abs(dx)+Math.abs(dy)>4)drag.moved=true;center={x:drag.center.x-dx/scale,z:drag.center.z-dy/scale};draw();}});
+canvas.addEventListener('pointerup',e=>{if(drag&&!drag.moved){const r=canvas.getBoundingClientRect(),x=e.clientX-r.left,y=e.clientY-r.top;const closest=markers.map(m=>({...m,dist:Math.hypot(m.sx-x,m.sy-y)})).sort((a,b)=>a.dist-b.dist)[0];if(closest&&closest.dist<18){selected=closest;details();}}drag=null;canvas.style.cursor='grab';draw();});
+canvas.addEventListener('pointercancel',()=>{drag=null;canvas.style.cursor='grab';});
+canvas.addEventListener('keydown',e=>{if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','+','=','-'].includes(e.key))e.preventDefault();if(e.key==='ArrowLeft')center.x-=50/scale;if(e.key==='ArrowRight')center.x+=50/scale;if(e.key==='ArrowUp')center.z-=50/scale;if(e.key==='ArrowDown')center.z+=50/scale;if(e.key==='+'||e.key==='=')zoom(1.3);if(e.key==='-')zoom(1/1.3);draw();});
+$('zoom-in').onclick=()=>zoom(1.4);$('zoom-out').onclick=()=>zoom(1/1.4);$('fit').onclick=fit;
+$('dimension').onchange=()=>{selected=null;update();fit();};$('age').onchange=update;$('search').oninput=update;for(const id of ['show-chunks','show-bots','show-players','show-areas'])$(id).onchange=draw;
+$('pause').onclick=()=>{paused=!paused;$('pause').textContent=paused?'Resume updates':'Pause updates';$('pause').setAttribute('aria-pressed',String(paused));if(!paused)poll();};
+let polling=false;
+async function poll(){if(paused||polling)return;polling=true;try{const response=await fetch('/api/snapshot',{headers:{Authorization:'Bearer '+token},cache:'no-store',signal:AbortSignal.timeout(5000)});if(!response.ok)throw new Error(response.status===401?'Open the full address printed by #network web, including the access token.':'The local client returned '+response.status+'.');const next=await response.json();for(const key of ['chunks','bots','sightings','hotspots','peers'])if(!Array.isArray(next[key]))throw new Error('Waiting for a complete atlas snapshot.');
+data=next;const dims=[...new Set([next.dimension,...data.chunks.map(p=>p.d),...data.sightings.map(p=>p.d),...data.bots.map(p=>p.d)])].filter(Boolean).sort();const current=fitted?dimension():next.dimension;$('dimension').replaceChildren(...dims.map(d=>{const option=element('option',friendly(d));option.value=d;return option;}));$('dimension').value=dims.includes(current)?current:dims[0];$('status').textContent=data.status;$('connection').classList.remove('off');$('notice').textContent='';$('updated').textContent='Updated '+new Date().toLocaleTimeString();update();if(!fitted&&(data.chunks.length||data.bots.length||data.sightings.length)){fit();fitted=true;}}
+catch(error){$('connection').classList.add('off');$('status').textContent='Client unavailable';$('notice').textContent=error.message||'Waiting for your local client. The last received map remains visible.';}finally{polling=false;}}
+new ResizeObserver(resize).observe($('map-wrap'));update();poll();setInterval(poll,2000);
+</script>
+</body>
+</html>

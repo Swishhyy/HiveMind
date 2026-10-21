@@ -75,6 +75,7 @@ public final class ExplosiveCombat {
     private String lastProblem="No suitable blast position",warning,rejection;
     private final Set<CombatStyle> rejected=EnumSet.noneOf(CombatStyle.class);
     private final Map<Integer,double[]> chainDamage=new HashMap<>();
+    private final Set<BlockPos> reusableAnchors=new HashSet<>();
     private long chainTick=-1;
     private double lowestSelfDamage;
     /** Interactive blocks would open/toggle on an unsneaked right-click instead of taking the placed block. */
@@ -99,7 +100,7 @@ public final class ExplosiveCombat {
     /** Drops the current plan but remembers which styles failed, so a melee fallback does not immediately retry them. */
     public void abandon() { stage=Stage.SELECT;plan=null;ticks=delay=idleTicks=supportIndex=selectDelay=0;id=-1;blockConfirmed=false;firingPoint=lurePoint=null;firingUntil=lureUntil=0; }
     public boolean expectedCrystal(Entity entity) { return stage==Stage.WAIT_BREAK&&entity instanceof EndCrystal&&entity.getId()==id; }
-    public void reset() { abandon();confirmedCycles=stockDelay=0;warning=null;rejected.clear();failedFootings.clear();nextLureCheck=0; }
+    public void reset() { abandon();confirmedCycles=stockDelay=0;warning=null;rejected.clear();reusableAnchors.clear();failedFootings.clear();nextLureCheck=0; }
     public void onBlockChange(BlockChangeEvent event) {
         if(plan!=null) {
             BlockPos expected=stage==Stage.WAIT_COVER?plan.cover():stage==Stage.WAIT_SUPPORT&&supportIndex<plan.supports().size()?plan.supports().get(supportIndex):plan.pos();
@@ -125,7 +126,7 @@ public final class ExplosiveCombat {
         return switch(requested) {
             case MELEE -> false;
             case CRYSTAL -> carried(Items.END_CRYSTAL)>=0;
-            case ANCHOR -> BlastPolicy.anchorDimension(MiningRouteAccess.dimension(ctx))&&carried(Items.RESPAWN_ANCHOR)>=0&&carried(Items.GLOWSTONE)>=0;
+            case ANCHOR -> BlastPolicy.anchorDimension(MiningRouteAccess.dimension(ctx))&&(carried(Items.RESPAWN_ANCHOR)>=0&&carried(Items.GLOWSTONE)>=0||reusableAnchor(carried(Items.GLOWSTONE)>=0));
             case AUTO -> carries(CombatStyle.CRYSTAL)||carries(CombatStyle.ANCHOR);
         };
     }
@@ -164,8 +165,13 @@ public final class ExplosiveCombat {
                 ||stack.is(Items.GLOWSTONE)||stack.is(Items.TOTEM_OF_UNDYING)||stack.is(Items.POTION)||stack.is(Items.ENDER_PEARL)||stack.has(DataComponents.FOOD);
     }
     private boolean anchorAvailable() {
-        return BlastPolicy.anchorDimension(MiningRouteAccess.dimension(ctx))&&slot(Items.RESPAWN_ANCHOR)>=0&&slot(Items.GLOWSTONE)>=0
+        return BlastPolicy.anchorDimension(MiningRouteAccess.dimension(ctx))&&(slot(Items.RESPAWN_ANCHOR)>=0&&slot(Items.GLOWSTONE)>=0||reusableAnchor(slot(Items.GLOWSTONE)>=0))
                 &&!ctx.player().getOffhandItem().is(Items.GLOWSTONE)&&triggerSlot()>=0;
+    }
+    private boolean reusableAnchor(boolean glowstone) {
+        reusableAnchors.removeIf(pos->!ctx.world().hasChunkAt(pos)||!ctx.world().getBlockState(pos).is(Blocks.RESPAWN_ANCHOR));
+        return reusableAnchors.stream().anyMatch(pos->pos.distSqr(ctx.playerFeet())<=64&&anchorExplodesAt(pos)
+                &&(glowstone||ctx.world().getBlockState(pos).getValue(RespawnAnchorBlock.CHARGE)>0));
     }
     private boolean anchorExplodesAt(BlockPos pos) {
         return BlastPolicy.anchorDimension(MiningRouteAccess.dimension(ctx))
@@ -201,7 +207,7 @@ public final class ExplosiveCombat {
                     if(++idleTicks>=6)return problem(lastProblem,requested);
                     return new Step(blastRange(target.blockPosition()),false,null);
                 }
-                idleTicks=supportIndex=0;lurePoint=firingPoint=null;lureUntil=firingUntil=0;
+                idleTicks=supportIndex=0;lurePoint=firingPoint=null;lureUntil=firingUntil=0;rejection="";
                 change(plan.supports().isEmpty()?Stage.COVER:Stage.SUPPORT);
                 return waitStep();
             }
@@ -242,6 +248,9 @@ public final class ExplosiveCombat {
                         if(use(slot(Items.OBSIDIAN),hit)){change(Stage.WAIT_BASE);blockConfirmed=false;}
                     } else change(Stage.CRYSTAL);
                 } else {
+                    if(ctx.world().getBlockState(plan.pos()).is(Blocks.RESPAWN_ANCHOR)) {
+                        reusableAnchors.add(plan.pos());change(Stage.CHARGE);return waitStep();
+                    }
                     BlockHitResult hit=placementHit(plan.pos());
                     if(hit==null) { if(placementJump(plan.pos()))return waitStep();return problem("No reachable anchor placement face",requested); }
                     if(use(slot(Items.RESPAWN_ANCHOR),hit)){change(Stage.WAIT_ANCHOR);blockConfirmed=false;}
@@ -280,7 +289,7 @@ public final class ExplosiveCombat {
                 return waitStep();
             }
             case WAIT_ANCHOR -> {
-                if(blockConfirmed&&ctx.world().getBlockState(plan.pos()).is(Blocks.RESPAWN_ANCHOR))change(Stage.CHARGE);
+                if(blockConfirmed&&ctx.world().getBlockState(plan.pos()).is(Blocks.RESPAWN_ANCHOR)) { reusableAnchors.add(plan.pos());change(Stage.CHARGE); }
                 return waitStep();
             }
             case CHARGE -> {
@@ -288,7 +297,10 @@ public final class ExplosiveCombat {
                 if(!anchorExplodesAt(plan.pos())||!state.is(Blocks.RESPAWN_ANCHOR))return problem("Anchor is absent or is a respawn point in this dimension",requested);
                 if(state.getValue(RespawnAnchorBlock.CHARGE)>0) { change(Stage.DETONATE);return waitStep(); }
                 BlockHitResult hit=bestFace(plan.pos());
-                if(hit==null)return problem("Anchor moved out of reach",requested);
+                if(hit==null) {
+                    rejection="";Step move=saferFiringPoint(target);if(move!=null) { ticks=0;return move; }
+                    return problem("No reachable firing position for the existing anchor",requested);
+                }
                 if(use(slot(Items.GLOWSTONE),hit)){change(Stage.WAIT_CHARGE);blockConfirmed=false;}
                 return waitStep();
             }
@@ -302,7 +314,11 @@ public final class ExplosiveCombat {
                 if(!anchorExplodesAt(plan.pos())||!state.is(Blocks.RESPAWN_ANCHOR)||state.getValue(RespawnAnchorBlock.CHARGE)<1)
                     return problem("Anchor cannot detonate here",requested);
                 if(ctx.player().getOffhandItem().is(Items.GLOWSTONE))return problem("Move glowstone out of the offhand before anchor combat",requested);
-                BlockHitResult hit=bestFace(plan.pos());if(hit==null)return problem("Charged anchor moved out of reach",requested);
+                BlockHitResult hit=bestFace(plan.pos());
+                if(hit==null) {
+                    rejection="";Step move=saferFiringPoint(target);if(move!=null) { ticks=0;return move; }
+                    return problem("No reachable firing position for the charged anchor",requested);
+                }
                 if(use(triggerSlot(),hit)){change(Stage.WAIT_DETONATE);blockConfirmed=false;}
                 return waitStep();
             }
@@ -324,14 +340,17 @@ public final class ExplosiveCombat {
             for(int dx=-3;dx<=3;dx++)for(int dz=-3;dz<=3;dz++)for(int dy=-3;dy<=2;dy++) {
                 BlockPos pos=center.offset(dx,dy,dz);
                 if(!ctx.world().hasChunkAt(pos)||pos.distSqr(ctx.playerFeet())>36)continue;
-                boolean existing=style==CombatStyle.CRYSTAL&&base(pos);
+                boolean existing=style==CombatStyle.CRYSTAL?base(pos):ctx.world().getBlockState(pos).is(Blocks.RESPAWN_ANCHOR);
                 if(!existing&&(!replaceable(pos)||!emptyBody(pos)))continue;
                 if(style==CombatStyle.CRYSTAL&&!crystalSpace(pos))continue;
                 if(style==CombatStyle.CRYSTAL&&!CombatTerrainPolicy.crystalTopReachable(pos.getY(),ctx.playerHead().y))continue;
                 if(style==CombatStyle.ANCHOR&&!anchorExplodesAt(pos))continue;
+                if(style==CombatStyle.ANCHOR&&(!existing&&slot(Items.RESPAWN_ANCHOR)<0
+                        ||slot(Items.GLOWSTONE)<0&&(!existing||ctx.world().getBlockState(pos).getValue(RespawnAnchorBlock.CHARGE)==0)))continue;
                 if(style==CombatStyle.CRYSTAL&&!existing&&slot(Items.OBSIDIAN)<0)continue;
                 List<BlockPos> support=existing?List.of():supports(pos,style,ctx.player().position());
-                if(support==null||(existing&&faceHit(pos,Direction.UP)==null&&faceHitFrom(pos,Direction.UP,ctx.playerHead().add(0,1.2,0))==null)) {
+                if(support==null||(existing&&(style==CombatStyle.CRYSTAL
+                        ?faceHit(pos,Direction.UP)==null&&faceHitFrom(pos,Direction.UP,ctx.playerHead().add(0,1.2,0))==null:bestFace(pos)==null))) {
                     reasons.merge("no reachable block face or short support chain",1,Integer::sum);continue;
                 }
                 double reach=Math.min(4.5,ctx.playerController().getBlockReachDistance());
@@ -350,7 +369,7 @@ public final class ExplosiveCombat {
                     forecast.add(shield);
                 }
                 double score=damageAt(target,target.position(),blast,power,removed,forecast)
-                        -damageAt(ctx.player(),ctx.player().position(),blast,power,removed,forecast)*1.1-needed*0.5-(shield==null?0:0.5);
+                        -damageAt(ctx.player(),ctx.player().position(),blast,power,removed,forecast)*1.1-needed*0.5-(shield==null?0:0.5)+(existing?1.5:0);
                 if(best==null||score>best.score())best=new Plan(pos.immutable(),style,!existing,List.copyOf(support),shield,score);
             }
         }

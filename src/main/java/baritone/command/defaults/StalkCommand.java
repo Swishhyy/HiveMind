@@ -104,6 +104,7 @@ public final class StalkCommand extends Command {
                 "Explosive combat can leave craters/obsidian and uses blast-exposure, health, bystander, and protected-area checks.",
                 "kill status/stop; stalk status/stop - Inspect or cancel. Global pause/stop still apply.",
                 "Hunts have health, weapon, approach, combat, and attempt limits. Trusted controllers are protected by default.",
-                "Only observations from this client are remembered. Possible bases are inferences; they do not establish ownership.");
+                "A configured client network supplies recent search hints; peer reports stay separate from firsthand base evidence.",
+                "Possible bases are inferences; they do not establish ownership. Use network web for the local shared atlas.");
     }
 }

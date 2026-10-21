@@ -54,6 +54,7 @@ public final class DefaultCommands {
                 new FarmCommand(baritone),
                 new FollowCommand(baritone),
                 new StalkCommand(baritone),
+                new NetworkCommand(baritone),
                 new PickupCommand(baritone),
                 new ExploreFilterCommand(baritone),
                 new ReloadAllCommand(baritone),

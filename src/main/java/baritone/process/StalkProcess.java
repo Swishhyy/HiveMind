@@ -33,6 +33,8 @@ import baritone.pathing.movement.MovementHelper;
 import baritone.pathing.path.PathExecutor;
 import baritone.utils.BaritoneProcessHelper;
 import baritone.utils.mining.MiningRouteAccess;
+import baritone.utils.network.NetworkProtocol.Sighting;
+import baritone.utils.network.SharedSightings;
 import baritone.utils.social.*;
 import net.minecraft.client.multiplayer.PlayerInfo;
 import net.minecraft.core.BlockPos;
@@ -84,6 +86,8 @@ public final class StalkProcess extends BaritoneProcessHelper implements IBehavi
     private Goal searchGoal;
     private Player watchedPlayer;
     private List<PlayerMemory.Place> rememberedPlaces=List.of();
+    private Sighting peerSearch;
+    private long peerSearchAt;
     private int searchStep,memoryStep,legTicks,siteWait,gazeTicks,quietTicks,scatterTicks,scatterQuiet,failedPaths,attempts,previousSlot=-1;
     private int drinkTicks,drinkWait,totemDelay,explosiveRecheck,explosiveBackoff=20;
     private boolean stalkSneak;
@@ -128,6 +132,7 @@ public final class StalkProcess extends BaritoneProcessHelper implements IBehavi
         if(ctx.minecraft().getConnection()!=null)for(PlayerInfo info:ctx.minecraft().getConnection().getOnlinePlayers())
             if(info.getProfile().name().equalsIgnoreCase(name))return info.getProfile().id();
         UUID known=memory().resolve(name,System.currentTimeMillis(),retention());
+        if(known==null)known=baritone.getNetwork().resolve(name);
         if(known==null)throw new IllegalStateException("No online profile or saved sighting for "+name);
         return known;
     }
@@ -162,8 +167,9 @@ public final class StalkProcess extends BaritoneProcessHelper implements IBehavi
         if(checkOnly) {
             selected=identity(requested);
             var known=memory().places(selected,MiningRouteAccess.dimension(ctx),System.currentTimeMillis(),retention());
-            if(known.isEmpty())throw new IllegalStateException("No saved places for that player in this dimension");
-            name=known.get(0).name();
+            Sighting shared=baritone.getNetwork().hint(selected,MiningRouteAccess.dimension(ctx));
+            if(known.isEmpty()&&shared==null)throw new IllegalStateException("No saved places or recent peer marks for that player in this dimension");
+            name=known.isEmpty()?shared.playerName():known.get(0).name();
         } else {
             PlayerInfo profile;
             if(random) {
@@ -201,7 +207,7 @@ public final class StalkProcess extends BaritoneProcessHelper implements IBehavi
     private void rememberPlayers() {
         if(ctx.world()!=observedWorld) { seen.clear();observedWorld=ctx.world(); }
         long now=System.currentTimeMillis();seen.entrySet().removeIf(entry->now-entry.getValue().time()>120000);
-        for(Player player:ctx.world().players())if(player!=ctx.player()&&player.isAlive()&&!player.isSpectator())
+        for(Player player:ctx.world().players())if(player!=ctx.player()&&player.isAlive()&&!player.isSpectator()&&ctx.player().hasLineOfSight(player))
             seen.put(player.getUUID(),new Seen(player.blockPosition().immutable(),now));
     }
     private double facing(Player target,Vec3 point) {
@@ -688,6 +694,15 @@ public final class StalkProcess extends BaritoneProcessHelper implements IBehavi
     }
 
     private PathingCommand search(boolean failed,boolean safe) {
+        long now=System.currentTimeMillis();Seen local=seen.get(targetId);
+        Sighting shared=baritone.getNetwork().hint(targetId,MiningRouteAccess.dimension(ctx));
+        if(SharedSightings.shouldRedirect(shared,peerSearch,local==null?0:local.time(),peerSearchAt,now)) {
+            peerSearch=shared;peerSearchAt=now;checkedLastSeen=true;searchAnchor=MiningRouteAccess.position(shared.point());
+            searchGoal=new GoalStandoff(searchAnchor,distance());searchStarted=now;legTicks=siteWait=0;retryAt=0;
+            tell(shared.reporterName()+" saw "+targetName+" at "+coordinates(shared.point().dimension(),searchAnchor)
+                    +" "+Math.max(0,(now-shared.observedAt())/1000)+"s ago; checking that report");
+            return path(searchGoal);
+        }
         if(waitingToRetry(safe))return pause();
         long timeout=StealthPolicy.bounded(Baritone.settings().stalkSearchTimeoutMS.value,10000L,600000L);
         if(System.currentTimeMillis()-searchStarted>timeout)return restartSearch("Search pass finished; keeping the target and trying again",safe,false);
@@ -718,7 +733,7 @@ public final class StalkProcess extends BaritoneProcessHelper implements IBehavi
     }
     private PathingCommand restartSearch(String reason,boolean safe,boolean recycle) {
         searchGoal=null;legTicks=siteWait=0;
-        if(recycle) { searchStep=memoryStep=0;checkedLastSeen=false; }
+        if(recycle) { searchStep=memoryStep=0;checkedLastSeen=false;peerSearch=null;peerSearchAt=0; }
         searchStarted=System.currentTimeMillis();
         rememberedPlaces=memory().places(targetId,MiningRouteAccess.dimension(ctx),searchStarted,retention());
         return retry(Phase.SEARCH,reason,safe);
@@ -792,6 +807,7 @@ public final class StalkProcess extends BaritoneProcessHelper implements IBehavi
         watchStation.reset();retryAt=lastRetryReport=0;retryCount=0;retryReason="";recycleVantages=targetMissing=false;
         searchStep=memoryStep=legTicks=siteWait=gazeTicks=quietTicks=scatterTicks=scatterQuiet=failedPaths=attempts=attackCount=0;
         ambushAt=approachStarted=attackStarted=lastRecorded=lastReport=0;rememberedPlaces=List.of();failedVantages.clear();
+        peerSearch=null;peerSearchAt=0;
         baritone.getInputOverrideHandler().setInputForceState(Input.SNEAK,false);baritone.getInputOverrideHandler().setInputForceState(Input.SPRINT,false);
     }
     @Override public void onPlayerDeath() { onLostControl(); }

@@ -31,6 +31,13 @@ fi
     src/main/java/baritone/utils/social/BlastPolicy.java \
     src/main/java/baritone/utils/social/CombatTerrainPolicy.java \
     src/main/java/baritone/utils/social/PlayerMemory.java \
+    src/main/java/baritone/utils/network/NetworkProtocol.java \
+    src/main/java/baritone/utils/network/SharedSightings.java \
+    src/main/java/baritone/utils/network/NetworkConfig.java \
+    src/main/java/baritone/utils/network/NetworkAtlas.java \
+    src/main/java/baritone/utils/network/BotNetwork.java \
+    src/main/java/baritone/utils/network/LocalNetworkViewer.java \
+    src/test/java/baritone/utils/network/NetworkChecks.java \
     src/test/java/baritone/utils/social/StealthChecks.java \
     src/test/java/baritone/utils/mining/MiningPolicyChecks.java \
     src/test/java/baritone/utils/mining/WorldRouteChecks.java \
@@ -45,3 +52,4 @@ java -cp "$task_classes" baritone.utils.bot.BotPolicyChecks
 java -cp "$task_classes" baritone.utils.bot.CompanionPolicyChecks
 
 java -cp "$task_classes" baritone.utils.social.StealthChecks
+java -cp "$task_classes:src/main/resources" baritone.utils.network.NetworkChecks

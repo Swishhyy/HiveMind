@@ -406,6 +406,14 @@ public final class Settings {
     public final Setting<Long> stalkReportIntervalMS = new Setting<>(120000L);
     public final Setting<Integer> stalkMemoryDays = new Setting<>(30);
 
+    /** Connection endpoints and keys remain in the per-server bot-network.properties file, managed with #network. */
+    public final Setting<Boolean> networkShareSightings = new Setting<>(true);
+    public final Setting<Boolean> networkShareExploration = new Setting<>(true);
+    public final Setting<Long> networkSightingIntervalMS = new Setting<>(5000L);
+    /** Search hints expire quickly; the separate atlas retains historical observations for up to 30 days. */
+    public final Setting<Long> networkSightingTTLMS = new Setting<>(120000L);
+    public final Setting<Boolean> networkRenderSightings = new Setting<>(false);
+
     /** Explicit named-player ambush uses normal client attacks; all timers and attempts are bounded. */
     public final Setting<Boolean> killAllowTrustedTargets = new Setting<>(false);
     public final Setting<Integer> killMinimumHealth = new Setting<>(16);

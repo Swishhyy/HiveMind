@@ -53,4 +53,8 @@ public final class MiningPoliciesTest {
     public void standOffAndRetreatRespectDistanceAndSearchLimits() {
         baritone.utils.social.SocialPolicyChecks.runAll();
     }
+    @Test
+    public void networkRelayHistoryReconnectsAndLocalViewerPreserveBoundaries() throws Exception {
+        baritone.utils.network.NetworkChecks.runAll();
+    }
 }
