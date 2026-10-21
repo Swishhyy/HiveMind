@@ -47,12 +47,17 @@ public final class NetworkConfig {
     }
     private final Path file;
     private Options options;
-    public NetworkConfig(Path root) {
+    public NetworkConfig(Path root) { this(root, NetworkProtocol.newKey()); }
+    public NetworkConfig(Path root, String clientKey) {
         file = root.resolve("bot-network.properties"); Properties p = AtomicProperties.read(file);
         try {
-            options = new Options(Mode.valueOf(p.getProperty("mode", "OFF").toUpperCase(Locale.ROOT)), p.getProperty("key", ""),
+            String key = p.getProperty("key", "");
+            boolean initialize = key.isEmpty();
+            if (initialize) key = NetworkProtocol.checkKey(clientKey);
+            options = new Options(Mode.valueOf(p.getProperty("mode", "OFF").toUpperCase(Locale.ROOT)), key,
                     p.getProperty("host", "127.0.0.1"), Integer.parseInt(p.getProperty("port", "" + DEFAULT_PORT)),
                     p.getProperty("bind", "0.0.0.0"), p.getProperty("scope", ""), Integer.parseInt(p.getProperty("webPort", "0")));
+            if (initialize) save(options);
         } catch (RuntimeException e) { throw new IllegalStateException("Invalid bot-network.properties; correct it before connecting", e); }
     }
     public Options options() { return options; }

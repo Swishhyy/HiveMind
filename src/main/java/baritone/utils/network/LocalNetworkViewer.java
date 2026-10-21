@@ -24,15 +24,20 @@ import java.net.*;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.concurrent.*;
+import java.util.function.Predicate;
 
-/** Read-only localhost page; an independent random access token protects coordinates from other web origins. */
+/** Local control page. Authenticated HTTP actions are queued for execution on the Minecraft client thread. */
 public final class LocalNetworkViewer implements AutoCloseable {
     private final HttpServer server;
     private final ExecutorService workers;
     private final String token = NetworkProtocol.newKey();
     private final byte[] page;
+    private final Predicate<WebControlAction> actions;
     private volatile byte[] snapshot = "{\"now\":0,\"status\":\"Waiting for world data\",\"dimension\":\"minecraft:overworld\",\"samples\":0,\"peers\":[],\"chunks\":[],\"bots\":[],\"sightings\":[],\"hotspots\":[]}".getBytes(StandardCharsets.UTF_8);
-    public LocalNetworkViewer(int port) throws IOException {
+    private volatile byte[] control = "{\"ready\":false,\"bots\":[],\"schema\":[],\"actions\":[]}".getBytes(StandardCharsets.UTF_8);
+    public LocalNetworkViewer(int port) throws IOException { this(port,action->false); }
+    public LocalNetworkViewer(int port,Predicate<WebControlAction> actions) throws IOException {
+        this.actions=actions;
         try (InputStream stream = LocalNetworkViewer.class.getResourceAsStream("/assets/baritone/network/index.html")) {
             if (stream == null) throw new IOException("Network viewer resource is missing");
             page = stream.readAllBytes();
@@ -46,6 +51,11 @@ public final class LocalNetworkViewer implements AutoCloseable {
     public int port() { return server.getAddress().getPort(); }
     public String url() { return "http://127.0.0.1:" + port() + "/#" + token; }
     public void snapshot(String json) { snapshot = json.getBytes(StandardCharsets.UTF_8); }
+    public void controls(String json) { control=json.getBytes(StandardCharsets.UTF_8); }
+    private boolean authenticated(HttpExchange request){
+        String auth=request.getRequestHeaders().getFirst("Authorization");
+        return auth!=null&&MessageDigest.isEqual(("Bearer "+token).getBytes(StandardCharsets.US_ASCII),auth.getBytes(StandardCharsets.UTF_8));
+    }
     private void handle(HttpExchange request) throws IOException {
         try {
             var headers = request.getResponseHeaders();
@@ -54,14 +64,27 @@ public final class LocalNetworkViewer implements AutoCloseable {
             String host = request.getRequestHeaders().getFirst("Host"), origin = request.getRequestHeaders().getFirst("Origin");
             if (!("127.0.0.1:" + port()).equals(host) && !("localhost:" + port()).equals(host)) { send(request, 403, "text/plain", "Local host required".getBytes(StandardCharsets.UTF_8)); return; }
             if (origin != null && !origin.equals("http://" + host)) { send(request, 403, "text/plain", new byte[0]); return; }
-            if (!request.getRequestMethod().equals("GET")) { send(request, 405, "text/plain", new byte[0]); return; }
+            String path=request.getRequestURI().getPath(),method=request.getRequestMethod();
+            if(path.startsWith("/api/")&&!authenticated(request)){send(request,401,"text/plain","Open the address printed by #network web".getBytes(StandardCharsets.UTF_8));return;}
+            if(!method.equals("GET")&&!(method.equals("POST")&&path.equals("/api/control"))){send(request,405,"text/plain",new byte[0]);return;}
             switch (request.getRequestURI().getPath()) {
                 case "/" -> send(request, 200, "text/html; charset=utf-8", page);
                 case "/api/snapshot" -> {
-                    String auth = request.getRequestHeaders().getFirst("Authorization");
-                    if (auth == null || !MessageDigest.isEqual(("Bearer " + token).getBytes(StandardCharsets.US_ASCII), auth.getBytes(StandardCharsets.UTF_8)))
-                        send(request, 401, "text/plain", "Open the address printed by #network web".getBytes(StandardCharsets.UTF_8));
-                    else send(request, 200, "application/json; charset=utf-8", snapshot);
+                    send(request, 200, "application/json; charset=utf-8", snapshot);
+                }
+                case "/api/control" -> {
+                    if(method.equals("GET"))send(request,200,"application/json; charset=utf-8",control);
+                    else{
+                        String type=request.getRequestHeaders().getFirst("Content-Type");
+                        if(type==null||!type.toLowerCase(java.util.Locale.ROOT).startsWith("application/x-www-form-urlencoded")){send(request,415,"text/plain",new byte[0]);return;}
+                        byte[] body=request.getRequestBody().readNBytes(8193);
+                        if(body.length>8192){send(request,413,"text/plain",new byte[0]);return;}
+                        try{
+                            WebControlAction action=WebControlAction.parse(body,System.currentTimeMillis());
+                            if(!actions.test(action)){send(request,429,"text/plain","Control queue is busy; try again shortly".getBytes(StandardCharsets.UTF_8));return;}
+                            send(request,202,"application/json; charset=utf-8",("{\"id\":\""+action.id()+"\"}").getBytes(StandardCharsets.UTF_8));
+                        }catch(IllegalArgumentException error){send(request,400,"text/plain",error.getMessage().getBytes(StandardCharsets.UTF_8));}
+                    }
                 }
                 default -> send(request, 404, "text/plain", new byte[0]);
             }

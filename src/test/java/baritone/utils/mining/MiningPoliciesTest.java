@@ -57,4 +57,8 @@ public final class MiningPoliciesTest {
     public void networkRelayHistoryReconnectsAndLocalViewerPreserveBoundaries() throws Exception {
         baritone.utils.network.NetworkChecks.runAll();
     }
+    @Test
+    public void controlsPersistGlobalAndIndividualPoliciesAndRouteOnlyValidatedRequests() throws Exception {
+        baritone.utils.network.ControlChecks.runAll();
+    }
 }

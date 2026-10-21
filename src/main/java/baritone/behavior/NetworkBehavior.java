@@ -40,12 +40,14 @@ import java.util.concurrent.*;
 /** The only network adapter that reads the Minecraft world. It snapshots observations on the client thread. */
 public final class NetworkBehavior extends Behavior {
     private final SharedSightings marks = new SharedSightings();
+    private final ClientNetworkKey clientKey;
     private final Map<UUID, Sighting> published = new HashMap<>();
     private final ExecutorService saves = Executors.newSingleThreadExecutor(task -> { Thread thread = new Thread(task, "Baritone-atlas-save"); thread.setDaemon(true); return thread; });
     private final Set<NetworkAtlas> saving = ConcurrentHashMap.newKeySet();
     private Path root;
     private NetworkConfig config;
     private NetworkAtlas atlas;
+    private NetworkControls controls;
     private BotNetwork network;
     private NetworkConfig.Options started;
     private LocalNetworkViewer viewer;
@@ -55,23 +57,24 @@ public final class NetworkBehavior extends Behavior {
     private int scanCursor;
     private String webError = "";
     private volatile String storageError;
-    public NetworkBehavior(Baritone bot) { super(bot); }
+    public NetworkBehavior(Baritone bot) { super(bot);clientKey=new ClientNetworkKey(bot.getDirectory()); }
     public NetworkConfig config() {
         Path current = MiningRouteAccess.root(ctx);
         if (!current.equals(root)) {
-            NetworkConfig next = new NetworkConfig(current); NetworkAtlas history = new NetworkAtlas(current);
+            NetworkConfig next = new NetworkConfig(current,clientKey.key()); NetworkAtlas history = new NetworkAtlas(current);
             clearWorld(); config = next; atlas = history; root = current;
         }
+        if(controls==null)controls=new NetworkControls(this,baritone,current);
         return config;
     }
     public void configure(NetworkConfig.Options options) {
         config().save(options); nextSetup = nextWebAttempt = 0; ensure();
     }
     public void reload() {
-        Path current = MiningRouteAccess.root(ctx); NetworkConfig next = new NetworkConfig(current);
+        Path current = MiningRouteAccess.root(ctx); NetworkConfig next = new NetworkConfig(current,clientKey.key());
         config = next; nextSetup = nextWebAttempt = 0; ensure();
     }
-    private Identity identity() {
+    Identity localIdentity() {
         String server;
         if (!config.options().scope().isEmpty()) server = "server-label:" + config.options().scope();
         else {
@@ -84,7 +87,7 @@ public final class NetworkBehavior extends Behavior {
         return a != null && a.mode() == b.mode() && a.key().equals(b.key()) && a.host().equals(b.host()) && a.port() == b.port() && a.bind().equals(b.bind()) && a.scope().equals(b.scope());
     }
     private void ensure() {
-        config(); NetworkConfig.Options options = config.options(); Identity who = identity();
+        config(); NetworkConfig.Options options = config.options(); Identity who = localIdentity();
         boolean sightings = Baritone.settings().networkShareSightings.value, exploration = Baritone.settings().networkShareExploration.value;
         if (!sameTransport(started, options) || sharingSightings != sightings || sharingExploration != exploration || network != null && !network.identity().equals(who)) {
             stopNetwork(); started = options; sharingSightings = sightings; sharingExploration = exploration;
@@ -98,7 +101,7 @@ public final class NetworkBehavior extends Behavior {
         }
         if (viewer != null && viewer.port() != options.webPort()) { viewer.close(); viewer = null; }
         if (options.webPort() != 0 && viewer == null && System.currentTimeMillis() >= nextWebAttempt) {
-            try { viewer = new LocalNetworkViewer(options.webPort()); webError = ""; }
+            try { NetworkControls owner=controls;viewer = new LocalNetworkViewer(options.webPort(),owner::enqueue); webError = ""; }
             catch (IOException e) { webError = "Cannot start local page: " + e.getMessage(); nextWebAttempt = System.currentTimeMillis() + 30000; }
         }
     }
@@ -108,6 +111,7 @@ public final class NetworkBehavior extends Behavior {
     }
     public String pageUrl() { if (viewer == null) throw new IllegalStateException(webError.isEmpty() ? "Use network web [port] to start the local page" : webError); return viewer.url(); }
     public List<Identity> peers() { return network == null ? List.of() : network.peers(); }
+    BotNetwork transport(){return network;}
     public List<Sighting> sightings(String name) {
         return marks.all(System.currentTimeMillis(), ttl()).stream().filter(s -> name == null || s.playerName().equalsIgnoreCase(name)).limit(32).toList();
     }
@@ -123,11 +127,11 @@ public final class NetworkBehavior extends Behavior {
         if (!history.dirty() || !saving.add(history)) return;
         saves.execute(() -> { try { do { history.save(); } while (history.dirty()); } catch (RuntimeException e) { storageError = e.getMessage(); } finally { saving.remove(history); } });
     }
-    private void stopNetwork() { if (network != null) network.close(); network = null; marks.clear(); published.clear(); lastExploration = null; }
+    private void stopNetwork() { if (network != null) network.close(); network = null; marks.clear(); published.clear(); lastExploration = null;if(controls!=null)controls.connectionChanged(); }
     private void closeRuntime() { stopNetwork(); started = null; if (viewer != null) viewer.close(); viewer = null; }
     private void clearWorld() {
         if (atlas != null) save(atlas);
-        closeRuntime(); root = null; config = null; atlas = null; lastScan = lastPage = lastSave = 0; scanCursor = 0; webError = "";
+        closeRuntime();if(controls!=null)controls.close();controls=null;root = null; config = null; atlas = null; lastScan = lastPage = lastSave = 0; scanCursor = 0; webError = "";
     }
     @Override public void onTick(TickEvent event) {
         if (event.getState() != EventState.PRE) return;
@@ -140,11 +144,13 @@ public final class NetworkBehavior extends Behavior {
         try {
             ensure();
             if (network != null) for (Message message : network.drain(128)) {
+                if(message instanceof ControlPackets.Packet packet){controls.accept(packet,now);continue;}
                 atlas.accept(message, now);
                 if (message instanceof Sighting sighting && !sighting.reporter().equals(ctx.player().getUUID())) marks.accept(sighting, now, ttl());
             }
+            controls.tick(now);
             if ((network != null || viewer != null) && ctx.player().isAlive() && now - lastScan >= 1000) { scan(now); lastScan = now; }
-            if (viewer != null && now - lastPage >= 1000) { viewer.snapshot(atlas.json(now, network == null ? "Local observations · network off" : network.status(), MiningRouteAccess.dimension(ctx), peers())); lastPage = now; }
+            if (viewer != null && now - lastPage >= 1000) { viewer.snapshot(atlas.json(now, network == null ? "Local observations · network off" : network.status(), MiningRouteAccess.dimension(ctx), peers()));viewer.controls(controls.json(now));lastPage = now; }
             if (now - lastSave >= 30000) { save(atlas); lastSave = now; }
             if (storageError != null) { String problem = storageError; storageError = null; throw new IllegalStateException(problem); }
         } catch (RuntimeException e) {
@@ -153,7 +159,7 @@ public final class NetworkBehavior extends Behavior {
         }
     }
     private void scan(long now) {
-        Identity who = identity(); var point = MiningRouteAccess.endpoint(ctx, ctx.playerFeet());
+        Identity who = localIdentity(); var point = MiningRouteAccess.endpoint(ctx, ctx.playerFeet());
         if (lastExploration == null || now - lastExploration.observedAt() >= 5000 || !lastExploration.point().dimension().equals(point.dimension())
                 || Math.floorDiv(lastExploration.point().x(), 16) != Math.floorDiv(point.x(), 16) || Math.floorDiv(lastExploration.point().z(), 16) != Math.floorDiv(point.z(), 16)) {
             lastExploration = new Exploration(who.id(), who.name(), point, now); atlas.accept(lastExploration, now);

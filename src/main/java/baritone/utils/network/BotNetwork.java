@@ -18,6 +18,7 @@
 package baritone.utils.network;
 
 import baritone.utils.network.NetworkProtocol.*;
+import baritone.utils.network.ControlPackets.*;
 import java.io.*;
 import java.net.*;
 import java.util.*;
@@ -36,6 +37,9 @@ public final class BotNetwork implements AutoCloseable {
     private final Set<Socket> sockets = ConcurrentHashMap.newKeySet();
     private final Map<UUID, Peer> peers = new ConcurrentHashMap<>();
     private final BlockingQueue<Message> received = new ArrayBlockingQueue<>(512);
+    private final BlockingQueue<Packet> controls = new ArrayBlockingQueue<>(128);
+    private final Map<UUID,State> states = new ConcurrentHashMap<>();
+    private volatile Defaults defaults;
     private final NetworkAtlas cache = new NetworkAtlas();
     private volatile ServerSocket listener;
     private volatile boolean closed;
@@ -57,6 +61,12 @@ public final class BotNetwork implements AutoCloseable {
     public static BotNetwork host(Identity identity, String key, String bind, int port, List<Message> history) { return new BotNetwork(identity, key, bind, port, true, history); }
     public static BotNetwork join(Identity identity, String key, String host, int port, List<Message> history) { return new BotNetwork(identity, key, host, port, false, history); }
     public Identity identity() { return identity; }
+    public boolean isHost() { return host; }
+    public List<State> states() {
+        long now=System.currentTimeMillis();
+        return states.values().stream().filter(state->state.valid(now)&&(!host||state.reporter().equals(identity.id())||peers.containsKey(state.reporter())))
+                .sorted(Comparator.comparing(State::reporterName)).toList();
+    }
     public int boundPort() { return boundPort; }
     public List<Identity> peers() { return peers.values().stream().map(peer -> peer.channel.remote()).sorted(Comparator.comparing(Identity::name)).toList(); }
     public boolean connected() { return !peers.isEmpty(); }
@@ -67,11 +77,18 @@ public final class BotNetwork implements AutoCloseable {
     }
     public List<Message> drain(int limit) {
         List<Message> result = new ArrayList<>();
-        received.drainTo(result, Math.max(0, Math.min(512, limit))); return result;
+        int count=Math.max(0,Math.min(512,limit));
+        controls.drainTo(result,count);received.drainTo(result,count-result.size());return result;
     }
     /** Only firsthand reports from this client's identity may enter through this API. Received reports never return here. */
     public boolean publish(Message report) {
         if (closed || !report.reporter().equals(identity.id()) || !report.reporterName().equals(identity.name())) return false;
+        if(report instanceof Packet packet){
+            if(!packet.valid(System.currentTimeMillis())||(packet instanceof Execute||packet instanceof Policy||packet instanceof Defaults)&&!host||packet instanceof Request&&host)return false;
+            if(packet instanceof State state)states.put(state.reporter(),state);
+            if(packet instanceof Defaults current)defaults=current;
+            boolean delivered=true;for(Peer peer:peers.values())delivered&=peer.offer(packet);return delivered;
+        }
         if (!cache.accept(report, System.currentTimeMillis())) return false;
         for (Peer peer : peers.values()) peer.offer(report);
         return true;
@@ -79,6 +96,23 @@ public final class BotNetwork implements AutoCloseable {
     private void route(Peer sender, Message report) throws IOException {
         if (host && !report.reporter().equals(sender.channel.remote().id()))
             throw new IOException("Peer attempted to impersonate another reporter");
+        if(report instanceof Packet packet){
+            if(host&&(packet instanceof Execute||packet instanceof Policy||packet instanceof Defaults))throw new IOException("Only the network host can dispatch control");
+            if(!host&&(packet instanceof Request||(packet instanceof Execute||packet instanceof Policy||packet instanceof Defaults)&&!packet.reporter().equals(sender.channel.remote().id())))
+                throw new IOException("Invalid control authority");
+            if(!packet.valid(System.currentTimeMillis()))return;
+            if(packet instanceof State state){
+                long now=System.currentTimeMillis();states.values().removeIf(value->!value.valid(now));
+                State old=states.get(state.reporter());if(old!=null&&old.observedAt()>=state.observedAt())return;
+                if(states.size()>=256&&!states.containsKey(state.reporter()))throw new IOException("Bot state limit exceeded");
+                states.put(state.reporter(),state);
+            }
+            if(packet instanceof Defaults current)defaults=current;
+            if(!controls.offer(packet))throw new IOException("Control inbox is full; action was not queued");
+            // Requests reach the host's client thread for validation before any bot is told to execute them.
+            if(host&&!(packet instanceof Request))for(Peer peer:peers.values())if(peer!=sender)peer.offer(packet);
+            return;
+        }
         if (!report.valid(System.currentTimeMillis())) return;
         if (!cache.accept(report, System.currentTimeMillis())) return;
         if (!received.offer(report)) { received.poll(); received.offer(report); }
@@ -149,28 +183,38 @@ public final class BotNetwork implements AutoCloseable {
         ServerSocket server = listener; if (server != null) try { server.close(); } catch (IOException ignored) {}
         for (Peer peer : peers.values()) peer.close();
         for (Socket socket : sockets) forget(socket);
-        peers.clear(); cache.clear(); received.clear(); io.shutdownNow();
+        peers.clear(); cache.clear(); received.clear(); controls.clear();states.clear();io.shutdownNow();
     }
     private final class Peer {
         private final Socket socket;
         private final NetworkProtocol.Channel channel;
         private final BlockingQueue<Message> outgoing = new ArrayBlockingQueue<>(256);
+        private final BlockingQueue<Packet> priority = new ArrayBlockingQueue<>(64);
         private final Deque<Message> history;
         private volatile boolean stopped, registered;
         private Peer(Socket socket, NetworkProtocol.Channel channel) {
             this.socket = socket; this.channel = channel;
             history = new ArrayDeque<>(cache.snapshot(System.currentTimeMillis()).stream()
                     .filter(message -> !message.reporter().equals(channel.remote().id()) && (host || message.reporter().equals(identity.id()))).toList());
+            for(State state:states())if(!state.reporter().equals(channel.remote().id())&&(host||state.reporter().equals(identity.id())))history.addFirst(state);
+            Defaults current=defaults;if(host&&current!=null&&current.valid(System.currentTimeMillis()))history.addFirst(current);
         }
-        private void offer(Message sighting) {
+        private boolean offer(Message sighting) {
+            if(sighting instanceof Packet packet){
+                if(stopped)return false;
+                if(priority.offer(packet))return true;
+                close();return false;
+            }
             if (!stopped && !outgoing.offer(sighting)) { outgoing.poll(); outgoing.offer(sighting); }
+            return !stopped;
         }
         private void write() {
             try {
                 while (!closed && !stopped) {
-                    Message report = outgoing.poll();
+                    Message report = priority.poll();
+                    if(report==null)report=outgoing.poll();
                     if (report == null) report = history.pollFirst();
-                    if (report == null) report = outgoing.poll(3, TimeUnit.SECONDS);
+                    if (report == null) report = priority.poll(500, TimeUnit.MILLISECONDS);
                     if (closed || stopped) return;
                     channel.write(report); // An empty queue sends an authenticated keepalive.
                     if (report != null) Thread.sleep(8); // Bound initial history replay below the receiver's rate limit.
@@ -191,6 +235,6 @@ public final class BotNetwork implements AutoCloseable {
             } catch (IOException | RuntimeException e) { if (!stopped) failed(e); }
             finally { close(); }
         }
-        private void close() { stopped = true; peers.remove(channel.remote().id(), this); outgoing.clear(); forget(socket); }
+        private void close() { stopped = true; peers.remove(channel.remote().id(), this);if(host)states.remove(channel.remote().id());outgoing.clear();priority.clear();forget(socket); }
     }
 }

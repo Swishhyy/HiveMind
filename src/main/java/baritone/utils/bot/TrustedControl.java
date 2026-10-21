@@ -34,7 +34,13 @@ public final class TrustedControl {
     }
     public boolean trusted(UUID id) { return id != null && players().contains(id); }
     public void change(UUID id, boolean add) {
-        Set<UUID> ids = new TreeSet<>(players()); if (add) ids.add(id); else ids.remove(id);
+        apply(Map.of(id,add));
+    }
+    public void apply(Map<UUID,Boolean> changes) {
+        Set<UUID> original=players(),ids=new TreeSet<>(original);
+        changes.forEach((id,add)->{if(add)ids.add(id);else ids.remove(id);});
+        if(ids.equals(original))return;
+        if(ids.size()>128)throw new IllegalArgumentException("A bot may trust at most 128 controllers");
         Properties updated = new Properties(); updated.putAll(values);
         updated.setProperty("trusted", String.join(",", ids.stream().map(UUID::toString).toList()));
         updated.putIfAbsent("whisperTypes", "minecraft:msg_command_incoming");

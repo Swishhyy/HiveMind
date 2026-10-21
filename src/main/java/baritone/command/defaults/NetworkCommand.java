@@ -57,7 +57,13 @@ public final class NetworkCommand extends Command {
                     network.configure(options.mode(NetworkConfig.Mode.HOST, options.host(), port)); logDirect(network.status());
                 }
                 case "join", "connect" -> {
-                    String host = args.getString(); int port = args.hasAny() ? args.getAs(Integer.class) : NetworkConfig.DEFAULT_PORT; args.requireMax(0);
+                    String host = args.getString();int port=NetworkConfig.DEFAULT_PORT;String key=null;
+                    if(args.hasAny()){
+                        String next=args.getString();
+                        if(next.matches("[0-9]{1,5}")){port=Integer.parseInt(next);if(args.hasAny())key=args.getString();}
+                        else key=next;
+                    }
+                    args.requireMax(0);if(key!=null)options=options.key(key);
                     network.configure(options.mode(NetworkConfig.Mode.JOIN, host, port)); logDirect(network.status());
                 }
                 case "off", "disconnect" -> { args.requireMax(0); network.configure(options.mode(NetworkConfig.Mode.OFF, options.host(), options.port())); logDirect("Client network disabled; saved atlas retained"); }
@@ -104,7 +110,8 @@ public final class NetworkCommand extends Command {
     @Override public List<String> getLongDesc() {
         return List.of("network key [key|new] - Generate/show a key locally; click the key or [Copy key] to copy it.",
                 "network host [port] - Run a relay in this client (default TCP 28766).",
-                "network join <host> [port] - Join that relay; reconnects automatically.",
+                "Every client generates a persistent key on first launch; network host works immediately.",
+                "network join <host> [port] [host-key] - Join in one command; reconnects automatically.",
                 "network status/peers/sightings [player] - Inspect connections and recent marks.",
                 "network web [port|off] - Start the localhost atlas (default 28767); click its address to open it or [Copy link] to copy it.",
                 "network off - Disconnect and disable automatic networking for this Minecraft server; keeps the atlas.",
@@ -112,6 +119,6 @@ public final class NetworkCommand extends Command {
                 "Bots must use the same Minecraft server address or explicit scope. Keys, endpoints, and page settings are saved per server.",
                 "Only real visual sightings are shared. Peers' recent marks help stalk searches but never count as firsthand base evidence.",
                 "The page saves visited chunks and a bounded 30-day sighting history, including reporting bots and frequent areas.",
-                "No remote commands run through this transport. Use the existing trusted-whisper system for bot control.");
+                "The local page can issue quick commands, change trust, and apply settings to one bot or all bots.");
     }
 }

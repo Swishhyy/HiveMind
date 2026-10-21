@@ -53,7 +53,7 @@ public final class NetworkAtlas {
     }
     public synchronized boolean accept(Message message, long now) {
         prune(now);
-        if (message == null || !message.valid(now)) return false;
+        if (message == null || message instanceof ControlPackets.Packet || !message.valid(now)) return false;
         if (message instanceof Sighting sighting) {
             if (!sightings.add(sighting)) return false;
             if (sightings.size() > 4096) sightings.remove(sightings.stream().min(Comparator.comparingLong(Sighting::observedAt)).orElseThrow());
@@ -144,7 +144,7 @@ public final class NetworkAtlas {
         return out.append(values).append("]}").toString();
     }
     private static String point(baritone.utils.mining.WorldRoutes.Endpoint p) { return "\"d\":" + quote(p.dimension()) + ",\"x\":" + p.x() + ",\"y\":" + p.y() + ",\"z\":" + p.z(); }
-    private static String quote(String value) {
+    public static String quote(String value) {
         StringBuilder out = new StringBuilder("\"");
         for (char ch : value.toCharArray()) {
             if (ch == '"' || ch == '\\') out.append('\\').append(ch);

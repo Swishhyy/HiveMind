@@ -186,7 +186,7 @@ public final class NetworkChecks {
             page.snapshot("{\"test\":\"no secrets\"}");
             check(request(page,"GET",false,null) == 401, "Local API requires the independent page token");
             check(request(page,"GET",true,null) == 200, "The local page can read its own snapshot");
-            check(request(page,"POST",true,null) == 405, "The viewer exposes no mutation/command API");
+            check(request(page,"POST",true,null) == 405, "The exploration snapshot remains read-only; controls use their separate authenticated endpoint");
             check(request(page,"GET",true,"https://unrelated.example") == 403, "An unrelated web origin cannot read coordinates");
             try (Socket socket = new Socket("127.0.0.1", page.port())) {
                 socket.setSoTimeout(3000);

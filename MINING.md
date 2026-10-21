@@ -68,7 +68,7 @@ Use `#set fleeConflicts false` to disable it. `#pause` and `#stop` retain priori
 
 ## Stealth stalking and player sightings
 
-The optional [client network and local atlas](NETWORK.md) shares visual sightings and visited chunks between bot clients. Use `#network` to connect them and `#network web` to open a read-only localhost map with source/age information and frequent sighting areas.
+The optional [client network and local atlas](NETWORK.md) shares visual sightings and visited chunks between bot clients. Keys are generated on client launch. Use `#network` to connect clients and `#network web` for the localhost map, quick commands, trust and settings for one bot or all bots.
 
 `#stalk <player>` watches an online UUID; `#stalk` / `#stalk random` chooses one player, preferring a tracked nearby player. The viewing distance defaults to 40 blocks. The bot chooses loaded, walkable vantage points with a clear ray to the player's eyes, prefers the rear/side of their facing direction, and remains within `stalkVerticalRange` (default five blocks) vertically. `stalkPreferOpenAir=true` rejects enclosed roofs/hillside cavities while allowing leaf cover up to 12 blocks overhead. It does not tunnel into a mountain to see the player. Candidate selection favors partial body cover from trees, rocks and terrain, nearby solid backdrops, and short approaches while keeping the eye-level sight line open. It compares the current position too, so a small cover improvement does not justify a long, conspicuous orbit. Once a viewing point is chosen it keeps that destination until arrival or an actual route failure, instead of recalculating it every second.
 
