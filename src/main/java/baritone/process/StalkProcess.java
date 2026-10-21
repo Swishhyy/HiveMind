@@ -18,6 +18,7 @@
 package baritone.process;
 
 import baritone.Baritone;
+import baritone.utils.network.TeamPackets.Kind;
 import baritone.api.behavior.IBehavior;
 import baritone.api.event.events.TickEvent;
 import baritone.api.event.events.BlockChangeEvent;
@@ -105,6 +106,9 @@ public final class StalkProcess extends BaritoneProcessHelper implements IBehavi
     public StalkProcess(Baritone bot) { super(bot);explosives=new ExplosiveCombat(bot); }
     @Override public boolean isActive() { return targetId!=null; }
     public boolean hunting() { return isActive()&&hunt; }
+    public UUID target(){return targetId;}
+    public BlockPos teamPoint(){BlockPos blast=explosives.teamPoint();return blast!=null?blast:vantage!=null?vantage:ctx.player()==null?null:ctx.playerFeet().immutable();}
+    public boolean teamExplosives(){return hunting()&&!meleeFallback&&combatStyle!=CombatStyle.MELEE&&phase!=Phase.SCATTER&&equipmentReady(combatStyle)&&ctx.player().getHealth()>Baritone.settings().killRetreatHealth.value;}
     public boolean terrainLocked() { return isActive()&&Baritone.settings().stalkMinimalEvidence.value; }
     /** Quiet (no sprint, crouch where allowed) only while another player could hear or possibly see the bot. */
     public boolean quietMovement() { return isActive()&&perceptible&&quietPhase()&&!baritone.getConflictProcess().isActive(); }
@@ -147,6 +151,7 @@ public final class StalkProcess extends BaritoneProcessHelper implements IBehavi
         if(point==null)throw new IllegalStateException("Supply coordinates or observe the player in this dimension first");
         String canonical=visible!=null?visible.getGameProfile().name():places.isEmpty()?name:places.get(0).name();
         memory().confirm(id,canonical,MiningRouteAccess.endpoint(ctx,point),System.currentTimeMillis(),retention());
+        baritone.getNetwork().confirmSite(point,canonical);
     }
     public void start(String requested) { start(requested,false,false,CombatStyle.MELEE); }
     public void startHunt(String requested) { startHunt(requested,CombatStyle.parse(Baritone.settings().killCombatStyle.value)); }
@@ -160,7 +165,7 @@ public final class StalkProcess extends BaritoneProcessHelper implements IBehavi
             throw new IllegalStateException("Close containers and clear the cursor before tracking");
         rememberPlayers();memory();
         List<PlayerInfo> online=ctx.minecraft().getConnection().getOnlinePlayers().stream()
-                .filter(info->!info.getProfile().id().equals(ctx.player().getUUID())).toList();
+                .filter(info->!info.getProfile().id().equals(ctx.player().getUUID())&&!baritone.getNetwork().isTeammate(info.getProfile().id())).toList();
         UUID selected;String name;
         boolean random=requested==null||requested.equalsIgnoreCase("random");
         if(kill&&random)throw new IllegalStateException("Name one player explicitly: kill <player>");
@@ -181,6 +186,7 @@ public final class StalkProcess extends BaritoneProcessHelper implements IBehavi
                     .orElseThrow(()->new IllegalStateException("That player is not online; use stalk check <name> for saved places"));
             selected=profile.getProfile().id();name=profile.getProfile().name();
         }
+        if(baritone.getNetwork().isTeammate(selected))throw new IllegalStateException("Connected bots are teammates and cannot be stalked or hunted");
         if(selected.equals(ctx.player().getUUID()))throw new IllegalStateException("The bot cannot target itself");
         if(Baritone.settings().stalkMinimalEvidence.value)for(EquipmentSlot slot:EquipmentSlot.values())
             if(ctx.player().getItemBySlot(slot).getEnchantments().keySet().stream().anyMatch(holder->holder.is(Enchantments.FROST_WALKER)))
@@ -229,7 +235,7 @@ public final class StalkProcess extends BaritoneProcessHelper implements IBehavi
     }
     private boolean alone(Player target) {
         return ctx.world().players().stream().noneMatch(other->other!=ctx.player()&&!other.getUUID().equals(target.getUUID())&&!other.isSpectator()&&other.isAlive()
-                &&other.distanceToSqr(target)<144&&!baritone.getBotControl().isTrusted(other.getUUID()));
+                &&other.distanceToSqr(target)<144&&!baritone.getBotControl().isTrusted(other.getUUID())&&!baritone.getNetwork().isTeammate(other.getUUID()));
     }
     private boolean equipmentReady(CombatStyle style) {
         return style==CombatStyle.MELEE?weapon()>=0:explosives.inProgress()||explosives.carries(style)||explosives.supplies(style)||(style==CombatStyle.AUTO&&weapon()>=0);
@@ -242,7 +248,7 @@ public final class StalkProcess extends BaritoneProcessHelper implements IBehavi
     private int opponentsNear(Player target) {
         int count=0;
         for(Player other:ctx.world().players())
-            if(other!=ctx.player()&&other.isAlive()&&!other.isSpectator()&&(other.getUUID().equals(targetId)||!baritone.getBotControl().isTrusted(other.getUUID()))
+            if(other!=ctx.player()&&other.isAlive()&&!other.isSpectator()&&!baritone.getNetwork().isTeammate(other.getUUID())&&(other.getUUID().equals(targetId)||!baritone.getBotControl().isTrusted(other.getUUID()))
                     &&(other.distanceToSqr(ctx.player())<=256||other.distanceToSqr(target)<=144))count++;
         return count;
     }
@@ -282,6 +288,7 @@ public final class StalkProcess extends BaritoneProcessHelper implements IBehavi
         try {
             if(ctx.player()==null||ctx.world()==null||!ctx.player().isAlive()||ctx.world()!=observedWorld||ctx.minecraft().getConnection()==null)
                 return stop("Bot or world changed");
+            if(baritone.getNetwork().isTeammate(targetId))return stop("Target is a connected teammate");
             if(phase==Phase.SEARCH&&!targetMissing&&waitingToRetry(safe))return pause();
             if(phase!=Phase.DRINK)releaseUse();
             if(hunt&&!committedCombat()&&System.currentTimeMillis()-taskStarted>StealthPolicy.bounded(Baritone.settings().killTimeoutMS.value,60000L,3600000L))
@@ -294,6 +301,10 @@ public final class StalkProcess extends BaritoneProcessHelper implements IBehavi
             if(phase==Phase.SCATTER)return scatterTick(target,failed,safe);
             if(hunt&&!checkingMemoryOnly&&ctx.minecraft().getConnection().getPlayerInfo(targetId)==null)return stop("Target left the server; no kill is assumed");
             if(phase==Phase.DRINK)return drink(target,safe);
+            if(hunt&&target!=null&&committedCombat()){
+                if(!baritone.getNetwork().team().ready())return watch(target,safe);
+                if(baritone.getNetwork().team().blastSupport(targetId))return support(target,safe);
+            }
             if(target==null) {
                 if(phase==Phase.ATTACK)return stop("Target left client view during combat; a kill was not confirmed");
                 targetMissing=true;
@@ -367,6 +378,14 @@ public final class StalkProcess extends BaritoneProcessHelper implements IBehavi
         return retry(Phase.WATCH,"No concealed sight line is reachable yet; staying put and retrying",safe);
     }
 
+    private PathingCommand support(Player target,boolean safe){
+        lastProgress=approachStarted=System.currentTimeMillis();
+        if(safe){baritone.getInputOverrideHandler().clearAllKeys();ctx.playerController().resetBlockRemoving();}
+        double range=ctx.player().distanceToSqr(target);
+        if(range<14*14)return path(new GoalRetreat(List.of(new GoalRetreat.Threat(target.blockPosition(),16))));
+        if(range>24*24)return path(new GoalNear(target.blockPosition(),18));
+        return watch(target,safe);
+    }
     private boolean watchRange(Player target,boolean settled) {
         return WatchPolicy.inRange(Math.hypot(ctx.player().getX()-target.getX(),ctx.player().getZ()-target.getZ()),ctx.player().getY()-target.getY(),
                 distance(),Baritone.settings().stalkPositionTolerance.value,Baritone.settings().stalkVerticalRange.value,settled);
@@ -379,6 +398,7 @@ public final class StalkProcess extends BaritoneProcessHelper implements IBehavi
 
     /** A hunt starts from wherever it already sees the target instead of first settling into the viewing band. */
     private PathingCommand ambush(Player target,boolean sight,boolean safe) {
+        if(!baritone.getNetwork().team().ready())return null;
         if(!sight||Math.hypot(target.getX()-ctx.player().getX(),target.getZ()-ctx.player().getZ())>distance()+8)return null;
         long now=System.currentTimeMillis();
         if(ambushAt==0) {
@@ -441,7 +461,7 @@ public final class StalkProcess extends BaritoneProcessHelper implements IBehavi
     private double vantageScore(Player target,BlockPos point) {
         Vec3 eye=new Vec3(point.getX()+0.5,point.getY()+1.27,point.getZ()+0.5);
         double range=Math.hypot(eye.x-target.getX(),eye.z-target.getZ());
-        return WatchPolicy.vantageScore(ctx.playerFeet().distSqr(point),facing(target,eye),cover(target,point),point.getY()-target.getY(),range-distance());
+        return WatchPolicy.vantageScore(ctx.playerFeet().distSqr(point),facing(target,eye),cover(target,point),point.getY()-target.getY(),range-distance())+baritone.getNetwork().team().watchPenalty(point,targetId);
     }
     /** Leave the eye ray open while hiding part of the body and breaking its silhouette with nearby terrain. */
     private double cover(Player target,BlockPos point) {
@@ -605,6 +625,7 @@ public final class StalkProcess extends BaritoneProcessHelper implements IBehavi
         // Look randomization never reproduces an exact rotation, so swing once the sent rotation's ray actually crosses the target.
         Vec3 eye=ctx.playerHead(),reach=eye.add(RotationUtils.calcLookDirectionFromRotation(ctx.playerRotations()).scale(4));
         if(target.getBoundingBox().inflate(0.1).clip(eye,reach).isPresent()&&ctx.player().getAttackStrengthScale(0)>=0.95f) {
+            if(!baritone.getNetwork().team().clearStrike(target))return path(new GoalNear(target.blockPosition().offset((int)Math.round(Math.cos(baritone.getNetwork().team().heading(Kind.HUNT,targetId))*3),0,(int)Math.round(Math.sin(baritone.getNetwork().team().heading(Kind.HUNT,targetId))*3)),1));
             ctx.minecraft().gameMode.attack(ctx.player(),target);ctx.player().swing(InteractionHand.MAIN_HAND,SwingAnimation.DEFAULT,false);lastStrike=now;
             if(!blocking)attackCount++; // a raised shield proves PvP is on, so blocked swings do not count toward the no-damage check
         }return pause();
@@ -674,7 +695,7 @@ public final class StalkProcess extends BaritoneProcessHelper implements IBehavi
     private boolean noticeable() {
         boolean invisible=ctx.player().hasEffect(MobEffects.INVISIBILITY),hidden=visuallyHidden();
         for(Player other:ctx.world().players()) {
-            if(other==ctx.player()||!other.isAlive()||other.isSpectator())continue;
+            if(other==ctx.player()||!other.isAlive()||other.isSpectator()||baritone.getNetwork().isTeammate(other.getUUID()))continue;
             if(StealthPolicy.mayBeNoticed(Math.sqrt(other.distanceToSqr(ctx.player())),facing(other,ctx.playerHead()),invisible,hidden,Baritone.settings().stalkSneakHearingRange.value,
                     Baritone.settings().stalkSneakViewAngle.value,()->other.hasLineOfSight(ctx.player())))return true;
         }return false;

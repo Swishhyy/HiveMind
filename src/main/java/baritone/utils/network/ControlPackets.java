@@ -24,9 +24,9 @@ import java.util.*;
 
 /** Live control data is deliberately excluded from the exploration journal and from history replay. */
 public final class ControlPackets {
-    public sealed interface Packet extends Message permits State, Request, Execute, Policy, Receipt, Defaults {
+    public sealed interface Packet extends Message permits State, Request, Execute, Policy, Receipt, Defaults, TeamPackets.Intent, TeamPackets.Plan {
         @Override default boolean valid(long now) {
-            long ttl=this instanceof State?20000:this instanceof Receipt?120000:60000;
+            long ttl=this instanceof TeamPackets.Plan?4000:this instanceof TeamPackets.Intent?6000:this instanceof State?20000:this instanceof Receipt?120000:60000;
             return observedAt()>=0&&observedAt()<=now+NetworkProtocol.CLOCK_SKEW_MS&&now-observedAt()<=ttl;
         }
     }
@@ -67,23 +67,23 @@ public final class ControlPackets {
         }
     }
     private ControlPackets() {}
-    private static void base(UUID id,String name) { Objects.requireNonNull(id);if(name==null||!name.matches("[A-Za-z0-9_]{1,16}"))throw new IllegalArgumentException("Invalid bot identity"); }
-    private static void check(String value,int length) { if(value==null||value.length()>length||value.chars().anyMatch(ch->ch<32&&ch!='\n'))throw new IllegalArgumentException("Invalid control text"); }
+    static void base(UUID id,String name) { Objects.requireNonNull(id);if(name==null||!name.matches("[A-Za-z0-9_]{1,16}"))throw new IllegalArgumentException("Invalid bot identity"); }
+    static void check(String value,int length) { if(value==null||value.length()>length||value.chars().anyMatch(ch->ch<32&&ch!='\n'))throw new IllegalArgumentException("Invalid control text"); }
     private static Map<String,String> stringMap(Map<String,String> values,int limit) {
         if(values.size()>limit)throw new IllegalArgumentException("Too many settings");
         values.forEach((key,value)->{check(key,128);check(value,128);});
         return Map.copyOf(values);
     }
-    private static Map<UUID,String> uuidMap(Map<UUID,String> values,int limit,int length) {
+    static Map<UUID,String> uuidMap(Map<UUID,String> values,int limit,int length) {
         if(values.size()>limit)throw new IllegalArgumentException("Too many players");
         values.forEach((key,value)->{Objects.requireNonNull(key);check(value,length);});
         return Map.copyOf(values);
     }
-    public static int type(Packet p) { return p instanceof State?3:p instanceof Request?4:p instanceof Execute?5:p instanceof Policy?6:p instanceof Receipt?7:8; }
-    private static void uuid(DataOutputStream out,UUID id)throws IOException { out.writeBoolean(id!=null);if(id!=null){out.writeLong(id.getMostSignificantBits());out.writeLong(id.getLeastSignificantBits());} }
-    private static UUID uuid(DataInputStream in)throws IOException { return in.readBoolean()?new UUID(in.readLong(),in.readLong()):null; }
-    private static void text(DataOutputStream out,String value)throws IOException { byte[] bytes=value.getBytes(StandardCharsets.UTF_8);out.writeShort(bytes.length);out.write(bytes); }
-    private static String text(DataInputStream in,int limit)throws IOException {
+    public static int type(Packet p) { return p instanceof State?3:p instanceof Request?4:p instanceof Execute?5:p instanceof Policy?6:p instanceof Receipt?7:p instanceof Defaults?8:p instanceof TeamPackets.Intent?9:10; }
+    static void uuid(DataOutputStream out,UUID id)throws IOException { out.writeBoolean(id!=null);if(id!=null){out.writeLong(id.getMostSignificantBits());out.writeLong(id.getLeastSignificantBits());} }
+    static UUID uuid(DataInputStream in)throws IOException { return in.readBoolean()?new UUID(in.readLong(),in.readLong()):null; }
+    static void text(DataOutputStream out,String value)throws IOException { byte[] bytes=value.getBytes(StandardCharsets.UTF_8);out.writeShort(bytes.length);out.write(bytes); }
+    static String text(DataInputStream in,int limit)throws IOException {
         int size=in.readUnsignedShort();if(size>limit*4)throw new IOException("Control text too long");
         byte[] bytes=new byte[size];in.readFully(bytes);String value=new String(bytes,StandardCharsets.UTF_8);check(value,limit);return value;
     }
@@ -92,14 +92,15 @@ public final class ControlPackets {
         int count=in.readUnsignedShort();if(count>128)throw new IOException("Too many settings");
         Map<String,String> map=new LinkedHashMap<>();for(int i=0;i<count;i++){String key=text(in,128);if(map.put(key,text(in,128))!=null)throw new IOException("Duplicate setting");}return map;
     }
-    private static void people(DataOutputStream out,Map<UUID,String> map)throws IOException { out.writeShort(map.size());for(var entry:map.entrySet()){uuid(out,entry.getKey());text(out,entry.getValue());} }
-    private static Map<UUID,String> people(DataInputStream in,int limit,int length)throws IOException {
+    static void people(DataOutputStream out,Map<UUID,String> map)throws IOException { out.writeShort(map.size());for(var entry:map.entrySet()){uuid(out,entry.getKey());text(out,entry.getValue());} }
+    static Map<UUID,String> people(DataInputStream in,int limit,int length)throws IOException {
         int count=in.readUnsignedShort();if(count>limit)throw new IOException("Too many players");
         Map<UUID,String> map=new LinkedHashMap<>();for(int i=0;i<count;i++){UUID id=uuid(in);if(id==null||map.put(id,text(in,length))!=null)throw new IOException("Invalid player map");}return map;
     }
     public static void encode(DataOutputStream out,Packet packet)throws IOException {
         out.writeLong(packet.observedAt());
-        if(packet instanceof State p){
+        if(packet instanceof TeamPackets.Intent||packet instanceof TeamPackets.Plan){TeamPackets.encode(out,packet);}
+        else if(packet instanceof State p){
             text(out,p.status());out.writeFloat(p.health());out.writeByte(p.food());
             text(out,p.point().dimension());out.writeInt(p.point().x());out.writeInt(p.point().y());out.writeInt(p.point().z());
             people(out,p.trusted());strings(out,p.settings());people(out,p.players());out.writeLong(p.policyVersion());
@@ -117,6 +118,7 @@ public final class ControlPackets {
     public static Packet decode(DataInputStream in,int type,UUID reporter,String name)throws IOException {
         long time=in.readLong();
         return switch(type){
+            case 9,10 -> TeamPackets.decode(in,type,reporter,name,time);
             case 3 -> new State(reporter,name,text(in,512),in.readFloat(),in.readUnsignedByte(),new Endpoint(text(in,128),in.readInt(),in.readInt(),in.readInt()),people(in,128,64),strings(in),people(in,256,16),in.readLong(),time);
             case 4 -> {UUID id=uuid(in),target=uuid(in);int action=in.readUnsignedByte();if(action>=Action.values().length)throw new IOException("Unknown control action");yield new Request(reporter,name,id,target,Action.values()[action],text(in,128),text(in,512),time);}
             case 5 -> new Execute(reporter,name,uuid(in),uuid(in),uuid(in),text(in,220),time);

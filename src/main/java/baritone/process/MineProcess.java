@@ -18,6 +18,7 @@
 package baritone.process;
 
 import baritone.Baritone;
+import baritone.utils.network.TeamPackets.Kind;
 import baritone.utils.bot.BotItems;
 import baritone.api.BaritoneAPI;
 import baritone.api.pathing.goals.*;
@@ -197,7 +198,9 @@ public final class MineProcess extends BaritoneProcessHelper implements IMinePro
                 return null;
             }
         }
-        Optional<BlockPos> shaft = curr.stream()
+        List<BlockPos> coordinated=baritone.getNetwork().team().mineTargets(curr);
+        if(baritone.getNetwork().team().enabled()&&!curr.isEmpty()&&coordinated.isEmpty()) { baritone.getInputOverrideHandler().clearAllKeys();ctx.playerController().resetBlockRemoving();return new PathingCommand(null,PathingCommandType.REQUEST_PAUSE); }
+        Optional<BlockPos> shaft = coordinated.stream()
                 .filter(pos -> pos.getX() == ctx.playerFeet().getX() && pos.getZ() == ctx.playerFeet().getZ())
                 .filter(pos -> pos.getY() >= ctx.playerFeet().getY())
                 .filter(pos -> !(BlockStateInterface.get(ctx, pos).getBlock() instanceof AirBlock)) // after breaking a block, it takes mineGoalUpdateInterval ticks for it to actually update this list =(
@@ -267,9 +270,12 @@ public final class MineProcess extends BaritoneProcessHelper implements IMinePro
         if (!locs.isEmpty()) {
             CalculationContext context = new CalculationContext(baritone);
             List<BlockPos> locs2 = prune(context, new ArrayList<>(locs), filter, Baritone.settings().mineMaxOreLocationsCount.value, blacklist, droppedItemsScan());
+            knownOreLocations=locs2;
+            locs2=baritone.getNetwork().team().mineTargets(locs2);
+            if(locs2.isEmpty())return new PathingCommand(null,PathingCommandType.REQUEST_PAUSE);
+            final List<BlockPos> goals=locs2;
             // can't reassign locs, gotta make a new var locs2, because we use it in a lambda right here, and variables you use in a lambda must be effectively final
-            Goal goal = new GoalComposite(locs2.stream().map(loc -> coalesce(loc, locs2, context)).toArray(Goal[]::new));
-            knownOreLocations = locs2;
+            Goal goal = new GoalComposite(locs2.stream().map(loc -> coalesce(loc, goals, context)).toArray(Goal[]::new));
             return new PathingCommand(goal, legit ? PathingCommandType.FORCE_REVALIDATE_GOAL_AND_PATH : PathingCommandType.REVALIDATE_GOAL_AND_PATH);
         }
         // we don't know any ore locations at the moment
@@ -307,6 +313,12 @@ public final class MineProcess extends BaritoneProcessHelper implements IMinePro
         }
         // TODO shaft mode, mine 1x1 shafts to either side
         // TODO also, see if the GoalRunAway with maintain Y at 11 works even from the surface
+        if(baritone.getNetwork().team().enabled()&&baritone.getNetwork().team().groupSize(Kind.MINE,null)>1){
+            double heading=baritone.getNetwork().team().heading(Kind.MINE,null);
+            BlockPos point=new BlockPos(branchPoint.getX()+(int)Math.round(Math.cos(heading)*96),y,branchPoint.getZ()+(int)Math.round(Math.sin(heading)*96));
+            if(ctx.playerFeet().distSqr(point)<64)branchPoint=ctx.playerFeet();
+            return new PathingCommand(new GoalNear(point,4),PathingCommandType.REVALIDATE_GOAL_AND_PATH);
+        }
         if (branchPointRunaway == null) {
             branchPointRunaway = new GoalRunAway(1, y, branchPoint) {
                 @Override

@@ -41,12 +41,16 @@ import java.util.concurrent.*;
 public final class NetworkBehavior extends Behavior {
     private final SharedSightings marks = new SharedSightings();
     private final ClientNetworkKey clientKey;
+    private final NetworkTeamwork team;
     private final Map<UUID, Sighting> published = new HashMap<>();
     private final ExecutorService saves = Executors.newSingleThreadExecutor(task -> { Thread thread = new Thread(task, "Baritone-atlas-save"); thread.setDaemon(true); return thread; });
     private final Set<NetworkAtlas> saving = ConcurrentHashMap.newKeySet();
     private Path root;
     private NetworkConfig config;
     private NetworkAtlas atlas;
+    private TerrainStore terrain;
+    private TerrainSampler sampler;
+    private volatile boolean savingTerrain;
     private NetworkControls controls;
     private BotNetwork network;
     private NetworkConfig.Options started;
@@ -57,12 +61,12 @@ public final class NetworkBehavior extends Behavior {
     private int scanCursor;
     private String webError = "";
     private volatile String storageError;
-    public NetworkBehavior(Baritone bot) { super(bot);clientKey=new ClientNetworkKey(bot.getDirectory()); }
+    public NetworkBehavior(Baritone bot) { super(bot);clientKey=new ClientNetworkKey(bot.getDirectory());team=new NetworkTeamwork(this,bot); }
     public NetworkConfig config() {
         Path current = MiningRouteAccess.root(ctx);
         if (!current.equals(root)) {
-            NetworkConfig next = new NetworkConfig(current,clientKey.key()); NetworkAtlas history = new NetworkAtlas(current);
-            clearWorld(); config = next; atlas = history; root = current;
+            NetworkConfig next = new NetworkConfig(current,clientKey.key()); NetworkAtlas history = new NetworkAtlas(current);TerrainStore surface=new TerrainStore(current);
+            clearWorld(); config = next; atlas = history;terrain=surface;sampler=new TerrainSampler(this,baritone); root = current;
         }
         if(controls==null)controls=new NetworkControls(this,baritone,current);
         return config;
@@ -90,8 +94,10 @@ public final class NetworkBehavior extends Behavior {
         config(); NetworkConfig.Options options = config.options(); Identity who = localIdentity();
         boolean sightings = Baritone.settings().networkShareSightings.value, exploration = Baritone.settings().networkShareExploration.value;
         if (!sameTransport(started, options) || sharingSightings != sightings || sharingExploration != exploration || network != null && !network.identity().equals(who)) {
+            if(started!=null&&(!started.key().equals(options.key())||!started.scope().equals(options.scope())||options.mode()==NetworkConfig.Mode.OFF))team.reset(true);
             stopNetwork(); started = options; sharingSightings = sightings; sharingExploration = exploration;
-            List<Message> history = atlas.snapshot(System.currentTimeMillis()).stream().filter(message ->
+            List<Message> retained=new ArrayList<>(atlas.snapshot(System.currentTimeMillis()));retained.addAll(terrain.snapshot(System.currentTimeMillis()));
+            List<Message> history = retained.stream().filter(message ->
                     !message.reporter().equals(who.id()) || (message instanceof Sighting ? sightings : exploration)).toList();
             network = switch (options.mode()) {
                 case OFF -> null;
@@ -101,7 +107,7 @@ public final class NetworkBehavior extends Behavior {
         }
         if (viewer != null && viewer.port() != options.webPort()) { viewer.close(); viewer = null; }
         if (options.webPort() != 0 && viewer == null && System.currentTimeMillis() >= nextWebAttempt) {
-            try { NetworkControls owner=controls;viewer = new LocalNetworkViewer(options.webPort(),owner::enqueue); webError = ""; }
+            try { NetworkControls owner=controls;viewer = new LocalNetworkViewer(options.webPort(),owner::enqueue);viewer.terrain(terrain); webError = ""; }
             catch (IOException e) { webError = "Cannot start local page: " + e.getMessage(); nextWebAttempt = System.currentTimeMillis() + 30000; }
         }
     }
@@ -112,6 +118,9 @@ public final class NetworkBehavior extends Behavior {
     public String pageUrl() { if (viewer == null) throw new IllegalStateException(webError.isEmpty() ? "Use network web [port] to start the local page" : webError); return viewer.url(); }
     public List<Identity> peers() { return network == null ? List.of() : network.peers(); }
     BotNetwork transport(){return network;}
+    public NetworkTeamwork team(){return team;}
+    public boolean isTeammate(UUID id){return team.ally(id);}
+    public boolean visited(net.minecraft.core.BlockPos point){return atlas!=null&&atlas.visited(MiningRouteAccess.dimension(ctx),Math.floorDiv(point.getX(),16),Math.floorDiv(point.getZ(),16));}
     public List<Sighting> sightings(String name) {
         return marks.all(System.currentTimeMillis(), ttl()).stream().filter(s -> name == null || s.playerName().equalsIgnoreCase(name)).limit(32).toList();
     }
@@ -120,18 +129,30 @@ public final class NetworkBehavior extends Behavior {
     private long ttl() { return StealthPolicy.bounded(Baritone.settings().networkSightingTTLMS.value, 10000L, NetworkProtocol.MAX_AGE_MS); }
     public void clearHistory() {
         marks.clear(); published.clear(); lastExploration = null;
+        if(terrain!=null)terrain.clear();
         if (atlas != null) { atlas.clear(); save(atlas); }
         stopNetwork(); started = null; // Rebuild the relay's replay cache from the cleared atlas.
+    }
+    void record(Message message){
+        long now=System.currentTimeMillis();if(!terrain.accept(message,now))return;
+        if(network!=null&&Baritone.settings().networkShareExploration.value)network.publish(message);
+    }
+    public void confirmSite(net.minecraft.core.BlockPos point,String name){
+        config();var who=localIdentity();record(new TerrainPackets.Site(who.id(),who.name(),MiningRouteAccess.endpoint(ctx,point),name+" base","Manually confirmed by a controller",true,System.currentTimeMillis()));
+    }
+    private void saveTerrain(){
+        TerrainStore current=terrain;if(current==null||!current.dirty()||savingTerrain)return;savingTerrain=true;
+        saves.execute(()->{try{current.save();}catch(RuntimeException error){storageError=error.getMessage();}finally{savingTerrain=false;}});
     }
     private void save(NetworkAtlas history) {
         if (!history.dirty() || !saving.add(history)) return;
         saves.execute(() -> { try { do { history.save(); } while (history.dirty()); } catch (RuntimeException e) { storageError = e.getMessage(); } finally { saving.remove(history); } });
     }
-    private void stopNetwork() { if (network != null) network.close(); network = null; marks.clear(); published.clear(); lastExploration = null;if(controls!=null)controls.connectionChanged(); }
+    private void stopNetwork() { team.reset(false);if (network != null) network.close(); network = null; marks.clear(); published.clear(); lastExploration = null;if(controls!=null)controls.connectionChanged(); }
     private void closeRuntime() { stopNetwork(); started = null; if (viewer != null) viewer.close(); viewer = null; }
     private void clearWorld() {
-        if (atlas != null) save(atlas);
-        closeRuntime();if(controls!=null)controls.close();controls=null;root = null; config = null; atlas = null; lastScan = lastPage = lastSave = 0; scanCursor = 0; webError = "";
+        if (atlas != null) save(atlas);saveTerrain();
+        closeRuntime();team.reset(true);if(controls!=null)controls.close();controls=null;root = null; config = null; atlas = null; lastScan = lastPage = lastSave = 0; scanCursor = 0; webError = "";
     }
     @Override public void onTick(TickEvent event) {
         if (event.getState() != EventState.PRE) return;
@@ -144,14 +165,16 @@ public final class NetworkBehavior extends Behavior {
         try {
             ensure();
             if (network != null) for (Message message : network.drain(128)) {
-                if(message instanceof ControlPackets.Packet packet){controls.accept(packet,now);continue;}
+                if(message instanceof ControlPackets.Packet packet){team.accept(packet,now);controls.accept(packet,now);continue;}
                 atlas.accept(message, now);
+                terrain.accept(message,now);
                 if (message instanceof Sighting sighting && !sighting.reporter().equals(ctx.player().getUUID())) marks.accept(sighting, now, ttl());
             }
-            controls.tick(now);
-            if ((network != null || viewer != null) && ctx.player().isAlive() && now - lastScan >= 1000) { scan(now); lastScan = now; }
+            team.tick(now);controls.tick(now);
+            if(ctx.player().isAlive()&&(network!=null||viewer!=null||baritone.getRoamProcess().isActive()))sampler.tick(now);
+            if ((network != null || viewer != null || baritone.getRoamProcess().isActive()) && ctx.player().isAlive() && now - lastScan >= 1000) { scan(now); lastScan = now; }
             if (viewer != null && now - lastPage >= 1000) { viewer.snapshot(atlas.json(now, network == null ? "Local observations · network off" : network.status(), MiningRouteAccess.dimension(ctx), peers()));viewer.controls(controls.json(now));lastPage = now; }
-            if (now - lastSave >= 30000) { save(atlas); lastSave = now; }
+            if (now - lastSave >= 30000) { save(atlas);saveTerrain(); lastSave = now; }
             if (storageError != null) { String problem = storageError; storageError = null; throw new IllegalStateException(problem); }
         } catch (RuntimeException e) {
             nextSetup = now + 30000;
@@ -170,7 +193,7 @@ public final class NetworkBehavior extends Behavior {
         int sent = 0;
         for (int checked = 0; checked < players.size() && sent < 32; checked++) {
             Player player = players.get(Math.floorMod(scanCursor++, players.size()));
-            if (player == ctx.player() || !player.isAlive() || player.isSpectator() || player.getEffect(MobEffects.INVISIBILITY) != null || !ctx.player().hasLineOfSight(player)) continue;
+            if (player == ctx.player() || isTeammate(player.getUUID()) || !player.isAlive() || player.isSpectator() || player.getEffect(MobEffects.INVISIBILITY) != null || !ctx.player().hasLineOfSight(player)) continue;
             Sighting previous = published.get(player.getUUID()); var location = MiningRouteAccess.endpoint(ctx, player.blockPosition());
             long interval = StealthPolicy.bounded(Baritone.settings().networkSightingIntervalMS.value, 2000L, 60000L);
             if (previous != null && previous.point().dimension().equals(location.dimension()) && now - previous.observedAt() < interval

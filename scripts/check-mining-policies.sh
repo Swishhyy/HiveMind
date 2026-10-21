@@ -34,6 +34,11 @@ fi
     src/main/java/baritone/utils/network/NetworkProtocol.java \
     src/main/java/baritone/utils/network/ClientNetworkKey.java \
     src/main/java/baritone/utils/network/ControlPackets.java \
+    src/main/java/baritone/utils/network/TeamPackets.java \
+    src/main/java/baritone/utils/network/Teamwork.java \
+    src/main/java/baritone/utils/network/RoamPolicy.java \
+    src/main/java/baritone/utils/network/TerrainPackets.java \
+    src/main/java/baritone/utils/network/TerrainStore.java \
     src/main/java/baritone/utils/network/ControlRules.java \
     src/main/java/baritone/utils/network/NetworkSettings.java \
     src/main/java/baritone/utils/network/WebControlAction.java \
@@ -43,6 +48,7 @@ fi
     src/main/java/baritone/utils/network/BotNetwork.java \
     src/main/java/baritone/utils/network/LocalNetworkViewer.java \
     src/test/java/baritone/utils/network/NetworkChecks.java \
+    src/test/java/baritone/utils/network/TeamChecks.java \
     src/test/java/baritone/utils/network/ControlChecks.java \
     src/test/java/baritone/utils/social/StealthChecks.java \
     src/test/java/baritone/utils/mining/MiningPolicyChecks.java \
@@ -60,3 +66,5 @@ java -cp "$task_classes" baritone.utils.bot.CompanionPolicyChecks
 java -cp "$task_classes" baritone.utils.social.StealthChecks
 java -cp "$task_classes:src/main/resources" baritone.utils.network.NetworkChecks
 java -cp "$task_classes:src/main/resources" baritone.utils.network.ControlChecks
+
+java -cp "$task_classes:src/main/resources" baritone.utils.network.TeamChecks

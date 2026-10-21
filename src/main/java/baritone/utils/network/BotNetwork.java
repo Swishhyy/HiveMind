@@ -41,6 +41,7 @@ public final class BotNetwork implements AutoCloseable {
     private final Map<UUID,State> states = new ConcurrentHashMap<>();
     private volatile Defaults defaults;
     private final NetworkAtlas cache = new NetworkAtlas();
+    private final TerrainStore terrain = new TerrainStore();
     private volatile ServerSocket listener;
     private volatile boolean closed;
     private volatile int boundPort;
@@ -49,7 +50,7 @@ public final class BotNetwork implements AutoCloseable {
     private BotNetwork(Identity identity, String key, String address, int port, boolean host, List<Message> history) {
         this.identity = identity; this.key = NetworkProtocol.checkKey(key); this.address = address; this.port = port; this.host = host;
         long now = System.currentTimeMillis();
-        for (Message message : history) if (host || message.reporter().equals(identity.id())) cache.accept(message, now);
+        for (Message message : history) if (host || message.reporter().equals(identity.id())) {cache.accept(message, now);terrain.accept(message,now);}
         AtomicInteger number = new AtomicInteger();
         io = new ThreadPoolExecutor(0, 64, 30, TimeUnit.SECONDS, new SynchronousQueue<>(), task -> {
             Thread thread = new Thread(task, "Baritone-network-" + number.incrementAndGet()); thread.setDaemon(true); return thread;
@@ -84,12 +85,12 @@ public final class BotNetwork implements AutoCloseable {
     public boolean publish(Message report) {
         if (closed || !report.reporter().equals(identity.id()) || !report.reporterName().equals(identity.name())) return false;
         if(report instanceof Packet packet){
-            if(!packet.valid(System.currentTimeMillis())||(packet instanceof Execute||packet instanceof Policy||packet instanceof Defaults)&&!host||packet instanceof Request&&host)return false;
+            if(!packet.valid(System.currentTimeMillis())||(packet instanceof Execute||packet instanceof Policy||packet instanceof Defaults||packet instanceof TeamPackets.Plan)&&!host||packet instanceof Request&&host)return false;
             if(packet instanceof State state)states.put(state.reporter(),state);
             if(packet instanceof Defaults current)defaults=current;
             boolean delivered=true;for(Peer peer:peers.values())delivered&=peer.offer(packet);return delivered;
         }
-        if (!cache.accept(report, System.currentTimeMillis())) return false;
+        if (!(report instanceof TerrainPackets.Tile||report instanceof TerrainPackets.Site?terrain.accept(report,System.currentTimeMillis()):cache.accept(report, System.currentTimeMillis()))) return false;
         for (Peer peer : peers.values()) peer.offer(report);
         return true;
     }
@@ -97,8 +98,8 @@ public final class BotNetwork implements AutoCloseable {
         if (host && !report.reporter().equals(sender.channel.remote().id()))
             throw new IOException("Peer attempted to impersonate another reporter");
         if(report instanceof Packet packet){
-            if(host&&(packet instanceof Execute||packet instanceof Policy||packet instanceof Defaults))throw new IOException("Only the network host can dispatch control");
-            if(!host&&(packet instanceof Request||(packet instanceof Execute||packet instanceof Policy||packet instanceof Defaults)&&!packet.reporter().equals(sender.channel.remote().id())))
+            if(host&&(packet instanceof Execute||packet instanceof Policy||packet instanceof Defaults||packet instanceof TeamPackets.Plan))throw new IOException("Only the network host can dispatch control");
+            if(!host&&(packet instanceof Request||(packet instanceof Execute||packet instanceof Policy||packet instanceof Defaults||packet instanceof TeamPackets.Plan)&&!packet.reporter().equals(sender.channel.remote().id())))
                 throw new IOException("Invalid control authority");
             if(!packet.valid(System.currentTimeMillis()))return;
             if(packet instanceof State state){
@@ -114,7 +115,7 @@ public final class BotNetwork implements AutoCloseable {
             return;
         }
         if (!report.valid(System.currentTimeMillis())) return;
-        if (!cache.accept(report, System.currentTimeMillis())) return;
+        if (!(report instanceof TerrainPackets.Tile||report instanceof TerrainPackets.Site?terrain.accept(report,System.currentTimeMillis()):cache.accept(report, System.currentTimeMillis()))) return;
         if (!received.offer(report)) { received.poll(); received.offer(report); }
         if (host) for (Peer peer : peers.values()) if (peer != sender) peer.offer(report);
     }
@@ -183,7 +184,7 @@ public final class BotNetwork implements AutoCloseable {
         ServerSocket server = listener; if (server != null) try { server.close(); } catch (IOException ignored) {}
         for (Peer peer : peers.values()) peer.close();
         for (Socket socket : sockets) forget(socket);
-        peers.clear(); cache.clear(); received.clear(); controls.clear();states.clear();io.shutdownNow();
+        peers.clear(); cache.clear();terrain.clear(); received.clear(); controls.clear();states.clear();io.shutdownNow();
     }
     private final class Peer {
         private final Socket socket;
@@ -194,7 +195,8 @@ public final class BotNetwork implements AutoCloseable {
         private volatile boolean stopped, registered;
         private Peer(Socket socket, NetworkProtocol.Channel channel) {
             this.socket = socket; this.channel = channel;
-            history = new ArrayDeque<>(cache.snapshot(System.currentTimeMillis()).stream()
+            List<Message> retained=new ArrayList<>(cache.snapshot(System.currentTimeMillis()));retained.addAll(terrain.snapshot(System.currentTimeMillis()));
+            history = new ArrayDeque<>(retained.stream()
                     .filter(message -> !message.reporter().equals(channel.remote().id()) && (host || message.reporter().equals(identity.id()))).toList());
             for(State state:states())if(!state.reporter().equals(channel.remote().id())&&(host||state.reporter().equals(identity.id())))history.addFirst(state);
             Defaults current=defaults;if(host&&current!=null&&current.valid(System.currentTimeMillis()))history.addFirst(current);

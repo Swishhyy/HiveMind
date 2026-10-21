@@ -34,6 +34,7 @@ public final class NetworkAtlas {
     private final Map<Chunk, Exploration> chunks = new LinkedHashMap<>();
     private final Map<UUID, Exploration> bots = new LinkedHashMap<>();
     private long revision, savedRevision, lastPrune;
+    public synchronized boolean visited(String dimension,int x,int z){return chunks.containsKey(new Chunk(dimension,x,z));}
     public NetworkAtlas() { file = null; }
     public NetworkAtlas(Path root) {
         file = root.resolve("bot-network-atlas.properties");
@@ -53,7 +54,7 @@ public final class NetworkAtlas {
     }
     public synchronized boolean accept(Message message, long now) {
         prune(now);
-        if (message == null || message instanceof ControlPackets.Packet || !message.valid(now)) return false;
+        if (message == null || !(message instanceof Sighting||message instanceof Exploration) || !message.valid(now)) return false;
         if (message instanceof Sighting sighting) {
             if (!sightings.add(sighting)) return false;
             if (sightings.size() > 4096) sightings.remove(sightings.stream().min(Comparator.comparingLong(Sighting::observedAt)).orElseThrow());

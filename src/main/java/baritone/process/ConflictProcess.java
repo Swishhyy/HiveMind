@@ -75,7 +75,7 @@ public final class ConflictProcess extends BaritoneProcessHelper implements IBeh
         if (!Baritone.settings().fleeConflicts.value || ctx.player() == null || ctx.world() == null || !hasWork()) return;
         Entity attacker = source.getEntity();
         if (attacker == null) attacker = source.getDirectEntity();
-        if (attacker == null || attacker == ctx.player()) return; // Environmental damage is not evidence that a bystander attacked.
+        if (attacker == null || attacker == ctx.player() || baritone.getNetwork().isTeammate(attacker.getUUID()) || baritone.getNetwork().team().alliedExplosive(attacker)) return; // Environmental damage is not evidence that a bystander attacked.
         if (baritone.getStalkProcess().handlesCombatAgainst(attacker)) return;
         if (observedWorld != ctx.world()) { onLostControl(); observedWorld = ctx.world(); }
         quietTicks = 0;
@@ -139,7 +139,7 @@ public final class ConflictProcess extends BaritoneProcessHelper implements IBeh
         long now = System.currentTimeMillis();
         Map<UUID, Entity> loaded = new LinkedHashMap<>();
         ctx.entitiesStream().filter(Entity::isAlive).forEach(entity -> loaded.put(entity.getUUID(), entity));
-        threats.entrySet().removeIf(entry -> entry.getValue().expires() < now);
+        threats.entrySet().removeIf(entry -> entry.getValue().expires() < now || baritone.getNetwork().isTeammate(entry.getKey()));
         for (var entry : new ArrayList<>(threats.entrySet())) {
             Entity entity = loaded.get(entry.getKey());
             if (entity != null) {
@@ -210,7 +210,7 @@ public final class ConflictProcess extends BaritoneProcessHelper implements IBeh
         Entity target = ctx.entitiesStream().filter(entity -> attackerId.equals(entity.getUUID())).findFirst().orElse(null);
         if (!(target instanceof LivingEntity) || !target.isAlive() || target.distanceToSqr(ctx.player()) > 8
                 || !ctx.player().hasLineOfSight(target)) return false;
-        if (target instanceof net.minecraft.world.entity.player.Player && baritone.getBotControl().isTrusted(target.getUUID())) return false;
+        if (baritone.getNetwork().isTeammate(target.getUUID()) || target instanceof net.minecraft.world.entity.player.Player && baritone.getBotControl().isTrusted(target.getUUID())) return false;
         int nearby = (int) threats.values().stream().filter(threat -> threat.position().distSqr(ctx.playerFeet()) < 10 * 10).count();
         if (!SurvivalPolicy.mayDefend(ctx.player().getHealth(), ctx.player().getFoodData().getFoodLevel(), nearby,
                 isType(target, "warden"), isType(target, "creeper"), true)) return false;
@@ -230,6 +230,7 @@ public final class ConflictProcess extends BaritoneProcessHelper implements IBeh
         if (attackDelay == 0 && ctx.player().getAttackStrengthScale(0) >= 0.95f) {
             stopShieldUse();
             ctx.player().getInventory().setSelectedSlot(weapon); ctx.playerController().syncHeldItem();
+            if (!baritone.getNetwork().team().clearStrike(target)) return false;
             ctx.minecraft().gameMode.attack(ctx.player(), target);
             ctx.player().swing(InteractionHand.MAIN_HAND, SwingAnimation.DEFAULT, false); attackDelay = 10;
         } else if (ctx.player().getOffhandItem().is(Items.SHIELD)) {
@@ -246,7 +247,7 @@ public final class ConflictProcess extends BaritoneProcessHelper implements IBeh
         Entity target = ctx.entitiesStream().filter(entity -> entity.getUUID().equals(attackerId)).findFirst().orElse(null);
         if (owner == null || !(target instanceof LivingEntity) || !target.isAlive() || target.distanceToSqr(owner) > 64
                 || target.distanceToSqr(ctx.player()) > 256 || target.distanceToSqr(ctx.player()) <= 8
-                || !ctx.player().hasLineOfSight(target) || (target instanceof net.minecraft.world.entity.player.Player && baritone.getBotControl().isTrusted(target.getUUID()))) return null;
+                || !ctx.player().hasLineOfSight(target) || baritone.getNetwork().isTeammate(target.getUUID()) || (target instanceof net.minecraft.world.entity.player.Player && baritone.getBotControl().isTrusted(target.getUUID()))) return null;
         int nearby = (int) threats.values().stream().filter(threat -> threat.position().distSqr(ctx.playerFeet()) < 256).count();
         if (!SurvivalPolicy.mayDefend(ctx.player().getHealth(), ctx.player().getFoodData().getFoodLevel(), nearby,
                 isType(target, "warden"), isType(target, "creeper"), true)) return null;

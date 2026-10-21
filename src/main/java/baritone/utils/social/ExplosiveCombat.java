@@ -84,6 +84,7 @@ public final class ExplosiveCombat {
             "respawn_anchor","redstone_wire","dragon_egg","cauldron","water_cauldron","lava_cauldron","powder_snow_cauldron","beehive","bee_nest");
 
     public ExplosiveCombat(Baritone bot) { this.bot=bot;ctx=bot.getPlayerContext(); }
+    public BlockPos teamPoint(){return plan==null?null:BlockPos.containing(blastPoint(plan));}
     public int confirmedCycles() { return confirmedCycles; }
     public boolean inProgress() { return plan!=null&&stage!=Stage.SELECT; }
     public String takeWarning() { String message=warning;warning=null;return message; }
@@ -405,6 +406,7 @@ public final class ExplosiveCombat {
         return worthwhileAt(target,ctx.player().position(),target.position(),blast,power,removedBlock,addedCover==null?List.of():List.of(addedCover));
     }
     private boolean worthwhileAt(Player target,Vec3 selfFeet,Vec3 targetFeet,Vec3 blast,double power,BlockPos removedBlock,List<BlockPos> addedBlocks) {
+        if(bot.getNetwork().isTeammate(target.getUUID())||!bot.getNetwork().team().ready()||bot.getNetwork().team().blastSupport(target.getUUID())){rejection="waiting for the team's explosive attacker";return false;}
         boolean bystanders=ctx.world().players().stream().anyMatch(player->player!=ctx.player()&&!player.getUUID().equals(target.getUUID())
                 &&player.isAlive()&&!player.isSpectator()&&player.position().distanceToSqr(blast)<power*power*4);
         if(bystanders) { rejection="another player is within blast range";return false; }

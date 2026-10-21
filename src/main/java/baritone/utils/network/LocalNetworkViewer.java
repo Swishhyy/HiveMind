@@ -35,6 +35,7 @@ public final class LocalNetworkViewer implements AutoCloseable {
     private final Predicate<WebControlAction> actions;
     private volatile byte[] snapshot = "{\"now\":0,\"status\":\"Waiting for world data\",\"dimension\":\"minecraft:overworld\",\"samples\":0,\"peers\":[],\"chunks\":[],\"bots\":[],\"sightings\":[],\"hotspots\":[]}".getBytes(StandardCharsets.UTF_8);
     private volatile byte[] control = "{\"ready\":false,\"bots\":[],\"schema\":[],\"actions\":[]}".getBytes(StandardCharsets.UTF_8);
+    private volatile TerrainStore terrain=new TerrainStore();
     public LocalNetworkViewer(int port) throws IOException { this(port,action->false); }
     public LocalNetworkViewer(int port,Predicate<WebControlAction> actions) throws IOException {
         this.actions=actions;
@@ -52,6 +53,7 @@ public final class LocalNetworkViewer implements AutoCloseable {
     public String url() { return "http://127.0.0.1:" + port() + "/#" + token; }
     public void snapshot(String json) { snapshot = json.getBytes(StandardCharsets.UTF_8); }
     public void controls(String json) { control=json.getBytes(StandardCharsets.UTF_8); }
+    public void terrain(TerrainStore store){terrain=java.util.Objects.requireNonNull(store);}
     private boolean authenticated(HttpExchange request){
         String auth=request.getRequestHeaders().getFirst("Authorization");
         return auth!=null&&MessageDigest.isEqual(("Bearer "+token).getBytes(StandardCharsets.US_ASCII),auth.getBytes(StandardCharsets.UTF_8));
@@ -71,6 +73,17 @@ public final class LocalNetworkViewer implements AutoCloseable {
                 case "/" -> send(request, 200, "text/html; charset=utf-8", page);
                 case "/api/snapshot" -> {
                     send(request, 200, "application/json; charset=utf-8", snapshot);
+                }
+                case "/api/terrain" -> send(request,200,"application/json; charset=utf-8",terrain.index(System.currentTimeMillis()).getBytes(StandardCharsets.UTF_8));
+                case "/api/tile" -> {
+                    try{
+                        String query=request.getRequestURI().getRawQuery();if(query==null||query.length()>1024)throw new IllegalArgumentException();
+                        java.util.Map<String,String> fields=new java.util.HashMap<>();
+                        for(String part:query.split("&")){String[] pair=part.split("=",2);if(pair.length!=2||fields.put(URLDecoder.decode(pair[0],StandardCharsets.UTF_8),URLDecoder.decode(pair[1],StandardCharsets.UTF_8))!=null)throw new IllegalArgumentException();}
+                        if(!java.util.Set.of("d","x","z").equals(fields.keySet()))throw new IllegalArgumentException();
+                        int x=Integer.parseInt(fields.get("x")),z=Integer.parseInt(fields.get("z"));if(Math.abs((long)x)>1875000||Math.abs((long)z)>1875000||fields.get("d").length()>128)throw new IllegalArgumentException();
+                        var tile=terrain.tile(fields.get("d"),x,z);send(request,tile==null?404:200,"application/json; charset=utf-8",(tile==null?"{}":TerrainStore.json(tile)).getBytes(StandardCharsets.UTF_8));
+                    }catch(IllegalArgumentException error){send(request,400,"text/plain",new byte[0]);}
                 }
                 case "/api/control" -> {
                     if(method.equals("GET"))send(request,200,"application/json; charset=utf-8",control);

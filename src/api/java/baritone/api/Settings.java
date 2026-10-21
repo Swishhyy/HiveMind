@@ -407,6 +407,8 @@ public final class Settings {
     public final Setting<Integer> stalkMemoryDays = new Setting<>(30);
 
     /** Connection endpoints and keys remain in the per-server bot-network.properties file, managed with #network. */
+    /** Automatically scout between tasks. Manual stop/pause overrides this. */
+    public final Setting<Boolean> botAutoRoam = new Setting<>(true);
     public final Setting<Boolean> networkShareSightings = new Setting<>(true);
     public final Setting<Boolean> networkShareExploration = new Setting<>(true);
     public final Setting<Long> networkSightingIntervalMS = new Setting<>(5000L);

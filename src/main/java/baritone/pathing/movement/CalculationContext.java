@@ -135,7 +135,7 @@ public class CalculationContext {
         this.additionalConstructionBlocks = new ArrayList<>(Baritone.settings().additionalConstructionBlocks.value);
         this.bsi = new BlockStateInterface(baritone.getPlayerContext(), forUseOnAnotherThread);
         this.toolSet = new ToolSet(player);
-        this.stealth = ((Baritone) baritone).getStalkProcess().terrainLocked();
+        this.stealth = ((Baritone) baritone).getStalkProcess().terrainLocked() || ((Baritone) baritone).getRoamProcess().terrainLocked();
         this.stalkTarget = ((Baritone) baritone).getStalkProcess().avoidanceCenter();
         this.stalkClearance = Math.min(24,Math.max(8,Baritone.settings().stalkDistance.value-8));
         this.hasThrowaway = !stealth && Baritone.settings().allowPlace.value && ((Baritone) baritone).getInventoryBehavior().hasGenericThrowaway();

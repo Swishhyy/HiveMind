@@ -166,7 +166,7 @@ final class NetworkControls {
         target.execute(label,args);return "Accepted #"+command+"; "+status();
     }
     private String status(){
-        return shorten(bot.getJobManager().status()+" · "+bot.getCompanionProcess().status()+" · "+bot.getStalkProcess().status(),500);
+        return shorten(bot.getJobManager().status()+" · "+bot.getCompanionProcess().status()+" · "+bot.getStalkProcess().status()+" · "+bot.getNetwork().team().status()+" · "+bot.getRoamProcess().status(),500);
     }
     private static String shorten(String text,int length){return text.replaceAll("[\\p{Cntrl}]"," ").substring(0,Math.min(length,text.length()));}
     private Settings.Setting<?> setting(String name){

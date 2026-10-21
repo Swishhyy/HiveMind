@@ -22,6 +22,9 @@ import baritone.Baritone;
 public final class BotWork {
     private BotWork() {}
     public static boolean active(Baritone bot) {
+        return foreground(bot)||bot.getRoamProcess().isActive();
+    }
+    public static boolean foreground(Baritone bot){
         return bot.getMineProcess().isActive() || bot.getDepositProcess().isActive()
                 || bot.getStalkProcess().isActive() || bot.getFollowProcess().isActive()
                 || bot.getCustomGoalProcess().isActive() || bot.getBuilderProcess().isActive()

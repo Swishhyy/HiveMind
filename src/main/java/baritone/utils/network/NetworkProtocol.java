@@ -30,10 +30,10 @@ import java.util.*;
 
 /** Bounded, mutually authenticated, encrypted observations and explicitly routed client control. */
 public final class NetworkProtocol {
-    private static final int MAGIC = 0x42544e31, VERSION = 2, MAX_FRAME = 65536;
+    private static final int MAGIC = 0x42544e31, VERSION = 3, MAX_FRAME = 65536;
     private static final SecureRandom RANDOM = new SecureRandom();
     public static final long MAX_AGE_MS = 600000, HISTORY_MS = 30L * 86400000, CLOCK_SKEW_MS = 10000;
-    public sealed interface Message permits Sighting, Exploration, ControlPackets.Packet {
+    public sealed interface Message permits Sighting, Exploration, ControlPackets.Packet, TerrainPackets.Tile, TerrainPackets.Site {
         UUID reporter();
         String reporterName();
         long observedAt();
@@ -101,10 +101,11 @@ public final class NetworkProtocol {
     private static UUID uuid(DataInputStream in) throws IOException { return new UUID(in.readLong(), in.readLong()); }
     public static byte[] encode(Message message) throws IOException {
         ByteArrayOutputStream bytes = new ByteArrayOutputStream(); DataOutputStream body = new DataOutputStream(bytes);
-        body.writeByte(message == null ? 0 : message instanceof Sighting ? 1 : message instanceof Exploration ? 2 : ControlPackets.type((ControlPackets.Packet)message));
+        body.writeByte(message == null ? 0 : message instanceof Sighting ? 1 : message instanceof Exploration ? 2 : message instanceof TerrainPackets.Tile?11:message instanceof TerrainPackets.Site?12:ControlPackets.type((ControlPackets.Packet)message));
         if (message != null) {
             uuid(body, message.reporter()); text(body, message.reporterName());
             if(message instanceof ControlPackets.Packet packet)ControlPackets.encode(body,packet);
+            else if(message instanceof TerrainPackets.Tile||message instanceof TerrainPackets.Site){body.writeLong(message.observedAt());TerrainPackets.encode(body,message);}
             else{
                 if (message instanceof Sighting sighting) { uuid(body, sighting.player()); text(body, sighting.playerName()); }
                 Endpoint point = message instanceof Sighting sighting ? sighting.point() : ((Exploration) message).point();
@@ -122,7 +123,8 @@ public final class NetworkProtocol {
                 UUID player = type == 1 ? uuid(body) : null; String playerName = type == 1 ? text(body, 16) : null;
                 Endpoint point = new Endpoint(text(body, 128), body.readInt(), body.readInt(), body.readInt()); long time = body.readLong();
                 result = type == 1 ? new Sighting(reporter, reporterName, player, playerName, point, time) : new Exploration(reporter, reporterName, point, time);
-            } else if(type>=3&&type<=8)result=ControlPackets.decode(body,type,uuid(body),text(body,16));
+            } else if(type==11||type==12){UUID reporter=uuid(body);String name=text(body,16);result=TerrainPackets.decode(body,type,reporter,name,body.readLong());
+            } else if(type>=3&&type<=10)result=ControlPackets.decode(body,type,uuid(body),text(body,16));
             else if (type != 0) throw new IOException("Unknown network message");
             if (body.available() != 0) throw new IOException("Trailing network data");
             return result;

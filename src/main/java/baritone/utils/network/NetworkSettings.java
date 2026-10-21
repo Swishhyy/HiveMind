@@ -83,7 +83,7 @@ public final class NetworkSettings {
         number("Companions","integer",1,100,"repairTargetPercent");
         number("Companions","long",5000,3600000,"repairNoProgressTimeoutMS companionTaskTimeoutMS");
         number("Companions","integer",1,65536,"gatherMaxActions");
-        bool("Sharing","networkShareSightings networkShareExploration networkRenderSightings");
+        bool("Sharing","botAutoRoam networkShareSightings networkShareExploration networkRenderSightings");
         number("Sharing","long",2000,60000,"networkSightingIntervalMS");
         number("Sharing","long",10000,600000,"networkSightingTTLMS");
     }

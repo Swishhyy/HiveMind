@@ -18,6 +18,7 @@
 package baritone.process;
 
 import baritone.Baritone;
+import baritone.utils.network.RoamPolicy;
 import baritone.api.behavior.IBehavior;
 import baritone.api.event.events.TickEvent;
 import baritone.api.process.PathingCommand;
@@ -174,7 +175,8 @@ public final class SurvivalProcess extends BaritoneProcessHelper implements IBeh
         if (event.getType() == TickEvent.Type.OUT || ctx.player() == null || ctx.world() == null) { releaseFood(); return; }
         if (ownsUse && !controlled()) releaseFood();
         if (!isActive() && BotWork.active(baritone) && !baritone.getDepositProcess().isActive() && !baritone.getConflictProcess().isActive() && !baritone.getWorkstationProcess().isActive()
-                && !baritone.getStalkProcess().suppressesCare()) beforeMining();
+                && !baritone.getStalkProcess().suppressesCare()
+                && (BotWork.foreground(baritone)||RoamPolicy.needsCare(ctx.player().getHealth(),ctx.player().getFoodData().getFoodLevel()))) beforeMining();
     }
     @Override public void onLostControl() { releaseFood(); stage = Stage.IDLE; reason = "Ready"; ticks = swapDelay = careTicks = 0; stalkCareRetryAt = 0; }
     @Override public void onPlayerDeath() { onLostControl(); }

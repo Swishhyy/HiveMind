@@ -73,6 +73,7 @@ public class Baritone implements IBaritone {
 
     private final FollowProcess followProcess;
     private final MineProcess mineProcess;
+    private final RoamProcess roamProcess;
     private final DepositProcess depositProcess;
     private final PortalTravelProcess portalTravelProcess;
     private final ConflictProcess conflictProcess;
@@ -128,6 +129,7 @@ public class Baritone implements IBaritone {
         {
             this.followProcess           = this.registerProcess(FollowProcess::new);
             this.mineProcess             = this.registerProcess(MineProcess::new);
+            this.roamProcess             = this.registerProcess(RoamProcess::new);
             this.depositProcess          = this.registerProcess(DepositProcess::new);
             this.portalTravelProcess     = this.registerProcess(PortalTravelProcess::new);
             this.conflictProcess         = this.registerProcess(ConflictProcess::new);
@@ -153,6 +155,7 @@ public class Baritone implements IBaritone {
         this.botControl = new BotControlBehavior(this);
         this.network = new NetworkBehavior(this);
         this.commandManager = new CommandManager(this);
+        this.registerBehavior(this.roamProcess);
         this.registerBehavior(this.portalTravelProcess);
         this.registerBehavior(this.conflictProcess);
         this.registerBehavior(this.stalkProcess);
@@ -251,6 +254,7 @@ public class Baritone implements IBaritone {
     public RepairProcess getRepairProcess() { return this.repairProcess; }
     public JobManager getJobManager() { return this.jobManager; }
     public BotControlBehavior getBotControl() { return this.botControl; }
+    public RoamProcess getRoamProcess(){return roamProcess;}
     public NetworkBehavior getNetwork() { return this.network; }
 
     public StalkProcess getStalkProcess() { return this.stalkProcess; }

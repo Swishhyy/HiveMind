@@ -58,6 +58,8 @@ public final class MiningPoliciesTest {
         baritone.utils.network.NetworkChecks.runAll();
     }
     @Test
+    public void teamClaimsAutonomyAndTerrainStayCoordinated() throws Exception {baritone.utils.network.TeamChecks.runAll();}
+    @Test
     public void controlsPersistGlobalAndIndividualPoliciesAndRouteOnlyValidatedRequests() throws Exception {
         baritone.utils.network.ControlChecks.runAll();
     }
