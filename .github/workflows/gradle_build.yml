@@ -26,18 +26,16 @@ jobs:
 
     - name: Grant execute permission for gradlew
       run: chmod +x gradlew
-      
+
+    # The version comes from a v* tag when one exists, otherwise from mod_version in gradle.properties
     - name: Build with Gradle
-      run: ./gradlew build -Pmod_version="$(git describe --always --tags --first-parent | cut -c2-)"
+      run: ./gradlew build
 
     - name: Archive Artifacts
       uses: actions/upload-artifact@v7
       with:
-        name: Artifacts
-        path: dist/
-        
-    - name: Archive mapping.txt
-      uses: actions/upload-artifact@v7
-      with:
-        name: Mappings
-        path: mapping/
+        name: HiveMind
+        if-no-files-found: error
+        path: |
+          fabric/build/libs/*.jar
+          !fabric/build/libs/*-dev*.jar

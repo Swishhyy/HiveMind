@@ -49,7 +49,7 @@ The webpage has four tabs:
 - **Trust** adds or revokes whisper controllers by online name or exact UUID. It shows the actual trusted players on the selected bots. A global choice also applies to future bots; individual choices can differ.
 - **Settings** edits 93 typed movement/mining/survival/stalking/combat/companion/sharing settings. Choose All bots for a saved group default, or select one bot for an individual override. Mixed values are shown clearly. Applying a setting/player to All bots replaces individual overrides for that same value. Unsaved field edits survive automatic refresh.
 
-Group defaults and individual overrides live on the host and sync to newly connected bots. Settings/trust choices can be saved for an offline bot; quick commands are only sent to online bots and are never saved for later replay. Per-bot responses distinguish queued requests, applied changes and failures. Managed web settings are persisted per server and restored when that client returns; leaving the server restores its ordinary runtime settings. In-game commands and Mods > Baritone > Configure remain available.
+Group defaults and individual overrides live on the host and sync to newly connected bots. Settings/trust choices can be saved for an offline bot; quick commands are only sent to online bots and are never saved for later replay. Per-bot responses distinguish queued requests, applied changes and failures. Managed web settings are persisted per server and restored when that client returns; leaving the server restores its ordinary runtime settings. In-game commands and Mods > HiveMind > Configure remain available.
 
 The page binds only to `127.0.0.1`, requires its separate random access token for reads and writes, and blocks unrelated browser origins/hostnames. Only authenticated form requests enter a bounded client-thread queue; HTTP/socket workers never modify Minecraft state. Clients sharing the host's network key belong to the same control group; keep that key with your bot clients. The Trust tab manages human whisper controllers separately from network membership. The page contains no external scripts, fonts, trackers or hosted service. `#network web off` stops it. With the peer network off, the webpage can control its own local bot.
 
@@ -97,7 +97,7 @@ The atlas saves asynchronously approximately every 30 seconds and when leaving a
 | `#network reload` | Reload local connection/page configuration |
 | `#network clear` | Clear this client's atlas and marks; peers retain their histories and can share them again |
 
-These options are also in **Mods > Baritone > Configure** and `#set`:
+These options are also in **Mods > HiveMind > Configure** and `#set`:
 
 | Setting | Default | Effect |
 | --- | --- | --- |

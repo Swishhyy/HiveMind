@@ -15,15 +15,12 @@
  * along with Baritone.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-import baritone.gradle.task.CreateDistTask
-import baritone.gradle.task.ProguardTask
-
 plugins {
     id "com.github.johnrengelman.shadow" version "8.1.1"
 }
 
 base {
-    archivesName = archivesName.get() + "-fabric"
+    archivesName = rootProject.archives_base_name
 }
 
 unimined.minecraft {
@@ -81,17 +78,6 @@ components.java {
         skip()
     }
 }
-
-task proguard(type: ProguardTask) {
-    proguardVersion "7.9.1"
-    compType "fabric"
-}
-
-task createDist(type: CreateDistTask, dependsOn: proguard) {
-    compType "fabric"
-}
-
-build.finalizedBy(createDist)
 
 publishing {
     publications {

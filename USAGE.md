@@ -1,4 +1,4 @@
-(assuming you already have Baritone [set up](SETUP.md))
+(assuming you already have HiveMind [installed](README.md#install))
 
 # Prefix
 

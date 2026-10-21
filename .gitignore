@@ -2,9 +2,6 @@
 **/*.swp
 
 run/
-autotest/
-dist/
-volderyarn/
 
 # Gradle
 build/
@@ -21,26 +18,13 @@ classes/
 *.iws
 /logs/
 
-tweaker/logs/
-common/logs/
-
 # Eclipse Files
 .classpath
 .project
 .settings/
-baritone_Client.launch
 
 # Copyright Files
 !/.idea/copyright/Baritone.xml
 !/.idea/copyright/profiles_settings.xml
 
 .vscode/launch.json
-.architectury-transformer
-
-
-mapping
-
-libs/lwjgl-platform-2.9.4-nightly-20150209-natives-osx.jar
-libs/java-objc-bridge-1.1.jar
-
-mapping

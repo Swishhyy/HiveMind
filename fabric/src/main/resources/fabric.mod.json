@@ -3,19 +3,21 @@
   "id": "baritone",
   "version": "${version}",
 
-  "name": "Baritone",
-  "description": "Google Maps for Blockgame",
+  "name": "HiveMind",
+  "description": "Autonomous companion bots built on Baritone: mining and logistics, stalking and PvP, and a shared map network.",
   "authors": [
+    "Swishhyy"
+  ],
+  "contributors": [
     "leijurv", "Brady"
   ],
   "contact": {
-    "homepage": "https://github.com/cabaletta/baritone",
-    "sources": "https://github.com/cabaletta/baritone",
-    "issues": "https://github.com/cabaletta/baritone/issues"
+    "homepage": "https://github.com/Swishhyy/baritone-but-better",
+    "sources": "https://github.com/Swishhyy/baritone-but-better",
+    "issues": "https://github.com/Swishhyy/baritone-but-better/issues"
   },
 
   "license": "LGPL-3.0",
-  "icon": "assets/baritone/icon.png",
 
   "environment": "*",
   "entrypoints": {
@@ -28,12 +30,5 @@
     "fabricloader": ">=0.19.5",
     "minecraft": "~26.3"
   },
-  "suggests": { "modmenu": ">=21.0.0" },
-  "custom": {
-    "modmenu": {
-      "links": {
-        "modmenu.discord": "https://discord.gg/s6fRBAUpmr"
-      }
-    }
-  }
+  "suggests": { "modmenu": ">=21.0.0" }
 }
