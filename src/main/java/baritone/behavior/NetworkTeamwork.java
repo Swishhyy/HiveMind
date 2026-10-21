@@ -34,7 +34,7 @@ public final class NetworkTeamwork {
     private final NetworkBehavior parent;
     private final Baritone bot;
     private Teamwork host=new Teamwork();
-    private final Set<UUID> allies=new HashSet<>();
+    private final Set<UUID> allies=new LinkedHashSet<>();
     private Plan plan;
     private BlockPos mineClaim;
     private long nextSend;
@@ -42,19 +42,20 @@ public final class NetworkTeamwork {
     public boolean enabled(){return parent.transport()!=null;}
     public boolean ready(){return !enabled()||plan!=null&&plan.valid(System.currentTimeMillis())&&(parent.transport().isHost()||parent.transport().connected());}
     public void reset(boolean forget){host=new Teamwork(System.currentTimeMillis()+4000+NetworkProtocol.CLOCK_SKEW_MS);plan=null;mineClaim=null;nextSend=0;if(forget)allies.clear();}
+    private void remember(UUID id){allies.remove(id);allies.add(id);while(allies.size()>256)allies.remove(allies.iterator().next());}
     public boolean ally(UUID id){
         if(id==null||!enabled())return false;
         if(id.equals(parent.localIdentity().id()))return true;
-        parent.peers().forEach(peer->allies.add(peer.id()));
+        parent.peers().forEach(peer->remember(peer.id()));
         return allies.contains(id);
     }
     void accept(Packet packet,long now){
         if(packet instanceof Intent intent&&parent.transport()!=null&&parent.transport().isHost())host.accept(intent,now);
-        else if(packet instanceof Plan current&&current.valid(now)&&(plan==null||current.observedAt()>plan.observedAt())){plan=current;allies.addAll(current.members().keySet());}
+        else if(packet instanceof Plan current&&current.valid(now)&&(plan==null||current.observedAt()>plan.observedAt())){plan=current;current.members().keySet().forEach(this::remember);}
     }
     void tick(long now){
         var wire=parent.transport();if(wire==null)return;
-        wire.peers().forEach(peer->allies.add(peer.id()));
+        wire.peers().forEach(peer->remember(peer.id()));
         if(now<nextSend)return;nextSend=now+500;
         var ctx=bot.getPlayerContext();var who=parent.localIdentity();
         var controlled=bot.getPathingControlManager().mostRecentInControl().orElse(null);
@@ -68,7 +69,7 @@ public final class NetworkTeamwork {
         Intent intent=new Intent(who.id(),who.name(),kind,target,MiningRouteAccess.endpoint(ctx,ctx.playerFeet()),work==null?null:MiningRouteAccess.endpoint(ctx,work),explosive,engaged,now);
         if(wire.isHost())host.accept(intent,now);else wire.publish(intent);
         if(wire.isHost()){
-            plan=host.plan(who,wire.peers(),now);allies.addAll(plan.members().keySet());wire.publish(plan);
+            plan=host.plan(who,wire.peers(),now);plan.members().keySet().forEach(this::remember);wire.publish(plan);
         }
     }
     public List<BlockPos> mineTargets(List<BlockPos> candidates){

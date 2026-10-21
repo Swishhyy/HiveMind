@@ -27,7 +27,7 @@ import static baritone.utils.network.ControlPackets.*;
 public final class TerrainPackets {
     public record Tile(UUID reporter,String reporterName,String dimension,int x,int z,String colors,String heights,long observedAt) implements Message {
         public Tile {
-            base(reporter,reporterName);new Endpoint(dimension,Math.multiplyExact(x,16),0,Math.multiplyExact(z,16));
+            base(reporter,reporterName);if(Math.abs((long)x)>1875000||Math.abs((long)z)>1875000)throw new IllegalArgumentException("Invalid terrain coordinate");new Endpoint(dimension,x*16,0,z*16);
             if(!colors.matches("[0-9a-f]{1536}")||!heights.matches("[0-9a-f]{1024}")||observedAt<0)throw new IllegalArgumentException("Invalid terrain tile");
         }
         public int height(int x,int z){return (short)Integer.parseInt(heights.substring((z*16+x)*4,(z*16+x)*4+4),16);}

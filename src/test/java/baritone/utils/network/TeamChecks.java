@@ -43,6 +43,7 @@ public final class TeamChecks {
         team.accept(work(A,Kind.MINE,point(12),false,now),now);team.accept(work(B,Kind.MINE,point(13),false,now),now);
         Plan plan=team.plan(HOST,online,now);check(plan.leases().size()==1,"A contested vein has exactly one owner");
         Teamwork restarting=new Teamwork(now+14000);restarting.accept(work(A,Kind.MINE,point(12),false,now),now);check(restarting.plan(HOST,List.of(A),now).leases().isEmpty(),"A fresh host waits out old grants before assigning contested resources");
+        check(!plan.valid(now+4001),"A missing host cannot keep stale team plans live");
         UUID holder=plan.leases().keySet().iterator().next();Identity owner=holder.equals(A.id())?A:B,other=holder.equals(A.id())?B:A;
         check(NetworkProtocol.decode(NetworkProtocol.encode(plan)).equals(plan),"Plan codec preserves roster, intents and lease expiry");
         check(NetworkProtocol.decode(NetworkProtocol.encode(work(A,Kind.MINE,point(12),false,now))).equals(work(A,Kind.MINE,point(12),false,now)),"Intent codec preserves provenance");
@@ -78,6 +79,7 @@ public final class TeamChecks {
             check(loaded.index(now+60001).contains("Confirmed base"),"A weak automatic mark cannot replace a manual confirmation");
             check(new TerrainStore(root.resolve("other-server")).snapshot(now).isEmpty(),"Terrain is isolated between Minecraft servers");
             try{new Tile(A.id(),A.name(),"minecraft:overworld",0,0,"00","0040".repeat(256),now);throw new AssertionError("Short tile accepted");}catch(IllegalArgumentException expected){}
+            try{new Tile(A.id(),A.name(),"minecraft:overworld",Integer.MAX_VALUE,0,"639844".repeat(256),"0040".repeat(256),now);throw new AssertionError("Unbounded tile coordinate accepted");}catch(IllegalArgumentException expected){}
             check(!new TerrainStore().accept(tile(now-31L*86400000),now),"Old terrain expires");
         }finally{try(var paths=Files.walk(root)){for(Path path:paths.sorted(Comparator.reverseOrder()).toList())Files.deleteIfExists(path);}}
     }
