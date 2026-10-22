@@ -32,6 +32,8 @@ public final class TerrainPackets {
         }
         public int height(int x,int z){return (short)Integer.parseInt(heights.substring((z*16+x)*4,(z*16+x)*4+4),16);}
         public int color(int x,int z){return Integer.parseInt(colors.substring((z*16+x)*6,(z*16+x)*6+6),16);}
+        /** Terrain is a durable map, not a recent player observation. */
+        @Override public boolean valid(long now){return observedAt<=now+NetworkProtocol.CLOCK_SKEW_MS;}
     }
     public record Site(UUID reporter,String reporterName,Endpoint point,String label,String evidence,boolean confirmed,long observedAt) implements Message {
         public Site {base(reporter,reporterName);Objects.requireNonNull(point);check(label,64);check(evidence,128);if(observedAt<0)throw new IllegalArgumentException("Invalid site time");}

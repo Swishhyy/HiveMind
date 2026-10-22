@@ -427,6 +427,7 @@ public final class Settings {
     public final Setting<Boolean> botUseElytra = new Setting<>(true);
     public final Setting<Integer> botFlightMinimumDistance = new Setting<>(128);
     public final Setting<Integer> botFlightRocketReserve = new Setting<>(8);
+    /** Initial outbound distance for idle aerial scouting; later sweeps continue farther outward. */
     public final Setting<Integer> botFlightRoamDistance = new Setting<>(768);
     public final Setting<Boolean> botElytraCombatEscape = new Setting<>(true);
     public final Setting<Boolean> botElytraPursuit = new Setting<>(true);
@@ -441,6 +442,10 @@ public final class Settings {
     /** Nearby server-loaded entities may be acquired behind cover; visual reports still require line of sight. */
     public final Setting<Boolean> botEntityAwareness = new Setting<>(true);
     public final Setting<Integer> botEntityAwarenessRange = new Setting<>(512);
+    public final Setting<Boolean> botRenderEntityESP = new Setting<>(true);
+    public final Setting<Boolean> botRenderMobESP = new Setting<>(false);
+    /** Terrain sampling/view radius in blocks, constrained to chunks actually loaded by the server. */
+    public final Setting<Integer> botTerrainViewRange = new Setting<>(128);
     public final Setting<Integer> botFlightSurveySpacing = new Setting<>(128);
     public final Setting<Integer> botFlightSurveyHeight = new Setting<>(48);
     public final Setting<Boolean> networkShareSightings = new Setting<>(true);

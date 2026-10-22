@@ -36,5 +36,5 @@ public final class RoamCommand extends Command {
     }
     @Override public Stream<String> tabComplete(String label,IArgConsumer args){return Stream.of("on","off","status");}
     @Override public String getShortDesc(){return "Automatically scout and map terrain between tasks";}
-    @Override public List<String> getLongDesc(){return List.of("roam on/off/status","Idle roaming is on by default. Stop parks it for this server; roam on or resume releases it.","Foreground work, care, conflict, containers and manual pause take priority. Roaming never breaks or places blocks.");}
+    @Override public List<String> getLongDesc(){return List.of("roam on/off/status","Idle roaming is on by default. Stop parks it for this server; roam on or resume releases it.","Scouts leave the starting area and widen their sweeps outward. botFlightRoamDistance sets the initial aerial distance (default 768 blocks); progress survives restart.","Foreground work, care, conflict, containers and manual pause take priority. Roaming never breaks or places blocks.");}
 }

@@ -45,7 +45,7 @@ public final class NetworkSettings {
         number("Sessions","long",5000,300000,"botReconnectDelayMS");
         bool("Combat","botKillAura botAutoCrystal botAutoTotem");
         bool("Survival","botUseShulkers botEmergencyBucketClutch");
-        bool("Autonomy","botAutoRespawn botPersistentTracking botPeriodicReports botReportAllTrusted botUseElytra botElytraCombatEscape botElytraPursuit botAerialSearch botEntityAwareness");
+        bool("Autonomy","botAutoRespawn botPersistentTracking botPeriodicReports botReportAllTrusted botUseElytra botElytraCombatEscape botElytraPursuit botAerialSearch botEntityAwareness botRenderEntityESP botRenderMobESP");
         number("Autonomy","long",1000,30000,"botRespawnDelayMS");
         number("Autonomy","long",30000,3600000,"botReportIntervalMS");
         number("Autonomy","integer",96,8192,"botFlightMinimumDistance botFlightRoamDistance");
@@ -53,7 +53,8 @@ public final class NetworkSettings {
         number("Autonomy","integer",512,8192,"botFlightEscapeDistance");
         number("Autonomy","integer",64,512,"botFlightSurveySpacing");
         number("Autonomy","integer",16,128,"botFlightSurveyHeight");
-        number("Autonomy","integer",64,512,"botEntityAwarenessRange");
+        number("Autonomy","integer",64,2048,"botEntityAwarenessRange");
+        number("Sharing","integer",32,512,"botTerrainViewRange");
         bool("Movement", "allowBreak allowPlace allowSprint allowParkour allowWaterBucketFall");
         number("Movement","integer",3,1024,"maxFallHeightBucket");
         number("Stalking","integer",0,10000,"stalkTerrainPenalty");

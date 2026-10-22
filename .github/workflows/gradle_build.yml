@@ -20,6 +20,8 @@ jobs:
         run: bash scripts/check-controller.sh
       - name: Check autonomous policies
         run: bash scripts/check-mining-policies.sh
+      - name: Check atlas terrain rendering
+        run: node scripts/check-atlas.cjs
       - name: Build Fabric 26.3 client
         run: chmod +x gradlew && ./gradlew build
       - name: Verify and stage release

@@ -113,6 +113,12 @@ public final class LocalNetworkViewer implements AutoCloseable {
         } finally { request.close(); }
     }
     private void send(HttpExchange request, int status, String type, byte[] body) throws IOException {
+        String encoding=request.getRequestHeaders().getFirst("Accept-Encoding");
+        if(body.length>1024&&encoding!=null&&java.util.Arrays.stream(encoding.split(",")).anyMatch(value->value.strip().equals("gzip"))){
+            var bytes=new java.io.ByteArrayOutputStream();try(var gzip=new java.util.zip.GZIPOutputStream(bytes)){gzip.write(body);}
+            body=bytes.toByteArray();request.getResponseHeaders().set("Content-Encoding","gzip");
+            request.getResponseHeaders().set("Vary","Accept-Encoding");
+        }
         request.getResponseHeaders().set("Content-Type", type); request.sendResponseHeaders(status, body.length);
         request.getResponseBody().write(body);
     }

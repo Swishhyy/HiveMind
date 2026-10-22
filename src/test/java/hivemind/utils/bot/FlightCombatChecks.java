@@ -11,6 +11,10 @@ public final class FlightCombatChecks {
     private static void check(boolean value,String why){if(!value)throw new AssertionError(why);}
     public static void main(String[] args){runAll();System.out.println("Flight/combat checks passed: escape supplies and headings, moving pursuit, observation expiry, mob triage, weapon choice and action cadence");}
     public static void runAll(){
+        double watched=AwarenessPolicy.priority(true,true,1000*1000),player=AwarenessPolicy.priority(true,false,500*500);
+        for(int mob=0;mob<2000;mob++)check(watched<player&&player<AwarenessPolicy.priority(false,false,mob),"Crowded farms must not push the watched player or other players out of the awareness budget");
+        check(AwarenessPolicy.within(1024*1024,1024)&&!AwarenessPolicy.within(1025*1025,1024),"Awareness honors its configured range");
+        check(!AwarenessPolicy.within(Double.NaN,2048)&&AwarenessPolicy.range(Integer.MAX_VALUE)==2048,"Invalid contacts cannot produce an unbounded scan");
         check(!FlightPolicy.supplied(Mode.TRAVEL,200,10,8,12,5),"Departure must honor the native landing reserve, otherwise it immediately lands far from its goal");
         check(FlightPolicy.supplied(Mode.TRAVEL,200,14,8,12,5),"A sufficiently supplied normal trip can depart");
         check(FlightPolicy.supplied(Mode.ESCAPE,12,5,8,12,5)&&!FlightPolicy.supplied(Mode.TRAVEL,12,5,8,12,5),"Combat escape can use equipment/reserves a normal trip would decline");

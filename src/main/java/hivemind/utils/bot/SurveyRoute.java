@@ -26,8 +26,14 @@ public final class SurveyRoute {
     public long step(){return step;}
     public void reanchor(Endpoint next){if(!origin.dimension().equals(next.dimension()))throw new IllegalArgumentException("Survey dimension changed");origin=next;step=0;}
     public Endpoint next(){
+        return next(false,0);
+    }
+    public Endpoint nextFrontier(int distance){
+        return next(true,distance);
+    }
+    private Endpoint next(boolean frontier,int distance){
         if(step>=9_000_000_000L)throw new IllegalStateException("Survey route reached its coordinate limit");
-        SurveyPolicy.Offset offset=SurveyPolicy.offset(++step,spacing,heading);
+        SurveyPolicy.Offset offset=frontier?SurveyPolicy.frontierOffset(++step,spacing,distance,heading):SurveyPolicy.offset(++step,spacing,heading);
         return new Endpoint(origin.dimension(),Math.max(-30_000_000,Math.min(30_000_000,origin.x()+offset.x())),origin.y(),Math.max(-30_000_000,Math.min(30_000_000,origin.z()+offset.z())));
     }
     public void save(){

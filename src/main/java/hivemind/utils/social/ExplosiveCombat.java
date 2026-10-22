@@ -35,6 +35,7 @@ import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.tags.ItemTags;
 import net.minecraft.world.InteractionHand;
+import net.minecraft.world.InteractionResult;
 import net.minecraft.world.attribute.EnvironmentAttributes;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EquipmentSlot;
@@ -74,7 +75,7 @@ public final class ExplosiveCombat {
     private BlockPos lurePoint,firingPoint;
     private long lureUntil,nextLureCheck,firingUntil;
     private final Map<BlockPos,Long> failedFootings=new HashMap<>();
-    private boolean blockConfirmed;
+    private boolean blockConfirmed,useRejected;
     private String lastProblem="No suitable blast position",warning,rejection;
     private final Set<CombatStyle> rejected=EnumSet.noneOf(CombatStyle.class);
     private final Map<Integer,double[]> chainDamage=new HashMap<>();
@@ -102,7 +103,7 @@ public final class ExplosiveCombat {
     /** Whether a crystal/anchor plan is eligible right now; lets a melee fallback switch back to explosives. */
     public boolean available(Player target,CombatStyle requested) { rejected.clear();return !inProgress()&&choose(target,requested)!=null; }
     /** Drops the current plan but remembers which styles failed, so a melee fallback does not immediately retry them. */
-    public void abandon() { stage=Stage.SELECT;plan=null;ticks=idleTicks=supportIndex=selectDelay=0;id=-1;blockConfirmed=false;firingPoint=lurePoint=null;firingUntil=lureUntil=0; }
+    public void abandon() { stage=Stage.SELECT;plan=null;ticks=idleTicks=supportIndex=selectDelay=0;id=-1;blockConfirmed=useRejected=false;firingPoint=lurePoint=null;firingUntil=lureUntil=0; }
     public boolean expectedCrystal(Entity entity) { return stage==Stage.WAIT_BREAK&&entity instanceof EndCrystal&&entity.getId()==id; }
     public void reset() { abandon();cadence.reset();evaluatedTick=Long.MIN_VALUE;reusableCrystalBase=null;confirmedCycles=stockDelay=0;warning=null;rejected.clear();reusableAnchors.clear();failedFootings.clear();nextLureCheck=0; }
     public void onBlockChange(BlockChangeEvent event) {
@@ -206,6 +207,7 @@ public final class ExplosiveCombat {
     private Step advance(Player target,CombatStyle requested) {
         if(ctx.player().containerMenu!=ctx.player().inventoryMenu||!ctx.player().inventoryMenu.getCarried().isEmpty())
             return problem("Close inventory menus before explosive combat",requested);
+        if(useRejected)return problem("The client rejected the explosive interaction; selecting another position",requested);
         // Building is evaluated with its planned supports/cover. Only an actual detonation
         // uses the current confirmed geometry; a small movement first tries another firing point.
         if(plan!=null&&(stage==Stage.DETONATE||stage==Stage.WAIT_CRYSTAL&&crystals().stream().anyMatch(entity->entity.position().distanceToSqr(blastPoint(plan))<2))
@@ -219,8 +221,8 @@ public final class ExplosiveCombat {
             case SELECT -> {
                 if(target.distanceToSqr(ctx.player())>256)return new Step(blastRange(target.blockPosition()),false,null);
                 if(HiveMind.settings().botAutoCrystal.value&&(requested==CombatStyle.AUTO||requested==CombatStyle.CRYSTAL)){
-                    EndCrystal existing=crystals().stream().filter(crystal->nearest(crystal.getBoundingBox(),ctx.playerHead()).distanceToSqr(ctx.playerHead())<=9
-                            &&clearRay(ctx.playerHead(),nearest(crystal.getBoundingBox(),ctx.playerHead()),null)&&worthwhile(target,crystal.position(),6,null)).findFirst().orElse(null);
+                    EndCrystal existing=crystals().stream().filter(crystal->crystalHit(crystal,ctx.playerHead())!=null
+                            &&worthwhile(target,crystal.position(),6,null)).findFirst().orElse(null);
                     if(existing!=null){plan=new Plan(existing.blockPosition().below(),CombatStyle.CRYSTAL,false,List.of(),null,0);change(Stage.WAIT_CRYSTAL);return waitStep();}
                 }
                 if(selectDelay-->0) { Step move=relocate(target,requested);return move==null?new Step(blastRange(target.blockPosition()),false,null):move; }
@@ -282,7 +284,9 @@ public final class ExplosiveCombat {
                 return waitStep();
             }
             case WAIT_BASE -> {
-                if(blockConfirmed&&ctx.world().getBlockState(plan.pos()).is(Blocks.OBSIDIAN))change(Stage.CRYSTAL);
+                if(blockConfirmed&&ctx.world().getBlockState(plan.pos()).is(Blocks.OBSIDIAN)) {
+                    reusableCrystalBase=plan.pos();change(Stage.CRYSTAL);
+                }
                 return waitStep();
             }
             case CRYSTAL -> {
@@ -295,8 +299,8 @@ public final class ExplosiveCombat {
             case WAIT_CRYSTAL -> {
                 EndCrystal crystal=crystals().stream().filter(entity->entity.position().distanceToSqr(blastPoint(plan))<2).findFirst().orElse(null);
                 if(crystal==null)return waitStep();
-                Vec3 aim=nearest(crystal.getBoundingBox(),ctx.playerHead());
-                if(aim.distanceToSqr(ctx.playerHead())>9||!clearRay(ctx.playerHead(),aim,null)) {
+                Vec3 aim=crystalHit(crystal,ctx.playerHead());
+                if(aim==null) {
                     Step move=saferFiringPoint(target);
                     if(move==null)return problem("No normal-reach crystal hit with acceptable blast exposure",requested);
                     ticks=0;return move;
@@ -521,6 +525,9 @@ public final class ExplosiveCombat {
     private List<EndCrystal> crystals() {
         return ctx.entitiesStream().filter(entity->entity instanceof EndCrystal&&entity.isAlive()).map(entity->(EndCrystal)entity).toList();
     }
+    private Vec3 crystalHit(EndCrystal crystal,Vec3 eye) {
+        return CrystalTargeting.hit(crystal.getBoundingBox(),eye,3,point->clearRay(eye,point,null));
+    }
     private boolean replaceable(BlockPos pos) {
         if(!ctx.world().hasChunkAt(pos))return false;
         var state=ctx.world().getBlockState(pos);
@@ -629,8 +636,7 @@ public final class ExplosiveCombat {
             if(point.equals(ctx.playerFeet())||failedFootings.getOrDefault(point,0L)>System.currentTimeMillis()||!walkable(point,context))continue;
             Vec3 feet=new Vec3(point.getX()+0.5,point.getY(),point.getZ()+0.5),eye=feet.add(0,1.62,0);
             if(crystal!=null) {
-                Vec3 hit=nearest(crystal.getBoundingBox(),eye);
-                if(hit.distanceToSqr(eye)>9||!clearRay(eye,hit,null))continue;
+                if(crystalHit(crystal,eye)==null)continue;
             } else if(bestFaceFrom(plan.pos(),eye)==null)continue;
             BlockPos removed=plan.style()==CombatStyle.ANCHOR?plan.pos():null;
             double power=plan.style()==CombatStyle.CRYSTAL?6:5;
@@ -722,15 +728,17 @@ public final class ExplosiveCombat {
     private boolean use(int selected,BlockHitResult hit) {
         if(selected<0||ctx.player().isShiftKeyDown()||!aim(hit.getLocation())||!cadence.claim(bot.clientTick(),HiveMind.settings().killExplosiveDelayTicks.value))return false;
         ctx.player().getInventory().setSelectedSlot(selected);ctx.playerController().syncHeldItem();
-        ctx.playerController().processRightClickBlock(ctx.player(),ctx.world(),InteractionHand.MAIN_HAND,hit);
+        var result=ctx.playerController().processRightClickBlock(ctx.player(),ctx.world(),InteractionHand.MAIN_HAND,hit);
+        if(!(result instanceof InteractionResult.Success)) { useRejected=true;return false; }
         ctx.player().swing(InteractionHand.MAIN_HAND,SwingAnimation.DEFAULT,false);return true;
     }
     private void change(Stage next) { stage=next;ticks=0; }
     private Step waitStep() { return new Step(null,false,null); }
     private Step problem(String reason,CombatStyle requested) {
         warning=remaining();
+        if(plan!=null&&plan.style()==CombatStyle.CRYSTAL&&base(plan.pos()))reusableCrystalBase=plan.pos();
         if(plan!=null)rejected.add(plan.style());else rejected.addAll(List.of(CombatStyle.CRYSTAL,CombatStyle.ANCHOR));
-        lastProblem=reason;stage=Stage.SELECT;plan=null;ticks=idleTicks=supportIndex=0;firingPoint=null;firingUntil=0;
+        lastProblem=reason;stage=Stage.SELECT;plan=null;ticks=idleTicks=supportIndex=0;blockConfirmed=useRejected=false;firingPoint=null;firingUntil=0;
         if(requested==CombatStyle.AUTO) {
             boolean remaining=List.of(CombatStyle.CRYSTAL,CombatStyle.ANCHOR).stream().anyMatch(style->!rejected.contains(style)&&supplies(style));
             return new Step(null,!remaining,null);

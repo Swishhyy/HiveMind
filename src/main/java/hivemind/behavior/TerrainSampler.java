@@ -37,10 +37,10 @@ final class TerrainSampler {
     private long next;
     TerrainSampler(NetworkBehavior parent,HiveMind bot){this.parent=parent;this.bot=bot;}
     void tick(long now){
-        if(now<next)return;next=now+100;
+        if(now<next)return;next=now+50;
         sampled.values().removeIf(time->now-time>120000);
-        long deadline=System.nanoTime()+4_000_000;
-        for(int tiles=0;tiles<4;tiles++){
+        long deadline=System.nanoTime()+3_000_000;
+        for(int tiles=0;tiles<8;tiles++){
             if(tiles>0&&System.nanoTime()>=deadline)return;
             if(!sample(now))return;
         }
@@ -48,7 +48,9 @@ final class TerrainSampler {
     private boolean sample(long now){
         var ctx=bot.getPlayerContext();var world=ctx.world();String dimension=MiningRouteAccess.dimension(ctx);
         int cx=Math.floorDiv(ctx.playerFeet().getX(),16),cz=Math.floorDiv(ctx.playerFeet().getZ(),16),bestX=0,bestZ=0;double best=Double.POSITIVE_INFINITY;boolean found=false;
-        for(int x=cx-4;x<=cx+4;x++)for(int z=cz-4;z<=cz+4;z++){
+        int requested=(Math.max(32,Math.min(512,HiveMind.settings().botTerrainViewRange.value))+15)/16;
+        int radius=Math.min(requested,Math.max(2,ctx.minecraft().options.renderDistance().get()));
+        for(int x=cx-radius;x<=cx+radius;x++)for(int z=cz-radius;z<=cz+radius;z++){
             BlockPos point=new BlockPos(x*16,ctx.playerFeet().getY(),z*16);if(!world.hasChunkAt(point))continue;
             String key=dimension+":"+x+":"+z;long previous=sampled.getOrDefault(key,0L);if(now-previous<30000)continue;
             double score=(previous==0?0:1000)+(x-cx)*(x-cx)+(z-cz)*(z-cz);if(score<best){best=score;bestX=x;bestZ=z;found=true;}
@@ -64,7 +66,11 @@ final class TerrainSampler {
                 while(y>world.getMinY()&&world.getBlockState(new BlockPos(wx,y,wz)).isAir())y--;
             }
             BlockPos pos=new BlockPos(wx,y,wz);var state=world.getBlockState(pos);
-            colors[z*16+x]=state.getMapColor(world,pos).col&0xffffff;heights[z*16+x]=y;
+            int color=state.getMapColor(world,pos).col&0xffffff;
+            // MapColor is a flat palette; block tint supplies biome grass, foliage and water colors.
+            var source=ctx.minecraft().getBlockColors().getTintSource(state,0);
+            int tint=source==null?-1:source.colorInWorld(state,ctx.minecraft().level,pos);
+            colors[z*16+x]=(tint==-1?color:tint)&0xffffff;heights[z*16+x]=y;
         }
         StringBuilder rgb=new StringBuilder(1536),h=new StringBuilder(1024);
         HexFormat hex=HexFormat.of();

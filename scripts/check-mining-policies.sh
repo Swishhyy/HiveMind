@@ -14,6 +14,7 @@ fi
     src/main/java/hivemind/utils/bot/AtomicProperties.java \
     src/main/java/hivemind/utils/bot/TrustedControl.java \
     src/main/java/hivemind/utils/bot/AutonomyPolicy.java \
+    src/main/java/hivemind/utils/bot/AwarenessPolicy.java \
     src/main/java/hivemind/utils/bot/FlightPolicy.java \
     src/main/java/hivemind/utils/bot/TakeoffState.java \
     src/test/java/hivemind/utils/bot/TakeoffChecks.java \
@@ -56,6 +57,7 @@ fi
     src/main/java/hivemind/utils/network/RoamPolicy.java \
     src/main/java/hivemind/utils/network/TerrainPackets.java \
     src/main/java/hivemind/utils/network/TerrainStore.java \
+    src/main/java/hivemind/utils/network/TerrainRegions.java \
     src/main/java/hivemind/utils/network/ControlRules.java \
     src/main/java/hivemind/utils/network/NetworkSettings.java \
     src/main/java/hivemind/utils/network/WebControlAction.java \

@@ -34,9 +34,10 @@ HiveMind runs on the Minecraft client of a bot account and turns it into a worke
 
 **Bot network, controller and autonomy**
 - An encrypted relay connects your bot clients. They share player sightings, explored chunks and map marks, recognize teammates, split up mining veins and coordinate hunts.
-- A browser dashboard shows a terrain map with sightings and base markers. It can also send commands, manage trust, and change settings for one bot or all bots.
+- A browser dashboard keeps a persistent terrain map with adjustable bot view-range rings, sightings and base markers. It can also send commands, manage trust, and change settings for one bot or all bots.
 - The standalone controller (a Windows executable or a Java 17+ jar) hosts the relay and dashboard on its own, and manages sessions, reconnects and optional combat logging.
 - Named watch/hunt orders persist across deaths, reconnects and restarts. Bots respawn automatically, scout while idle, and fly with elytra on long trips.
+- Player-prioritized entity awareness and configurable ESP outlines through terrain, using entities actually loaded by the server.
 - Opt-in automatic updates from GitHub Releases, verified before install.
 
 **Baritone underneath**
