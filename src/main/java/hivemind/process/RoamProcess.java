@@ -58,7 +58,7 @@ public final class RoamProcess extends HiveMindProcessHelper implements hivemind
     public boolean parked(){load();return held;}
     public BlockPos destination(){return destination;}
     public boolean terrainLocked(){return isActive();}
-    public String status(){if(!isActive())return held?"Roaming parked":"Roaming standby";return "Roaming survey"+(survey==null?"":" leg "+survey.step())+(destination==null?": choosing unexplored terrain":" toward "+destination.getX()+" "+destination.getZ());}
+    public String status(){if(!isActive())return held?"Roaming parked":"Roaming standby";return "Roaming outward"+(survey==null?"":" leg "+survey.step())+(destination==null?": choosing unexplored terrain":" toward "+destination.getX()+" "+destination.getZ());}
     @Override public boolean isTemporary(){return true;}
     @Override public double priority(){return -2;}
     @Override public PathingCommand onTick(boolean failed,boolean safe){
@@ -73,18 +73,17 @@ public final class RoamProcess extends HiveMindProcessHelper implements hivemind
             deadline=now+300000;
         }
         if(hivemind.getFlight().capable()){
-            boolean commute=Math.hypot(destination.getX()-ctx.player().getX(),destination.getZ()-ctx.player().getZ())>Math.max(256,HiveMind.settings().botFlightRoamDistance.value);
-            if(commute?hivemind.getFlight().travel(this,destination):hivemind.getFlight().survey(this,destination))return new PathingCommand(null,PathingCommandType.REQUEST_PAUSE);
+            if(hivemind.getFlight().survey(this,destination))return new PathingCommand(null,PathingCommandType.REQUEST_PAUSE);
         }
         return new PathingCommand(new GoalXZ(destination.getX(),destination.getZ()),PathingCommandType.REVALIDATE_GOAL_AND_PATH);
     }
     private BlockPos chooseSurvey(boolean aerial){
         long now=System.currentTimeMillis();blocked.values().removeIf(until->until<now);
-        if(survey==null||aerial!=airRoute){airRoute=aerial;survey=new SurveyRoute(root,aerial?"roam-air":"roam-ground",MiningRouteAccess.endpoint(ctx,ctx.playerFeet()),
+        if(survey==null||aerial!=airRoute){airRoute=aerial;survey=new SurveyRoute(root,aerial?"roam-air-frontier":"roam-ground-frontier",MiningRouteAccess.endpoint(ctx,ctx.playerFeet()),
                 aerial?HiveMind.settings().botFlightSurveySpacing.value:64,hivemind.getNetwork().team().heading(Kind.ROAM,null));}
         BlockPos fallback=null;
         for(int attempt=0;attempt<64;attempt++){
-            BlockPos point=MiningRouteAccess.position(survey.next());
+            BlockPos point=MiningRouteAccess.position(survey.nextFrontier(aerial?HiveMind.settings().botFlightRoamDistance.value:192));
             if(blocked.containsKey(point)||!ctx.world().getWorldBorder().isWithinBounds(point)||hivemind.getNetwork().team().roamOccupied(point)||point.distSqr(ctx.playerFeet())<48*48)continue;
             fallback=point;if(!hivemind.getNetwork().mapped(point)){survey.save();return point;}
         }

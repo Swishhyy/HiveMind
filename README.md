@@ -14,7 +14,7 @@ The autonomous controller also supports saved offline-player watch/hunt orders, 
 
 Requires Minecraft 26.3, Fabric Loader 0.19.5 or newer, and Java 25. [Mod Menu](https://modrinth.com/mod/modmenu) 21.0.0 is optional and adds a settings screen under **Mods > HiveMind > Configure**.
 
-Download `hivemind-0.1.0.1.jar` from [Releases](https://github.com/Swishhyy/HiveMind/releases/latest) and put it in your `mods` folder. Remove previous development mod jars before this first release. Packages, mod ID and configs now use `hivemind`; old configs are not migrated.
+Download `hivemind-0.1.0.2.jar` from [Releases](https://github.com/Swishhyy/HiveMind/releases/latest) and put it in your `mods` folder. Remove previous development mod jars before this first release. Packages, mod ID and configs now use `hivemind`; old configs are not migrated.
 
 For an independent controller, download and extract the entire Windows controller zip and run `HiveMindController.exe`, or run `java -jar hivemind-controller.jar` on Java 17+. See [CONTROLLER.md](CONTROLLER.md) for remote hosting, session/reconnect controls, optional combat logging and automatic updates.
 

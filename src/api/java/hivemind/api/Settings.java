@@ -427,6 +427,7 @@ public final class Settings {
     public final Setting<Boolean> botUseElytra = new Setting<>(true);
     public final Setting<Integer> botFlightMinimumDistance = new Setting<>(128);
     public final Setting<Integer> botFlightRocketReserve = new Setting<>(8);
+    /** Initial outbound distance for idle aerial scouting; later sweeps continue farther outward. */
     public final Setting<Integer> botFlightRoamDistance = new Setting<>(768);
     public final Setting<Boolean> botElytraCombatEscape = new Setting<>(true);
     public final Setting<Boolean> botElytraPursuit = new Setting<>(true);

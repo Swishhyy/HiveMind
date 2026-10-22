@@ -7,14 +7,18 @@ import hivemind.api.event.events.type.EventState;
 import hivemind.api.utils.RotationUtils;
 import hivemind.utils.bot.BotWork;
 import hivemind.utils.social.CombatCadence;
+import hivemind.utils.social.CrystalTargeting;
 import hivemind.utils.social.MeleeCombat;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.boss.enderdragon.EndCrystal;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.ContainerInput;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.component.SwingAnimation;
+import net.minecraft.world.level.ClipContext;
+import net.minecraft.world.phys.HitResult;
 
 /** Shared attack budget, reactive melee and offhand replacement across autonomous work. */
 public final class CombatBehavior extends Behavior {
@@ -41,11 +45,15 @@ public final class CombatBehavior extends Behavior {
     }
     private boolean canAttack(Entity target){
         if(!active()||target==null||!target.isAlive()||target.isSpectator()||ctx.player().isFallFlying()
-                ||hivemind.getClutch().active()||hivemind.getShulkerProcess().isActive()||!ctx.player().hasLineOfSight(target))return false;
+                ||hivemind.getClutch().active()||hivemind.getShulkerProcess().isActive())return false;
         if(target instanceof Player player&&(player.isCreative()||hivemind.getNetwork().isTeammate(player.getUUID())
                 ||hivemind.getBotControl().isTrusted(player.getUUID())&&!(hivemind.getStalkProcess().hunting()
                 &&player.getUUID().equals(hivemind.getStalkProcess().target())&&HiveMind.settings().killAllowTrustedTargets.value)))return false;
         var eye=ctx.playerHead();
+        if(target instanceof EndCrystal)return CrystalTargeting.facing(target.getBoundingBox(),eye,
+                RotationUtils.calcLookDirectionFromRotation(ctx.playerRotations()),3,
+                point->ctx.world().clip(new ClipContext(eye,point,ClipContext.Block.COLLIDER,ClipContext.Fluid.NONE,ctx.player())).getType()==HitResult.Type.MISS);
+        if(!ctx.player().hasLineOfSight(target))return false;
         return target.getBoundingBox().inflate(.06).clip(eye,eye.add(RotationUtils.calcLookDirectionFromRotation(ctx.playerRotations()).scale(3))).isPresent();
     }
     public boolean melee(LivingEntity target){

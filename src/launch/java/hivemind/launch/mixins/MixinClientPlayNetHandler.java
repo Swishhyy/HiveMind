@@ -25,7 +25,6 @@ import hivemind.api.event.events.ChatEvent;
 import hivemind.api.event.events.ChunkEvent;
 import hivemind.api.event.events.type.EventState;
 import hivemind.api.utils.Pair;
-import hivemind.cache.CachedChunk;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientCommonPacketListenerImpl;
 import net.minecraft.client.multiplayer.ClientPacketListener;
@@ -151,25 +150,14 @@ public abstract class MixinClientPlayNetHandler extends ClientCommonPacketListen
             at = @At("RETURN")
     )
     private void postHandleBlockChange(ClientboundBlockUpdatePacket packetIn, CallbackInfo ci) {
-        if (!HiveMind.settings().repackOnAnyBlockChange.value) {
-            return;
-        }
-        if (!CachedChunk.BLOCKS_TO_KEEP_TRACK_OF.contains(packetIn.getBlockState().getBlock())) {
-            return;
-        }
-        for (IHiveMind ihivemind : HiveMindAPI.getProvider().getAllHiveMinds()) {
-            LocalPlayer player = ihivemind.getPlayerContext().player();
-            if (player != null && player.connection == (ClientPacketListener) (Object) this) {
-                ihivemind.getGameEventHandler().onChunkEvent(
-                        new ChunkEvent(
-                                EventState.POST,
-                                ChunkEvent.Type.POPULATE_FULL,
-                                packetIn.getPos().getX() >> 4,
-                                packetIn.getPos().getZ() >> 4
-                        )
-                );
-            }
-        }
+        IHiveMind hivemind = HiveMindAPI.getProvider().getHiveMindForConnection((ClientPacketListener) (Object) this);
+        if (hivemind == null) return;
+        // Single-block packets confirm placements and anchor charges too. Cache repacking
+        // is optional and is handled by the event bus; action confirmations are not.
+        hivemind.getGameEventHandler().onBlockChange(new BlockChangeEvent(
+                ChunkPos.containing(packetIn.getPos()),
+                List.of(new Pair<>(packetIn.getPos().immutable(), packetIn.getBlockState()))
+        ));
     }
 
     @Inject(

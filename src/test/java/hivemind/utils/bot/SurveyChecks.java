@@ -9,6 +9,17 @@ public final class SurveyChecks {
     private static void check(boolean value,String why){if(!value)throw new AssertionError(why);}
     public static void main(String[] args)throws Exception{runAll();System.out.println("Survey checks passed: expanding adjacent coverage, durable progress, route isolation, reanchoring and coordinate bounds");}
     public static void runAll()throws Exception{
+        Set<SurveyPolicy.Offset> frontier=new HashSet<>();
+        SurveyPolicy.Offset prior=null;
+        for(int i=1;i<=10000;i++){
+            SurveyPolicy.Offset point=SurveyPolicy.frontierOffset(i,128,768,0);
+            check(point.x()>=768&&frontier.add(point),"Idle scouts must leave the starting area and never revisit an earlier outbound cell");
+            if(prior!=null)check(point.x()>=prior.x()&&Math.hypot(point.x()-prior.x(),point.z()-prior.z())<=Math.sqrt(2)*128+.001,"Outbound sweeps keep advancing with short adjacent legs");
+            prior=point;
+        }
+        check(prior.x()>13000,"Continued scouting must expand by kilometers instead of circling the spawn area");
+        check(SurveyPolicy.frontierOffset(1,128,2048,0).equals(new SurveyPolicy.Offset(2048,0)),"The configured roam distance must set the actual initial departure");
+        check(SurveyPolicy.frontierOffset(1,128,768,Math.PI).equals(new SurveyPolicy.Offset(-768,0)),"Separate team headings send scouts toward different frontiers");
         Set<SurveyPolicy.Offset> visited=new HashSet<>();SurveyPolicy.Offset previous=new SurveyPolicy.Offset(0,0);
         for(int i=1;i<=10000;i++){
             SurveyPolicy.Offset point=SurveyPolicy.offset(i,128,0);
@@ -22,6 +33,10 @@ public final class SurveyChecks {
         Path root=Files.createTempDirectory("hivemind-surveys");Endpoint origin=new Endpoint("minecraft:overworld",100,70,-200);
         try{
             SurveyRoute roam=new SurveyRoute(root,"roam-air",origin,128,0);
+            SurveyRoute outbound=new SurveyRoute(root,"roam-air-frontier",origin,128,0);
+            for(int i=0;i<17;i++)outbound.nextFrontier(768);outbound.save();Endpoint nextFrontier=outbound.nextFrontier(768);
+            SurveyRoute resumeFrontier=new SurveyRoute(root,"roam-air-frontier",new Endpoint(origin.dimension(),9000,70,9000),128,Math.PI);
+            check(resumeFrontier.step()==17&&resumeFrontier.nextFrontier(768).equals(nextFrontier),"An outbound route resumes its saved origin, heading and sweep after restart");
             for(int i=0;i<25;i++)roam.next();roam.save();Endpoint expected=roam.next();
             SurveyRoute restored=new SurveyRoute(root,"roam-air",new Endpoint(origin.dimension(),5000,64,5000),128,Math.PI);
             check(restored.step()==25&&restored.origin().equals(origin)&&restored.next().equals(expected),"Restart and changed team membership must resume the saved grid instead of circling a new anchor");

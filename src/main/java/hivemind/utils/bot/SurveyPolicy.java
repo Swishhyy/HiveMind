@@ -5,6 +5,16 @@ package hivemind.utils.bot;
 public final class SurveyPolicy {
     public record Offset(int x,int z) {}
     private SurveyPolicy() {}
+    /** Widening outbound sweeps: leave the starting area first, then keep expanding along a stable heading. */
+    public static Offset frontierOffset(long index,int configured,int distance,double heading){
+        if(index<1||index>9_000_000_000L||!Double.isFinite(heading))throw new IllegalArgumentException("Survey index or heading out of bounds");
+        int spacing=Math.max(32,Math.min(512,configured));
+        long ring=(long)Math.sqrt(index-1),lane=index-1-ring*ring;
+        double forward=Math.max(128,Math.min(8192,distance))+ring*spacing;
+        double sideways=(ring%2==0?lane-ring:ring-lane)*spacing;
+        return new Offset((int)Math.round(forward*Math.cos(heading)-sideways*Math.sin(heading)),
+                (int)Math.round(forward*Math.sin(heading)+sideways*Math.cos(heading)));
+    }
     public static Offset offset(long index,int configured,double heading){
         if(index<1||index>9_000_000_000L)throw new IllegalArgumentException("Survey index out of bounds");
         int spacing=Math.max(32,Math.min(512,configured));
