@@ -36,9 +36,12 @@ configurations {
     runtimeClasspath.extendsFrom common
 }
 
-repositories { maven {
-    url = "https://maven.terraformersmc.com/releases/"
-    content { includeGroup "com.terraformersmc" }
+repositories { ivy {
+    name = "ModMenuOfficialReleases"
+    url = "https://github.com/TerraformersMC/ModMenu/releases/download"
+    patternLayout { artifact "v[revision]/[artifact]-[revision].[ext]" }
+    metadataSources { artifact() }
+    content { includeModule "com.terraformersmc", "modmenu" }
 } }
 
 dependencies {
