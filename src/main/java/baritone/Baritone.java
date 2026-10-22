@@ -278,6 +278,7 @@ public class Baritone implements IBaritone {
     public FlightBehavior getFlight(){return flight;}
     public EntityAwareness getAwareness(){return awareness;}
     public CombatBehavior getCombat(){return combat;}
+    public long clientTick(){return gameEventHandler.clientTick();}
     public BucketClutchBehavior getClutch(){return clutch;}
     public ShulkerSupplyProcess getShulkerProcess(){return shulkerProcess;}
 

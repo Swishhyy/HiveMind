@@ -44,6 +44,9 @@ public final class GameEventHandler implements IEventBus, Helper {
     private final Baritone baritone;
 
     private final List<IGameEventListener> listeners = new CopyOnWriteArrayList<>();
+    private long clientTick;
+
+    public long clientTick(){return clientTick;}
 
     public GameEventHandler(Baritone baritone) {
         this.baritone = baritone;
@@ -51,6 +54,7 @@ public final class GameEventHandler implements IEventBus, Helper {
 
     @Override
     public final void onTick(TickEvent event) {
+        if(event.getState()==EventState.PRE)clientTick++;
         if (event.getType() == TickEvent.Type.IN) {
             try {
                 baritone.bsi = new BlockStateInterface(baritone.getPlayerContext(), true);

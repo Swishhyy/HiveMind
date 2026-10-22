@@ -105,7 +105,7 @@ public final class BucketClutchBehavior extends Behavior {
         if(event.getState()==EventState.PRE)tryUse();
     }
     private void tryUse(){
-        if(!active()||!enabled()||lastUse==ctx.player().tickCount)return;
+        if(!active()||!enabled()||lastUse==baritone.clientTick())return;
         boolean pickup=placed!=null;
         if(pickup&&!ClutchPolicy.caught(ctx.player().onGround(),ctx.player().isInWater(),ctx.player().getDeltaMovement().y,wetTicks))return;
         if(!ctx.player().getMainHandItem().is(pickup?Items.BUCKET:Items.WATER_BUCKET))return;
@@ -114,7 +114,7 @@ public final class BucketClutchBehavior extends Behavior {
         var hit=ctx.world().clip(new ClipContext(eye,eye.add(RotationUtils.calcLookDirectionFromRotation(rotation).scale(ctx.playerController().getBlockReachDistance())),
                 ClipContext.Block.OUTLINE,pickup?ClipContext.Fluid.SOURCE_ONLY:ClipContext.Fluid.NONE,ctx.player()));
         if(hit.getType()!=HitResult.Type.BLOCK||!(pickup?hit.getBlockPos().equals(target):hit.getBlockPos().equals(target.below())&&hit.getDirection()==Direction.UP))return;
-        lastUse=ctx.player().tickCount;attempted|=!pickup;
+        lastUse=baritone.clientTick();attempted|=!pickup;
         // useItem carries the player's rotation. Supply the actual bucket ray for this call,
         // including before travel crosses the remaining placement window this tick.
         float yaw=ctx.player().getYRot(),pitch=ctx.player().getXRot();

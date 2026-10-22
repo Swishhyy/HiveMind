@@ -188,7 +188,7 @@ public final class ExplosiveCombat {
         for(int i=0;i<9;i++)if(!ctx.player().getInventory().getItem(i).is(Items.GLOWSTONE))return i;return -1;
     }
     public Step tick(Player target,CombatStyle requested) {
-        long tick=ctx.player().tickCount;
+        long tick=bot.clientTick();
         if(!cadence.ready(tick))return waitStep();
         if(evaluatedTick!=tick){ticks++;evaluatedTick=tick;}
         // Drain transitions that only inspect already-confirmed state. At most one use/attack
@@ -301,7 +301,7 @@ public final class ExplosiveCombat {
                     if(move==null)return problem("No normal-reach crystal hit with acceptable blast exposure",requested);
                     ticks=0;return move;
                 }
-                if(aim(aim)&&bot.getCombat().crystal(crystal)&&cadence.claim(ctx.player().tickCount,Baritone.settings().killExplosiveDelayTicks.value)) {
+                if(aim(aim)&&bot.getCombat().crystal(crystal)&&cadence.claim(bot.clientTick(),Baritone.settings().killExplosiveDelayTicks.value)) {
                     id=crystal.getId();change(Stage.WAIT_BREAK);
                 }
                 return waitStep();
@@ -720,7 +720,7 @@ public final class ExplosiveCombat {
         return Math.abs(off.getYaw())<3&&Math.abs(off.getPitch())<3;
     }
     private boolean use(int selected,BlockHitResult hit) {
-        if(selected<0||ctx.player().isShiftKeyDown()||!aim(hit.getLocation())||!cadence.claim(ctx.player().tickCount,Baritone.settings().killExplosiveDelayTicks.value))return false;
+        if(selected<0||ctx.player().isShiftKeyDown()||!aim(hit.getLocation())||!cadence.claim(bot.clientTick(),Baritone.settings().killExplosiveDelayTicks.value))return false;
         ctx.player().getInventory().setSelectedSlot(selected);ctx.playerController().syncHeldItem();
         ctx.playerController().processRightClickBlock(ctx.player(),ctx.world(),InteractionHand.MAIN_HAND,hit);
         ctx.player().swing(InteractionHand.MAIN_HAND,SwingAnimation.DEFAULT,false);return true;

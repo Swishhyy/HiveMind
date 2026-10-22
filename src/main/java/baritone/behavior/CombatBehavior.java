@@ -28,14 +28,14 @@ public final class CombatBehavior extends Behavior {
     public boolean ensureTotem(){
         if(!active()||!Baritone.settings().botAutoTotem.value||!Baritone.settings().allowInventory.value
                 ||baritone.getStalkProcess().hunting()&&!Baritone.settings().killUseTotems.value
-                ||ctx.player().getOffhandItem().is(Items.TOTEM_OF_UNDYING)||lastTotemSwap==ctx.player().tickCount)return false;
+                ||ctx.player().getOffhandItem().is(Items.TOTEM_OF_UNDYING)||lastTotemSwap==baritone.clientTick())return false;
         if(ctx.player().isUsingItem()&&ctx.player().getUsedItemHand()==InteractionHand.OFF_HAND){
             if(!ctx.player().getOffhandItem().is(Items.SHIELD))return false;
             ctx.minecraft().gameMode.releaseUsingItem(ctx.player());
         }
         for(int slot=0;slot<36;slot++)if(ctx.player().getInventory().getItem(slot).is(Items.TOTEM_OF_UNDYING)){
             ctx.playerController().windowClick(ctx.player().inventoryMenu.containerId,slot<9?slot+36:slot,40,ContainerInput.SWAP,ctx.player());
-            lastTotemSwap=ctx.player().tickCount;return true;
+            lastTotemSwap=baritone.clientTick();return true;
         }
         return false;
     }
@@ -54,12 +54,12 @@ public final class CombatBehavior extends Behavior {
             if(!ctx.player().getOffhandItem().is(Items.SHIELD)||ctx.player().getUsedItemHand()!=InteractionHand.OFF_HAND)return false;
             ctx.minecraft().gameMode.releaseUsingItem(ctx.player());
         }
-        if(!baritone.getNetwork().team().clearStrike(target)||!attacks.claim(ctx.player().tickCount,1))return false;
+        if(!baritone.getNetwork().team().clearStrike(target)||!attacks.claim(baritone.clientTick(),1))return false;
         int slot=MeleeCombat.weapon(ctx,target.isBlocking());ctx.player().getInventory().setSelectedSlot(slot);ctx.playerController().syncHeldItem();
         strike(target);baritone.getStalkProcess().onMeleeStrike(target);return true;
     }
     public boolean crystal(Entity target){
-        if(!canAttack(target)||!attacks.claim(ctx.player().tickCount,1))return false;
+        if(!canAttack(target)||!attacks.claim(baritone.clientTick(),1))return false;
         strike(target);return true;
     }
     private void strike(Entity target){ctx.minecraft().gameMode.attack(ctx.player(),target);ctx.player().swing(InteractionHand.MAIN_HAND,SwingAnimation.DEFAULT,false);}
