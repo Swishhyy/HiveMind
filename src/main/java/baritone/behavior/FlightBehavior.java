@@ -120,7 +120,7 @@ public final class FlightBehavior extends Behavior {
     }
     private String label(Mode requested,BlockPos pos){return (requested==Mode.ESCAPE?"Escaping by elytra":requested==Mode.PURSUIT?"Pursuing by elytra":"Flying")+" toward "+pos.getX()+" "+pos.getZ();}
     private BlockPos cruiseDestination(BlockPos destination,Mode requested){
-        int y=Math.max(destination.getY()+16,ctx.playerFeet().getY()+(requested==Mode.ESCAPE?32:16));
+        int y=Math.max(destination.getY()+16,ctx.playerFeet().getY()+(requested==Mode.ESCAPE?32:flying()?0:16));
         if(ctx.world().dimension()==Level.NETHER&&ctx.player().getY()<128)y=Math.min(112,y);
         else if(ctx.world().hasChunkAt(destination))y=Math.max(y,ctx.world().getHeight(Heightmap.Types.MOTION_BLOCKING,destination.getX(),destination.getZ())+16);
         int ceiling=ctx.world().dimensionType().minY()+ctx.world().dimensionType().height()-8;
@@ -180,7 +180,7 @@ public final class FlightBehavior extends Behavior {
         if(owner==null){restoreArmor();return;}
         long now=System.currentTimeMillis();
         if(!baritone.getElytraProcess().isActive()){
-            if(owner==baritone.getStalkProcess())baritone.getStalkProcess().transported();
+            if(baritone.getStalkProcess().isActive())baritone.getStalkProcess().transported();
             if(!airborne){if(takeoff!=null)blockedTakeoffs.put(takeoff,now+30000);backoff(now,mode);reason="Takeoff blocked; walking briefly before retrying";}
             else reason="Landed; ready for the next flight";
             owner=null;targetId=null;restoreArmor();return;

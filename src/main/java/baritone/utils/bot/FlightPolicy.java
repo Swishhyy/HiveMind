@@ -26,7 +26,7 @@ public final class FlightPolicy {
     }
     public static boolean fresh(long now,long seen) { return seen>0&&now>=seen&&now-seen<=8000; }
     public static boolean replan(long now,long last,Point old,Point next) {
-        return old==null||now-last>=1500&&old.distanceSquared(next)>=16*16;
+        return old==null||now-last>=500&&old.distanceSquared(next)>=16*16;
     }
     public static Point intercept(Point target,Point velocity) {
         // A short, bounded lead reduces tail chasing without projecting a target across unloaded terrain.

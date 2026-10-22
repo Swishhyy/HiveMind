@@ -28,7 +28,7 @@ public final class FlightCombatChecks {
         check(!FlightPolicy.shouldPursue(false,true,true,100,40)&&!FlightPolicy.shouldPursue(true,true,false,100,0),"Watching stays distinct from deliberate airborne pursuit");
         Point intercept=FlightPolicy.intercept(new Point(100,150,100),new Point(3,.5,1));
         check(intercept.x()>100&&intercept.z()>100&&intercept.distanceSquared(new Point(100,150,100))<=48*48+.001,"Pursuit leads a moving target by a bounded amount");
-        check(!FlightPolicy.replan(1000,0,from,new Point(20,80,0))&&FlightPolicy.replan(1500,0,from,new Point(20,80,0)),"Dynamic routes update without rebuilding the flight solver every tick");
+        check(!FlightPolicy.replan(400,0,from,new Point(20,80,0))&&FlightPolicy.replan(500,0,from,new Point(20,80,0)),"Moving opponents can update a route twice a second without rebuilding the flight solver every tick");
         check(FlightPolicy.fresh(10000,3000)&&!FlightPolicy.fresh(12000,3000)&&!FlightPolicy.fresh(1000,3000),"Missing targets get a brief last-sighting continuation, never unlimited position knowledge");
         check(CombatPolicy.fightMob(true,20,20,3,false,false),"An armed healthy bot can clear ordinary hostile mobs");
         check(!CombatPolicy.fightMob(false,20,20,1,false,false)&&!CombatPolicy.fightMob(true,8,20,1,false,false),"No weapon or low health selects retreat");
