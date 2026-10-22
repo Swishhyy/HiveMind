@@ -14,7 +14,8 @@ public final class UpdateBehavior extends Behavior {
     @Override public void onTick(TickEvent event){
         if(event.getState()!=EventState.PRE||hivemind!=HiveMindAPI.getProvider().getPrimaryHiveMind()||!UpdateRuntime.ready())return;
         var service=UpdateRuntime.service();service.pulse();
-        if(event.getType()!=TickEvent.Type.IN||ctx.player()==null||!ctx.player().isAlive())return;
+        if(event.getType()!=TickEvent.Type.IN||ctx.player()==null){showing=false;return;}
+        if(!ctx.player().isAlive())return;
         if(!service.asked()&&!showing&&ctx.minecraft().gui.screen()==null){
             showing=true;ctx.minecraft().gui.setScreen(new ConfirmScreen(yes->{
                 service.consent(yes);showing=false;ctx.minecraft().gui.setScreen(null);

@@ -99,7 +99,7 @@ public final class Controller implements AutoCloseable {
             List<ControlView.History> history=new ArrayList<>();for(var request:pending.values())history.add(new ControlView.History(request.id(),request.description(),request.expected(),request.time(),receipts.values().stream().filter(receipt->receipt.id().equals(request.id())).toList()));Collections.reverse(history);
             String join="#network controller "+advertise+" "+wire.boundPort()+" "+key+" "+scope;
             web.controls(ControlView.json(identity,true,true,key,known.values().stream().sorted(Comparator.comparing(State::reporterName)).toList(),live.stream().map(State::reporter).collect(Collectors.toSet()),rules.settings(null),rules.trust(null),history,
-                Map.of("standalone","true","scope",scope,"joinCommand",join,"version","0.1.0.0")));
+                Map.of("standalone","true","scope",scope,"joinCommand",join,"version",Main.VERSION)));
             lastPage=now;
         }
         if(now-lastSave>=30000){save();lastSave=now;}

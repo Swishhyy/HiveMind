@@ -18,6 +18,7 @@
 package hivemind.command.defaults;
 
 import hivemind.api.IHiveMind;
+import hivemind.utils.update.UpdateService;
 import hivemind.api.command.Command;
 import hivemind.api.command.argument.IArgConsumer;
 import hivemind.api.command.exception.CommandException;
@@ -36,7 +37,7 @@ public class VersionCommand extends Command {
     @Override
     public void execute(String label, IArgConsumer args) throws CommandException {
         args.requireMax(0);
-        String version = getClass().getPackage().getImplementationVersion();
+        String version = UpdateService.installedVersion();
         if (version == null) {
             throw new CommandInvalidStateException("Null version (this is normal in a dev environment)");
         } else {
