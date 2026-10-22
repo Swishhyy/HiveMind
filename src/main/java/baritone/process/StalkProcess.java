@@ -91,7 +91,7 @@ public final class StalkProcess extends BaritoneProcessHelper implements IBehavi
     private Sighting peerSearch;
     private long peerSearchAt;
     private int searchStep,memoryStep,legTicks,siteWait,gazeTicks,quietTicks,scatterTicks,scatterQuiet,failedPaths,attempts,previousSlot=-1;
-    private int drinkTicks,drinkWait,totemDelay,explosiveRecheck,explosiveBackoff=20;
+    private int drinkTicks,drinkWait,totemDelay,explosiveRecheck,explosiveBackoff=5;
     private boolean stalkSneak;
     private String lastWarning;
     private boolean checkedLastSeen;
@@ -158,7 +158,10 @@ public final class StalkProcess extends BaritoneProcessHelper implements IBehavi
         baritone.getNetwork().confirmSite(point,canonical);
     }
     public void resume(Order order) { restoring=order;try{start(order.name(),order.hunt(),false,CombatStyle.parse(order.style()));}finally{restoring=null;} }
-    public void transported(){searchStarted=taskStarted=System.currentTimeMillis();}
+    public void transported(){
+        long now=System.currentTimeMillis();searchStarted=taskStarted=now;
+        if(committedCombat()){approachStarted=lastProgress=now;}
+    }
     public void start(String requested) { start(requested,false,false,CombatStyle.MELEE); }
     public void startHunt(String requested) { startHunt(requested,CombatStyle.parse(Baritone.settings().killCombatStyle.value)); }
     public void startHunt(String requested,CombatStyle style) { start(requested,true,false,style); }
@@ -241,12 +244,7 @@ public final class StalkProcess extends BaritoneProcessHelper implements IBehavi
     private int weapon() { return weapon(false); }
     /** An axe disables a raised shield, so it is preferred while the target blocks. */
     private int weapon(boolean preferAxe) {
-        int sword=-1,axe=-1;
-        for(int slot=0;slot<9;slot++) {
-            ItemStack stack=ctx.player().getInventory().getItem(slot);
-            if(stack.isDamageableItem()&&stack.getMaxDamage()-stack.getDamageValue()<=Math.max(1,Baritone.settings().botToolReserve.value))continue;
-            if(stack.is(ItemTags.SWORDS)&&sword<0)sword=slot;if(stack.is(ItemTags.AXES)&&axe<0)axe=slot;
-        }return preferAxe&&axe>=0?axe:sword>=0?sword:axe;
+        return MeleeCombat.weapon(ctx,preferAxe);
     }
     private boolean alone(Player target) {
         return ctx.world().players().stream().noneMatch(other->other!=ctx.player()&&!other.getUUID().equals(target.getUUID())&&!other.isSpectator()&&other.isAlive()
@@ -350,6 +348,10 @@ public final class StalkProcess extends BaritoneProcessHelper implements IBehavi
             if(hunt&&!Baritone.settings().killAllowTrustedTargets.value&&baritone.getBotControl().isTrusted(targetId))
                 {baritone.getAutonomy().clear();return stop("Target became a trusted controller");}
             if(ctx.player().hasLineOfSight(target))record(target);
+            if(hunt){
+                String retreat=retreatReason(target);if(retreat!=null)return scatter(target,retreat,true);
+                if(baritone.getFlight().pursue(this,target))return pause();
+            }
             searchAnchor=target.blockPosition().immutable();searchStarted=System.currentTimeMillis();searchGoal=null;
             legTicks=siteWait=searchStep=0;checkedLastSeen=false;memoryStep=0;
             boolean viewed=beingWatched(target);
@@ -531,6 +533,8 @@ public final class StalkProcess extends BaritoneProcessHelper implements IBehavi
     private PathingCommand scatterTick(Player target,boolean failed,boolean safe) {
         if(target!=null)scatterAnchor=target.blockPosition().immutable();
         if(scatterAnchor==null)scatterAnchor=ctx.playerFeet().immutable();
+        if(hunt&&Math.hypot(ctx.player().getX()-scatterAnchor.getX(),ctx.player().getZ()-scatterAnchor.getZ())<Math.max(256,Baritone.settings().botFlightEscapeDistance.value/2)
+                &&baritone.getFlight().escape(this,List.of(scatterAnchor))&&!baritone.getElytraProcess().getPath().isEmpty())return pause();
         if(waitingToRetry(safe))return pause();
         if((failed&&++failedPaths>=3)||++scatterTicks>1200) {
             if(hunt)return stop("No safe terrain-preserving scatter route");
@@ -588,7 +592,7 @@ public final class StalkProcess extends BaritoneProcessHelper implements IBehavi
         if(!reachedRear&&Math.hypot(target.getX()-target.xo,target.getZ()-target.zo)>0.08&&target.distanceToSqr(ctx.player())<=hearing*hearing)reachedRear=true;
         double attackRange=combatStyle==CombatStyle.MELEE||meleeFallback?8:25;
         if(target.distanceToSqr(ctx.player())<=attackRange&&ctx.player().hasLineOfSight(target)&&safe) {
-            phase=Phase.ATTACK;attackStarted=lastProgress=System.currentTimeMillis();attackCount=failedPaths=explosiveRecheck=0;explosiveBackoff=20;damageConfirmed=false;lastStrike=0;
+            phase=Phase.ATTACK;attackStarted=lastProgress=System.currentTimeMillis();attackCount=failedPaths=explosiveRecheck=0;explosiveBackoff=5;damageConfirmed=false;lastStrike=0;
             lastTargetHealth=target.getHealth()+target.getAbsorptionAmount();
             return attack(target,false,true);
         }
@@ -606,6 +610,7 @@ public final class StalkProcess extends BaritoneProcessHelper implements IBehavi
     private PathingCommand attack(Player target,boolean failed,boolean safe) {
         long now=System.currentTimeMillis();
         String retreat=retreatReason(target);if(retreat!=null)return scatter(target,retreat,true);
+        if(safe&&MeleeCombat.prepare(ctx,target.isBlocking()))return pause();
         float health=target.getHealth()+target.getAbsorptionAmount();
         if(health<lastTargetHealth&&now-lastStrike<1500)progress(now); // health drops right after the bot's own hit or blast
         lastTargetHealth=health;
@@ -656,17 +661,14 @@ public final class StalkProcess extends BaritoneProcessHelper implements IBehavi
         baritone.getInputOverrideHandler().clearAllKeys();ctx.playerController().resetBlockRemoving();
         if(previousSlot<0)previousSlot=ctx.player().getInventory().getSelectedSlot();
         ctx.player().getInventory().setSelectedSlot(selected);ctx.playerController().syncHeldItem();
-        baritone.getLookBehavior().updateTarget(RotationUtils.calcRotationFromVec3d(ctx.playerHead(),target.getEyePosition(),ctx.playerRotations()),true);
-        // Look randomization never reproduces an exact rotation, so swing once the sent rotation's ray actually crosses the target.
-        Vec3 eye=ctx.playerHead(),reach=eye.add(RotationUtils.calcLookDirectionFromRotation(ctx.playerRotations()).scale(4));
-        if(target.getBoundingBox().inflate(0.1).clip(eye,reach).isPresent()&&ctx.player().getAttackStrengthScale(0)>=0.95f) {
+        if(MeleeCombat.aim(ctx,baritone,target)&&ctx.player().getAttackStrengthScale(0)>=0.95f) {
             if(!baritone.getNetwork().team().clearStrike(target))return path(new GoalNear(target.blockPosition().offset((int)Math.round(Math.cos(baritone.getNetwork().team().heading(Kind.HUNT,targetId))*3),0,(int)Math.round(Math.sin(baritone.getNetwork().team().heading(Kind.HUNT,targetId))*3)),1));
             ctx.minecraft().gameMode.attack(ctx.player(),target);ctx.player().swing(InteractionHand.MAIN_HAND,SwingAnimation.DEFAULT,false);lastStrike=now;
             if(!blocking)attackCount++; // a raised shield proves PvP is on, so blocked swings do not count toward the no-damage check
         }return pause();
     }
     private void fallBackToMelee(String reason) {
-        meleeFallback=true;explosives.abandon();explosiveRecheck=0;explosiveBackoff=Math.min(400,explosiveBackoff*2);
+        meleeFallback=true;explosives.abandon();explosiveRecheck=0;explosiveBackoff=Math.min(80,explosiveBackoff*2);
         tell(reason+"; fighting in melee until a blast position opens");
     }
 
@@ -831,6 +833,15 @@ public final class StalkProcess extends BaritoneProcessHelper implements IBehavi
         previousSlot=-1;
     }
     private PathingCommand path(Goal goal) {
+        if(hunt&&phase!=Phase.SCATTER&&ctx.world()!=null){
+            Player target=loaded(targetId);
+            if(target!=null){
+                if(baritone.getFlight().pursue(this,target))return pause();
+                double dx=ctx.player().getX()-target.getX(),dz=ctx.player().getZ()-target.getZ(),length=Math.max(1,Math.hypot(dx,dz));
+                BlockPos approach=target.blockPosition().offset((int)(dx/length*24),0,(int)(dz/length*24));
+                if(baritone.getFlight().travel(this,approach))return pause();
+            }
+        }
         if(phase==Phase.SEARCH&&loaded(targetId)==null){
             BlockPos point=goal instanceof GoalXZ g?new BlockPos(g.getX(),ctx.playerFeet().getY(),g.getZ()):goal instanceof GoalStandoff g?g.target():null;
             if(point!=null&&goal instanceof GoalStandoff){double dx=ctx.player().getX()-point.getX(),dz=ctx.player().getZ()-point.getZ(),length=Math.max(1,Math.hypot(dx,dz));point=point.offset((int)(dx/length*96),0,(int)(dz/length*96));}
@@ -876,13 +887,16 @@ public final class StalkProcess extends BaritoneProcessHelper implements IBehavi
             baritone.getLookBehavior().updateTarget(RotationUtils.calcRotationFromVec3d(ctx.playerHead(),watchedPlayer.getEyePosition(),ctx.playerRotations()),true);
         }
     }
-    @Override public void onBlockChange(BlockChangeEvent event) { explosives.onBlockChange(event); }
+    @Override public void onBlockChange(BlockChangeEvent event) {
+        explosives.onBlockChange(event);
+        if(isActive()&&hunt&&meleeFallback&&ctx.player()!=null&&event.getBlocks().stream().anyMatch(change->change.first().distSqr(ctx.playerFeet())<=64))explosiveRecheck=explosiveBackoff;
+    }
     @Override public void onLostControl() {
         if(isActive()&&baritone.getAutonomy()!=null&&!retainOrder&&ctx.player()!=null&&ctx.player().isAlive()&&ctx.world()!=null&&ctx.world()==observedWorld)baritone.getAutonomy().clear();
         retainOrder=false;offlineWaiting=false;
         if(isActive()) { String remaining=explosives.remaining();if(remaining!=null)tell(remaining); }
         releaseUse();restoreWeapon();explosives.reset();combatStyle=CombatStyle.MELEE;meleeFallback=false;targetId=owner=null;targetName=null;hunt=checkingMemoryOnly=watching=endAfterScatter=reachedRear=checkedLastSeen=false;
-        perceptible=drinkStarted=invisibilityFailed=damageConfirmed=stalkSneak=false;drinkTicks=drinkWait=totemDelay=explosiveRecheck=0;explosiveBackoff=20;lastProgress=lastStrike=0;lastWarning=null;afterDrink=Phase.SEARCH;
+        perceptible=drinkStarted=invisibilityFailed=damageConfirmed=stalkSneak=false;drinkTicks=drinkWait=totemDelay=explosiveRecheck=0;explosiveBackoff=5;lastProgress=lastStrike=0;lastWarning=null;afterDrink=Phase.SEARCH;
         phase=Phase.SEARCH;watchedPlayer=null;searchAnchor=vantageAnchor=vantage=lastReported=scatterAnchor=scatterWaypoint=null;searchGoal=null;scatterDistance=scatterReplan=0;
         watchStation.reset();retryAt=lastRetryReport=0;retryCount=0;retryReason="";recycleVantages=targetMissing=false;
         searchStep=memoryStep=legTicks=siteWait=gazeTicks=quietTicks=scatterTicks=scatterQuiet=failedPaths=attempts=attackCount=0;

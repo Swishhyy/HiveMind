@@ -55,6 +55,8 @@ public final class FollowProcess extends BaritoneProcessHelper implements IFollo
     @Override
     public PathingCommand onTick(boolean calcFailed, boolean isSafeToCancel) {
         scanWorld();
+        if(!into&&!cache.isEmpty()&&baritone.getFlight().travel(this,cache.get(0).blockPosition()))
+            return new PathingCommand(null,PathingCommandType.REQUEST_PAUSE);
         Goal goal = new GoalComposite(cache.stream().map(this::towards).toArray(Goal[]::new));
         return new PathingCommand(goal, PathingCommandType.REVALIDATE_GOAL_AND_PATH);
     }

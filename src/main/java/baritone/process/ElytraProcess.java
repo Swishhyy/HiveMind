@@ -24,6 +24,7 @@ import baritone.api.event.events.type.EventState;
 import baritone.api.event.listener.AbstractGameEventListener;
 import baritone.api.pathing.goals.Goal;
 import baritone.api.pathing.goals.GoalBlock;
+import baritone.api.pathing.goals.GoalNear;
 import baritone.api.pathing.goals.GoalXZ;
 import baritone.api.pathing.goals.GoalYLevel;
 import baritone.api.pathing.movement.IMovement;
@@ -41,6 +42,7 @@ import baritone.pathing.movement.movements.MovementFall;
 import baritone.process.elytra.*;
 import baritone.utils.BaritoneProcessHelper;
 import baritone.utils.PathingCommandContext;
+import baritone.utils.bot.FlightPolicy;
 import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.multiplayer.ClientLevel;
@@ -83,9 +85,28 @@ public class ElytraProcess extends BaritoneProcessHelper implements IBaritonePro
     private boolean autonomousTravel;
     private int takeoffTicks;
     private boolean requestedLanding;
+    private boolean emergencyTravel;
+    private BlockPos takeoffPoint;
+    private int launchTicks;
+    private boolean deferPathInitialization;
     @Override public boolean isTemporary(){return autonomousTravel;}
     public boolean ownedBy(IBaritoneProcess owner){return travelOwner==owner&&isActive();}
-    public void travelFor(IBaritoneProcess owner,Goal destination){pathTo(destination);travelOwner=owner;autonomousTravel=true;takeoffTicks=0;}
+    public void travelFor(IBaritoneProcess owner,Goal destination,BlockPos takeoff,boolean emergency){
+        deferPathInitialization=true;
+        try{pathTo(destination);}finally{deferPathInitialization=false;}
+        travelOwner=owner;autonomousTravel=true;emergencyTravel=emergency;takeoffPoint=takeoff;takeoffTicks=launchTicks=0;
+        // Vanilla auto-jump waits for a walking fall before computing this path. Autonomous
+        // ground takeoff needs its flight path NOW, otherwise the solver never uses a rocket.
+        behavior.pathManager.pathToDestination(takeoff==null?ctx.playerFeet():takeoff);
+    }
+    public boolean retargetFor(IBaritoneProcess owner,BlockPos destination,boolean emergency){
+        if(!isActive()||!isSupportedPos(destination))return false;
+        boolean previous=emergencyTravel;emergencyTravel=emergency;
+        if(shouldLandForSafety()||!behavior.retarget(destination)){emergencyTravel=previous;return false;}
+        travelOwner=owner;autonomousTravel=true;requestedLanding=false;goingToLandingSpot=false;landingSpot=null;landingSearchState=null;
+        if(ctx.player().isFallFlying())state=State.FLYING;
+        return true;
+    }
     public void requestLanding(){requestedLanding=true;}
     private final Semaphore npfSema = new Semaphore(1);
 
@@ -102,7 +123,7 @@ public class ElytraProcess extends BaritoneProcessHelper implements IBaritonePro
     }
 
     public void onLostControl(boolean destroyNpf) {
-        travelOwner=null;takeoffTicks=0;requestedLanding=false;
+        travelOwner=null;takeoffTicks=launchTicks=0;requestedLanding=emergencyTravel=false;takeoffPoint=null;
         this.state = State.START_FLYING; // TODO: null state?
         this.goingToLandingSpot = false;
         this.landingSpot = null;
@@ -134,9 +155,11 @@ public class ElytraProcess extends BaritoneProcessHelper implements IBaritonePro
     @Override
     public void resetState() {
         BlockPos destination = this.currentDestination();
-        this.onLostControl();
+        IBaritoneProcess owner=travelOwner;boolean emergency=emergencyTravel;BlockPos takeoff=takeoffPoint;
+        this.onLostControl();this.travelOwner=owner;this.emergencyTravel=emergency;this.takeoffPoint=takeoff;
         if (destination != null) {
-            this.pathTo(destination);
+            this.pathTo0(destination, false);
+            if(travelOwner!=null)behavior.pathManager.pathToDestination(takeoffPoint==null?ctx.playerFeet():takeoffPoint);
             this.repackChunks();
         }
     }
@@ -145,7 +168,10 @@ public class ElytraProcess extends BaritoneProcessHelper implements IBaritonePro
 
     @Override
     public PathingCommand onTick(boolean calcFailed, boolean isSafeToCancel) {
-        if(travelOwner!=null&&!travelOwner.isActive()){onLostControl();return null;}
+        if(travelOwner!=null&&!travelOwner.isActive()){
+            if(ctx.player()!=null&&ctx.player().isFallFlying())requestedLanding=true;
+            else{onLostControl();return null;}
+        }
         try {
             final long seedSetting = Baritone.settings().elytraNetherSeed.value;
             if (seedSetting != this.behavior.npfContext.getSeed()) {
@@ -274,10 +300,14 @@ public class ElytraProcess extends BaritoneProcessHelper implements IBaritonePro
         }
 
         if(travelOwner!=null&&(this.state==State.FLYING||this.state==State.START_FLYING)&&!ctx.player().isFallFlying()){
+            if(requestedLanding||shouldLandForSafety()||++takeoffTicks>400){onLostControl();return new PathingCommand(null,PathingCommandType.CANCEL_AND_SET_GOAL);}
+            if(takeoffPoint!=null&&!new GoalNear(takeoffPoint,0).isInGoal(ctx.playerFeet()))
+                return new PathingCommand(new GoalNear(takeoffPoint,0),PathingCommandType.REVALIDATE_GOAL_AND_PATH);
+            if(behavior.pathManager.getPath().isEmpty())return new PathingCommand(null,emergencyTravel?PathingCommandType.DEFER:PathingCommandType.REQUEST_PAUSE);
             // Ordinary jump, release, glide request. No non-vanilla lift or movement packets.
-            if(++takeoffTicks>120){onLostControl();return new PathingCommand(null,PathingCommandType.CANCEL_AND_SET_GOAL);}
+            if(++launchTicks>120){onLostControl();return new PathingCommand(null,PathingCommandType.CANCEL_AND_SET_GOAL);}
             baritone.getInputOverrideHandler().clearAllKeys();
-            baritone.getInputOverrideHandler().setInputForceState(Input.JUMP,ctx.player().onGround()?takeoffTicks%20==1:ctx.player().getDeltaMovement().y<-.05&&takeoffTicks%4<2);
+            baritone.getInputOverrideHandler().setInputForceState(Input.JUMP,ctx.player().onGround()?launchTicks%20==1:ctx.player().getDeltaMovement().y<-.05&&launchTicks%4<2);
             return new PathingCommand(null,PathingCommandType.CANCEL_AND_SET_GOAL);
         }
         if (this.state == State.FLYING || this.state == State.START_FLYING) {
@@ -378,7 +408,7 @@ public class ElytraProcess extends BaritoneProcessHelper implements IBaritonePro
 
     @Override
     public double priority() {
-        return travelOwner==null||ctx.player()!=null&&ctx.player().isFallFlying()?0:-0.8;
+        return travelOwner==null?0:emergencyTravel?-0.05:ctx.player()!=null&&ctx.player().isFallFlying()?-0.05:-0.8;
     }
 
     @Override
@@ -424,7 +454,7 @@ public class ElytraProcess extends BaritoneProcessHelper implements IBaritonePro
 
     @Override
     public void pathTo(BlockPos destination) {
-        travelOwner=null;autonomousTravel=false;
+        travelOwner=null;autonomousTravel=emergencyTravel=false;takeoffPoint=null;
         if (!isSupportedPos(destination)) {
             throw new IllegalArgumentException("The goal must be within bounds to use elytra flight.");
         }
@@ -440,8 +470,9 @@ public class ElytraProcess extends BaritoneProcessHelper implements IBaritonePro
         if (ctx.player() == null) {
             return;
         }
-        IBaritoneProcess owner=this.travelOwner;boolean landing=this.requestedLanding;
-        this.onLostControl(false);this.travelOwner=owner;this.requestedLanding=landing;
+        IBaritoneProcess owner=this.travelOwner;boolean landing=this.requestedLanding,emergency=this.emergencyTravel;
+        BlockPos takeoff=this.takeoffPoint;int elapsed=takeoffTicks,launch=launchTicks;
+        this.onLostControl(false);this.travelOwner=owner;this.requestedLanding=landing;this.emergencyTravel=emergency;this.takeoffPoint=takeoff;this.takeoffTicks=elapsed;this.launchTicks=launch;
         this.predictingTerrain = ctx.player().level().dimension() == Level.NETHER && Baritone.settings().elytraPredictTerrain.value;
         this.allowTight = Baritone.settings().elytraAllowTightSpaces.value;
         this.allowAboveBuildLimit = Baritone.settings().elytraAllowAboveBuildLimit.value;
@@ -451,7 +482,7 @@ public class ElytraProcess extends BaritoneProcessHelper implements IBaritonePro
         if (ctx.world() != null) {
             this.repackChunks();
         }
-        this.behavior.pathTo();
+        if(!deferPathInitialization)this.behavior.pathTo();
     }
 
     @Override
@@ -496,7 +527,8 @@ public class ElytraProcess extends BaritoneProcessHelper implements IBaritonePro
 
     private boolean shouldLandForSafety() {
         ItemStack chest = ctx.player().getItemBySlot(EquipmentSlot.CHEST);
-        if (chest.getItem() != Items.ELYTRA || chest.getMaxDamage() - chest.getDamageValue() < (travelOwner!=null?Math.max(32,Baritone.settings().elytraMinimumDurability.value):Baritone.settings().elytraMinimumDurability.value)) {
+        FlightPolicy.Mode mode=emergencyTravel?FlightPolicy.Mode.ESCAPE:FlightPolicy.Mode.TRAVEL;
+        if (chest.getItem() != Items.ELYTRA || chest.getMaxDamage() - chest.getDamageValue() < (travelOwner!=null?FlightPolicy.durability(mode,Baritone.settings().elytraMinimumDurability.value):Baritone.settings().elytraMinimumDurability.value)) {
             // elytrabehavior replaces when durability <= minimumDurability, so if durability < minimumDurability then we can reasonably assume that the elytra will soon be broken without replacement
             return true;
         }
@@ -508,7 +540,7 @@ public class ElytraProcess extends BaritoneProcessHelper implements IBaritonePro
                 qty += inv.get(i).getCount();
             }
         }
-        if (qty <= (travelOwner!=null?Math.max(Baritone.settings().botFlightRocketReserve.value,Baritone.settings().elytraMinFireworksBeforeLanding.value):Baritone.settings().elytraMinFireworksBeforeLanding.value)) {
+        if (qty <= (travelOwner!=null?FlightPolicy.reserve(mode,Baritone.settings().botFlightRocketReserve.value,Baritone.settings().elytraMinFireworksBeforeLanding.value):Baritone.settings().elytraMinFireworksBeforeLanding.value)) {
             return true;
         }
         return false;

@@ -418,9 +418,13 @@ public final class Settings {
     public final Setting<Boolean> botReportAllTrusted = new Setting<>(true);
     public final Setting<Long> botReportIntervalMS = new Setting<>(300000L);
     public final Setting<Boolean> botUseElytra = new Setting<>(true);
-    public final Setting<Integer> botFlightMinimumDistance = new Setting<>(256);
+    public final Setting<Integer> botFlightMinimumDistance = new Setting<>(128);
     public final Setting<Integer> botFlightRocketReserve = new Setting<>(8);
     public final Setting<Integer> botFlightRoamDistance = new Setting<>(768);
+    public final Setting<Boolean> botElytraCombatEscape = new Setting<>(true);
+    public final Setting<Boolean> botElytraPursuit = new Setting<>(true);
+    public final Setting<Integer> botFlightEscapeDistance = new Setting<>(2048);
+    public final Setting<Boolean> botFightHostileMobs = new Setting<>(true);
     public final Setting<Boolean> networkShareSightings = new Setting<>(true);
     public final Setting<Boolean> networkShareExploration = new Setting<>(true);
     public final Setting<Long> networkSightingIntervalMS = new Setting<>(5000L);
@@ -451,7 +455,7 @@ public final class Settings {
     public final Setting<Integer> killMaximumSelfDamage = new Setting<>(14);
     public final Setting<Integer> killMinimumBlastDamage = new Setting<>(1);
     public final Setting<Integer> killBlastHealthReserve = new Setting<>(4);
-    public final Setting<Integer> killExplosiveDelayTicks = new Setting<>(1);
+    public final Setting<Integer> killExplosiveDelayTicks = new Setting<>(0);
     public final Setting<Boolean> killUseBlastCover = new Setting<>(true);
     /** Combat can place up to two obsidian support blocks to reach an uneven or side-mounted blast spot. */
     public final Setting<Integer> killMaxSupportBlocks = new Setting<>(2);

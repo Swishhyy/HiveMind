@@ -66,7 +66,9 @@ public final class ExplosiveCombat {
     private final IPlayerContext ctx;
     private Stage stage=Stage.SELECT;
     private Plan plan;
-    private int ticks,delay,id=-1,idleTicks,confirmedCycles,stockDelay;
+    private int ticks,id=-1,idleTicks,confirmedCycles,stockDelay;
+    private final CombatCadence cadence=new CombatCadence();
+    private BlockPos reusableCrystalBase;
     private int supportIndex,selectDelay;
     private BlockPos lurePoint,firingPoint;
     private long lureUntil,nextLureCheck,firingUntil;
@@ -99,9 +101,9 @@ public final class ExplosiveCombat {
     /** Whether a crystal/anchor plan is eligible right now; lets a melee fallback switch back to explosives. */
     public boolean available(Player target,CombatStyle requested) { rejected.clear();return !inProgress()&&choose(target,requested)!=null; }
     /** Drops the current plan but remembers which styles failed, so a melee fallback does not immediately retry them. */
-    public void abandon() { stage=Stage.SELECT;plan=null;ticks=delay=idleTicks=supportIndex=selectDelay=0;id=-1;blockConfirmed=false;firingPoint=lurePoint=null;firingUntil=lureUntil=0; }
+    public void abandon() { stage=Stage.SELECT;plan=null;ticks=idleTicks=supportIndex=selectDelay=0;id=-1;blockConfirmed=false;firingPoint=lurePoint=null;firingUntil=lureUntil=0; }
     public boolean expectedCrystal(Entity entity) { return stage==Stage.WAIT_BREAK&&entity instanceof EndCrystal&&entity.getId()==id; }
-    public void reset() { abandon();confirmedCycles=stockDelay=0;warning=null;rejected.clear();reusableAnchors.clear();failedFootings.clear();nextLureCheck=0; }
+    public void reset() { abandon();cadence.reset();reusableCrystalBase=null;confirmedCycles=stockDelay=0;warning=null;rejected.clear();reusableAnchors.clear();failedFootings.clear();nextLureCheck=0; }
     public void onBlockChange(BlockChangeEvent event) {
         if(plan!=null) {
             BlockPos expected=stage==Stage.WAIT_COVER?plan.cover():stage==Stage.WAIT_SUPPORT&&supportIndex<plan.supports().size()?plan.supports().get(supportIndex):plan.pos();
@@ -185,7 +187,17 @@ public final class ExplosiveCombat {
         for(int i=0;i<9;i++)if(!ctx.player().getInventory().getItem(i).is(Items.GLOWSTONE))return i;return -1;
     }
     public Step tick(Player target,CombatStyle requested) {
-        if(delay-->0)return waitStep();ticks++;
+        long tick=ctx.player().tickCount;
+        if(!cadence.ready(tick))return waitStep();ticks++;
+        // Drain transitions that only inspect already-confirmed state. At most one use/attack
+        // is sent per client tick; missing server confirmations still stop the pipeline.
+        for(int transitions=0;transitions<8;transitions++){
+            Stage previous=stage;Step result=advance(target,requested);
+            if(cadence.acted(tick)||stage==previous||result.goal()!=null||result.fallback()||result.problem()!=null)return result;
+        }
+        return waitStep();
+    }
+    private Step advance(Player target,CombatStyle requested) {
         if(ctx.player().containerMenu!=ctx.player().inventoryMenu||!ctx.player().inventoryMenu.getCarried().isEmpty())
             return problem("Close inventory menus before explosive combat",requested);
         // Building is evaluated with its planned supports/cover. Only an actual detonation
@@ -201,9 +213,9 @@ public final class ExplosiveCombat {
             case SELECT -> {
                 if(target.distanceToSqr(ctx.player())>256)return new Step(blastRange(target.blockPosition()),false,null);
                 if(selectDelay-->0) { Step move=relocate(target,requested);return move==null?new Step(blastRange(target.blockPosition()),false,null):move; }
-                plan=choose(target,requested);
+                plan=reuseCrystalBase(target,requested);if(plan==null)plan=choose(target,requested);
                 if(plan==null) {
-                    selectDelay=4;
+                    selectDelay=2;
                     Step move=relocate(target,requested);if(move!=null)return move;
                     if(++idleTicks>=6)return problem(lastProblem,requested);
                     return new Step(blastRange(target.blockPosition()),false,null);
@@ -278,15 +290,15 @@ public final class ExplosiveCombat {
                     if(move==null)return problem("No normal-reach crystal hit with acceptable blast exposure",requested);
                     ticks=0;return move;
                 }
-                if(aim(aim)) {
+                if(aim(aim)&&cadence.claim(ctx.player().tickCount,Baritone.settings().killExplosiveDelayTicks.value)) {
                     id=crystal.getId();ctx.minecraft().gameMode.attack(ctx.player(),crystal);
-                    ctx.player().swing(InteractionHand.MAIN_HAND,SwingAnimation.DEFAULT,false);change(Stage.WAIT_BREAK);pace();
+                    ctx.player().swing(InteractionHand.MAIN_HAND,SwingAnimation.DEFAULT,false);change(Stage.WAIT_BREAK);
                 }
                 return waitStep();
             }
             case WAIT_BREAK -> {
                 boolean present=crystals().stream().anyMatch(entity->entity.getId()==id);
-                if(!present) { confirmedCycles++;change(Stage.SELECT);plan=null;firingPoint=null;firingUntil=0; }
+                if(!present) { reusableCrystalBase=plan.pos();confirmedCycles++;change(Stage.SELECT);plan=null;firingPoint=null;firingUntil=0; }
                 return waitStep();
             }
             case WAIT_ANCHOR -> {
@@ -379,6 +391,14 @@ public final class ExplosiveCombat {
             top=String.format(Locale.ROOT,"estimated self damage at least %.1f exceeds killMaximumSelfDamage %d",lowestSelfDamage,Baritone.settings().killMaximumSelfDamage.value);
         lastProblem="No usable blast spot: "+top;
         return best;
+    }
+
+    private Plan reuseCrystalBase(Player target,CombatStyle requested){
+        if(reusableCrystalBase==null||requested==CombatStyle.ANCHOR||requested==CombatStyle.MELEE||rejected.contains(CombatStyle.CRYSTAL)
+                ||slot(Items.END_CRYSTAL)<0||!ctx.world().hasChunkAt(reusableCrystalBase)||reusableCrystalBase.distSqr(ctx.playerFeet())>36
+                ||!base(reusableCrystalBase)||!crystalSpace(reusableCrystalBase)||faceHit(reusableCrystalBase,Direction.UP)==null)return null;
+        Vec3 blast=new Vec3(reusableCrystalBase.getX()+.5,reusableCrystalBase.getY()+1,reusableCrystalBase.getZ()+.5);
+        return worthwhile(target,blast,6,null)?new Plan(reusableCrystalBase,CombatStyle.CRYSTAL,false,List.of(),null,0):null;
     }
     /** Holds a 3-4.5 block band around the target: close enough to place, far enough that the blast is survivable. */
     private static Goal blastRange(BlockPos center) {
@@ -690,12 +710,11 @@ public final class ExplosiveCombat {
         return Math.abs(off.getYaw())<3&&Math.abs(off.getPitch())<3;
     }
     private boolean use(int selected,BlockHitResult hit) {
-        if(selected<0||ctx.player().isShiftKeyDown()||!aim(hit.getLocation()))return false;
+        if(selected<0||ctx.player().isShiftKeyDown()||!aim(hit.getLocation())||!cadence.claim(ctx.player().tickCount,Baritone.settings().killExplosiveDelayTicks.value))return false;
         ctx.player().getInventory().setSelectedSlot(selected);ctx.playerController().syncHeldItem();
         ctx.playerController().processRightClickBlock(ctx.player(),ctx.world(),InteractionHand.MAIN_HAND,hit);
-        ctx.player().swing(InteractionHand.MAIN_HAND,SwingAnimation.DEFAULT,false);pace();return true;
+        ctx.player().swing(InteractionHand.MAIN_HAND,SwingAnimation.DEFAULT,false);return true;
     }
-    private void pace() { delay=StealthPolicy.bounded(Baritone.settings().killExplosiveDelayTicks.value,0,20); }
     private void change(Stage next) { stage=next;ticks=0; }
     private Step waitStep() { return new Step(null,false,null); }
     private Step problem(String reason,CombatStyle requested) {

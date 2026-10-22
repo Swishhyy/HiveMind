@@ -96,6 +96,11 @@ public final class CustomGoalProcess extends BaritoneProcessHelper implements IC
 
     @Override
     public PathingCommand onTick(boolean calcFailed, boolean isSafeToCancel) {
+        if((state==State.PATH_REQUESTED||state==State.EXECUTING)&&goal!=null&&!goal.isInGoal(ctx.playerFeet())){
+            net.minecraft.core.BlockPos destination=goal instanceof baritone.api.pathing.goals.GoalXZ g?new net.minecraft.core.BlockPos(g.getX(),ctx.playerFeet().getY(),g.getZ()):
+                    goal instanceof baritone.api.pathing.goals.GoalBlock g?new net.minecraft.core.BlockPos(g.x,g.y,g.z):null;
+            if(destination!=null&&baritone.getFlight().travel(this,destination))return new PathingCommand(null,PathingCommandType.REQUEST_PAUSE);
+        }
         switch (this.state) {
             case GOAL_SET:
                 return new PathingCommand(this.goal, PathingCommandType.CANCEL_AND_SET_GOAL);

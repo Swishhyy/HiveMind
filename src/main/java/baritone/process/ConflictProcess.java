@@ -26,7 +26,8 @@ import baritone.api.pathing.goals.GoalNear;
 import baritone.utils.BaritoneProcessHelper;
 import baritone.utils.bot.BotWork;
 import baritone.utils.bot.SurvivalPolicy;
-import baritone.api.utils.RotationUtils;
+import baritone.utils.social.CombatPolicy;
+import baritone.utils.social.MeleeCombat;
 import net.minecraft.tags.ItemTags;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.LivingEntity;
@@ -61,7 +62,7 @@ public final class ConflictProcess extends BaritoneProcessHelper implements IBeh
     private boolean protectingEscort;
     private boolean ownsShield;
     private int previousSlot = -1;
-    private int attackDelay;
+    private UUID mobTarget;
 
     public ConflictProcess(Baritone baritone) { super(baritone); }
     @Override public boolean isActive() { return active; }
@@ -140,13 +141,15 @@ public final class ConflictProcess extends BaritoneProcessHelper implements IBeh
         if (ownsShield && !holdsUse()) releaseShield();
         long now = System.currentTimeMillis();
         Map<UUID, Entity> loaded = new LinkedHashMap<>();
-        ctx.entitiesStream().filter(Entity::isAlive).forEach(entity -> loaded.put(entity.getUUID(), entity));
-        threats.entrySet().removeIf(entry -> entry.getValue().expires() < now || baritone.getNetwork().isTeammate(entry.getKey()));
+        ctx.entitiesStream().forEach(entity -> loaded.put(entity.getUUID(), entity));
+        threats.entrySet().removeIf(entry -> entry.getValue().expires() < now || baritone.getNetwork().isTeammate(entry.getKey())
+                ||loaded.containsKey(entry.getKey())&&!loaded.get(entry.getKey()).isAlive());
         for (var entry : new ArrayList<>(threats.entrySet())) {
             Entity entity = loaded.get(entry.getKey());
             if (entity != null) {
                 Threat old = entry.getValue();
-                boolean close = Math.hypot(entity.getX() - ctx.player().getX(), entity.getZ() - ctx.player().getZ()) < old.distance();
+                double keepDistance=entity instanceof net.minecraft.world.entity.player.Player&&baritone.getFlight().escaping()?Math.max(512,old.distance()):old.distance();
+                boolean close = Math.hypot(entity.getX() - ctx.player().getX(), entity.getZ() - ctx.player().getZ()) < keepDistance;
                 threats.put(entry.getKey(), new Threat(entity.blockPosition().immutable(), old.distance(), close ? now + 15000 : old.expires()));
             }
         }
@@ -154,11 +157,18 @@ public final class ConflictProcess extends BaritoneProcessHelper implements IBeh
         // An engaged hunt does not break off for nearby mobs; it retreats on low health or a second player instead.
         boolean engaged = baritone.getStalkProcess().committedCombat();
         for (Entity entity : loaded.values()) {
-            if (engaged || !(entity instanceof Mob mob) || entity.distanceToSqr(ctx.player()) > radius * radius) continue;
+            if (engaged || ctx.player().isFallFlying() || !entity.isAlive() || !(entity instanceof Mob mob) || entity.distanceToSqr(ctx.player()) > radius * radius) continue;
             boolean neutral = isType(entity, "enderman") || isType(entity, "zombified_piglin") || isType(entity, "piglin");
             if ((entity.getType().getCategory() == MobCategory.MONSTER && !neutral) || mob.getTarget() == ctx.player()) remember(entity, false);
         }
         if (!threats.isEmpty()) begin();
+        if(active&&playerThreat()){
+            releaseShield();baritone.getFlight().escape(this,threats.values().stream().map(Threat::position).toList());
+        }
+    }
+
+    public boolean playerThreat(){
+        return ctx.world().players().stream().anyMatch(player->player.isAlive()&&!player.isSpectator()&&threats.containsKey(player.getUUID()));
     }
 
     @Override public PathingCommand onTick(boolean calcFailed, boolean isSafeToCancel) {
@@ -166,6 +176,11 @@ public final class ConflictProcess extends BaritoneProcessHelper implements IBeh
             onLostControl();
             return null;
         }
+        if(playerThreat())baritone.getFlight().escape(this,threats.values().stream().map(Threat::position).toList());
+        PathingCommand mobFight=tryFightMob(isSafeToCancel);
+        if(mobFight!=null)return mobFight;
+        if(!playerThreat()&&mobTarget==null&&attackerId!=null&&MeleeCombat.weapon(ctx,false)<0)
+            baritone.getFlight().escape(this,threats.values().stream().map(Threat::position).toList());
         if (System.currentTimeMillis() < stalkRetreatRetryAt) {
             if (isSafeToCancel) baritone.getInputOverrideHandler().clearAllKeys();
             tryDefend(isSafeToCancel);
@@ -206,6 +221,32 @@ public final class ConflictProcess extends BaritoneProcessHelper implements IBeh
         return new PathingCommand(goal, PathingCommandType.REVALIDATE_GOAL_AND_PATH);
     }
 
+    private PathingCommand tryFightMob(boolean safe){
+        if(!Baritone.settings().botFightHostileMobs.value||playerThreat()||baritone.getSculkProcess().isActive()||baritone.getFlight().escaping())return null;
+        var candidates=ctx.entitiesStream().filter(entity->entity instanceof Mob&&entity.isAlive()&&threats.containsKey(entity.getUUID())
+                &&entity.distanceToSqr(ctx.player())<=20*20).map(entity->(Mob)entity).toList();
+        boolean dangerous=candidates.stream().anyMatch(entity->isType(entity,"warden")||isType(entity,"creeper")||isType(entity,"wither")||isType(entity,"ender_dragon"));
+        if(safe&&MeleeCombat.prepare(ctx,false))return new PathingCommand(null,PathingCommandType.REQUEST_PAUSE);
+        int weapon=MeleeCombat.weapon(ctx,false);
+        if(!CombatPolicy.fightMob(weapon>=0,ctx.player().getHealth()+ctx.player().getAbsorptionAmount(),ctx.player().getFoodData().getFoodLevel(),candidates.size(),dangerous,false)){
+            mobTarget=null;return null;
+        }
+        Mob target=candidates.stream().min(java.util.Comparator.comparingDouble(entity->entity.getUUID().equals(mobTarget)?-1:entity.distanceToSqr(ctx.player()))).orElse(null);
+        if(target==null){mobTarget=null;return null;}mobTarget=target.getUUID();
+        if(!ctx.player().hasLineOfSight(target)||target.distanceToSqr(ctx.player())>8){releaseShield();return new PathingCommand(new GoalNear(target.blockPosition(),1),PathingCommandType.REVALIDATE_GOAL_AND_PATH);}
+        if(!safe||ctx.minecraft().gameMode==null)return new PathingCommand(null,PathingCommandType.REQUEST_PAUSE);
+        baritone.getInputOverrideHandler().clearAllKeys();ctx.playerController().resetBlockRemoving();
+        if(previousSlot<0)previousSlot=ctx.player().getInventory().getSelectedSlot();
+        ctx.player().getInventory().setSelectedSlot(weapon);ctx.playerController().syncHeldItem();
+        if(MeleeCombat.aim(ctx,baritone,target)&&ctx.player().getAttackStrengthScale(0)>=.95f){
+            stopShieldUse();
+            if(baritone.getNetwork().team().clearStrike(target)){ctx.minecraft().gameMode.attack(ctx.player(),target);ctx.player().swing(InteractionHand.MAIN_HAND,SwingAnimation.DEFAULT,false);}
+        }else if(ctx.player().getOffhandItem().is(Items.SHIELD)){
+            ownsShield=true;if(!ctx.player().isUsingItem())ctx.playerController().processRightClick(ctx.player(),ctx.world(),InteractionHand.OFF_HAND);
+        }
+        return new PathingCommand(null,PathingCommandType.REQUEST_PAUSE);
+    }
+
     private boolean tryDefend(boolean safe) {
         if (!safe || !"defend".equalsIgnoreCase(Baritone.settings().botConflictMode.value)
                 || attackerId == null || System.currentTimeMillis() > defendUntil || baritone.getSculkProcess().isActive()) return false;
@@ -216,25 +257,19 @@ public final class ConflictProcess extends BaritoneProcessHelper implements IBeh
         int nearby = (int) threats.values().stream().filter(threat -> threat.position().distSqr(ctx.playerFeet()) < 10 * 10).count();
         if (!SurvivalPolicy.mayDefend(ctx.player().getHealth(), ctx.player().getFoodData().getFoodLevel(), nearby,
                 isType(target, "warden"), isType(target, "creeper"), true)) return false;
-        int weapon = -1;
-        for (int i = 0; i < 9; i++) {
-            var stack = ctx.player().getInventory().getItem(i);
-            if (stack.isDamageableItem() && stack.getMaxDamage() - stack.getDamageValue() <= Math.max(1, Baritone.settings().botToolReserve.value)) continue;
-            if (stack.is(ItemTags.SWORDS)) { weapon = i; break; }
-            if (weapon < 0 && stack.is(ItemTags.AXES)) weapon = i;
-        }
+        if(MeleeCombat.prepare(ctx,((LivingEntity)target).isBlocking()))return true;
+        int weapon = MeleeCombat.weapon(ctx,((LivingEntity)target).isBlocking());
         if (weapon < 0 || ctx.minecraft().gameMode == null) return false;
         baritone.getInputOverrideHandler().clearAllKeys(); ctx.playerController().resetBlockRemoving();
         if (previousSlot < 0) previousSlot = ctx.player().getInventory().getSelectedSlot();
         ctx.player().getInventory().setSelectedSlot(weapon); ctx.playerController().syncHeldItem();
-        baritone.getLookBehavior().updateTarget(RotationUtils.calcRotationFromVec3d(ctx.playerHead(), target.getEyePosition(), ctx.playerRotations()), true);
-        if (attackDelay > 0) attackDelay--;
-        if (attackDelay == 0 && ctx.player().getAttackStrengthScale(0) >= 0.95f) {
+        boolean aimed=MeleeCombat.aim(ctx,baritone,(LivingEntity)target);
+        if (aimed && ctx.player().getAttackStrengthScale(0) >= 0.95f) {
             stopShieldUse();
             ctx.player().getInventory().setSelectedSlot(weapon); ctx.playerController().syncHeldItem();
             if (!baritone.getNetwork().team().clearStrike(target)) return false;
             ctx.minecraft().gameMode.attack(ctx.player(), target);
-            ctx.player().swing(InteractionHand.MAIN_HAND, SwingAnimation.DEFAULT, false); attackDelay = 10;
+            ctx.player().swing(InteractionHand.MAIN_HAND, SwingAnimation.DEFAULT, false);
         } else if (ctx.player().getOffhandItem().is(Items.SHIELD)) {
             ownsShield = true;
             if (!ctx.player().isUsingItem()) ctx.playerController().processRightClick(ctx.player(), ctx.world(), InteractionHand.OFF_HAND);
@@ -296,7 +331,7 @@ public final class ConflictProcess extends BaritoneProcessHelper implements IBeh
         var id = BuiltInRegistries.ENTITY_TYPE.getKey(entity.getType());
         return id != null && id.getNamespace().equals("minecraft") && id.getPath().equals(path);
     }
-    @Override public void onLostControl() { releaseShield(); active = protectingEscort = false;protectedVictim=null; quietTicks = failedPaths = attackDelay = 0; threats.clear(); attackerId = protectedVictim = null; defendUntil = stalkRetreatRetryAt = 0; }
+    @Override public void onLostControl() { releaseShield(); active = protectingEscort = false;protectedVictim=mobTarget=null; quietTicks = failedPaths = 0; threats.clear(); attackerId = protectedVictim = null; defendUntil = stalkRetreatRetryAt = 0; }
     @Override public void onPlayerDeath() { onLostControl(); }
     @Override public String displayName0() { return "Retreating from conflict"; }
 }

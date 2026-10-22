@@ -108,8 +108,9 @@ public final class ElytraBehavior implements Helper {
     private final int[] nextTickBoostCounter;
 
     private BlockStateInterface bsi;
-    public final BetterBlockPos destination;
-    private final boolean appendDestination;
+    public volatile BetterBlockPos destination;
+    private volatile int destinationRevision;
+    private boolean appendDestination;
 
     private final ExecutorService solverExecutor;
     private Future<Solution> solver;
@@ -192,8 +193,10 @@ public final class ElytraBehavior implements Helper {
 
         public CompletableFuture<Void> pathToDestination(final BlockPos from) {
             final long start = System.nanoTime();
+            int revision=destinationRevision;
             return this.path0(from, destinationFixed(), UnaryOperator.identity())
                     .thenRun(() -> {
+                        if(revision!=destinationRevision||this.path.isEmpty())return;
                         final double distance = this.path.get(0).distanceTo(this.path.get(this.path.size() - 1));
                         if (this.completePath) {
                             logVerbose(String.format("Computed path (%.1f blocks in %.4f seconds)", distance, (System.nanoTime() - start) / 1e9d));
@@ -313,9 +316,10 @@ public final class ElytraBehavior implements Helper {
 
         // mickey resigned
         private CompletableFuture<Void> path0(BlockPos src, BlockPos dst, UnaryOperator<UnpackedSegment> operator) {
+            int revision=destinationRevision;
             return ElytraBehavior.this.pathFinder.pathFindAsync(src, dst)
                     .thenApply(operator)
-                    .thenAcceptAsync(this::setPath, ctx.minecraft()::execute);
+                    .thenAcceptAsync(segment->{if(revision==destinationRevision)this.setPath(segment);}, ctx.minecraft()::execute);
         }
 
         // required read lock to be held
@@ -493,6 +497,14 @@ public final class ElytraBehavior implements Helper {
         if (!Baritone.settings().elytraAutoJump.value || ctx.player().isFallFlying()) {
             this.pathManager.pathToDestination();
         }
+    }
+
+    /** Keep the current solver/boost state and path until an updated destination has a path. */
+    public boolean retarget(BlockPos point) {
+        if(pathManager.recalculating)return false;
+        destination=new BetterBlockPos(point);destinationRevision++;appendDestination=false;pathManager.completePath=false;
+        pathManager.pathRecalcSegment(OptionalInt.empty());
+        return true;
     }
 
     public void destroy() {

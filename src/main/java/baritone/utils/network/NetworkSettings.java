@@ -39,18 +39,19 @@ public final class NetworkSettings {
     }
     private static final Map<String, Spec> SPECS = new LinkedHashMap<>();
     static {
-        bool("Autonomy","botAutoRespawn botPersistentTracking botPeriodicReports botReportAllTrusted botUseElytra");
+        bool("Autonomy","botAutoRespawn botPersistentTracking botPeriodicReports botReportAllTrusted botUseElytra botElytraCombatEscape botElytraPursuit");
         number("Autonomy","long",1000,30000,"botRespawnDelayMS");
         number("Autonomy","long",30000,3600000,"botReportIntervalMS");
         number("Autonomy","integer",96,8192,"botFlightMinimumDistance botFlightRoamDistance");
         number("Autonomy","integer",2,64,"botFlightRocketReserve");
+        number("Autonomy","integer",512,8192,"botFlightEscapeDistance");
         bool("Movement", "allowBreak allowPlace allowSprint allowParkour allowWaterBucketFall");
         number("Movement","integer",3,1024,"maxFallHeightBucket");
         number("Stalking","integer",0,10000,"stalkTerrainPenalty");
         bool("Mining", "mineAutoDeposit mineDiscardWaste mineTravelBetweenDimensions preferAvoidConstruction protectContainers mineAvoidSculk");
         number("Mining","integer",0,16,"mineWasteKeepStacks");
         number("Mining","integer",1,64,"sculkAvoidRadius");
-        bool("Survival","botSurvival botAutoResupply fleeConflicts");
+        bool("Survival","botSurvival botAutoResupply fleeConflicts botFightHostileMobs");
         choice("Survival","botConflictMode","flee","defend");
         number("Survival","integer",1,20,"botMinimumHealth botEatAtHunger");
         number("Survival","integer",0,2304,"botMinimumFood botRestockFood botMinimumBlocks botRestockBlocks botToolReserve");
