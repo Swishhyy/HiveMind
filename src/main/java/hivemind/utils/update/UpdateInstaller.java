@@ -14,6 +14,12 @@ public final class UpdateInstaller {
         try{MessageDigest digest=MessageDigest.getInstance("SHA-256");try(InputStream in=Files.newInputStream(file)){byte[] buffer=new byte[65536];for(int n;(n=in.read(buffer))>=0;)digest.update(buffer,0,n);}return HexFormat.of().formatHex(digest.digest());}
         catch(NoSuchAlgorithmException e){throw new IllegalStateException(e);}
     }
+    public static void compatible(String installed,String candidate)throws IOException{
+        if(!Set.of("legacy","bot","player").contains(installed)||!Set.of("legacy","bot","player").contains(candidate)||!(installed.equals(candidate)||installed.equals("legacy")&&candidate.equals("bot")))throw new IOException("Update would change the client distribution");
+    }
+    public static String distribution(Path jar)throws IOException{
+        try(ZipFile zip=new ZipFile(jar.toFile())){var entry=zip.getEntry("hivemind-build.properties");if(entry==null)throw new IOException("Missing installed build identity");Properties p=new Properties();try(var in=zip.getInputStream(entry)){byte[] bytes=in.readNBytes(16385);if(bytes.length>16384)throw new IOException("Oversized build identity");p.load(new ByteArrayInputStream(bytes));}String role=p.getProperty("distribution","legacy");compatible(role,role);return role;}
+    }
     public static void verify(Path jar,UpdateManifest manifest)throws IOException{
         if(Files.size(jar)!=manifest.size()||!digest(jar).equals(manifest.sha256()))throw new IOException("Downloaded update checksum/size does not match");
         try(ZipFile zip=new ZipFile(jar.toFile())){
@@ -21,7 +27,7 @@ public final class UpdateInstaller {
             if(entry==null||fabric==null)throw new IOException("Update is missing HiveMind/Fabric metadata");
             Properties info=new Properties();try(InputStream in=zip.getInputStream(entry)){byte[] bytes=in.readNBytes(16385);if(bytes.length>16384)throw new IOException("Oversized build metadata");info.load(new ByteArrayInputStream(bytes));}
             if(!"hivemind".equals(info.getProperty("application"))||!"26.3".equals(info.getProperty("minecraft"))||!"fabric".equals(info.getProperty("loader"))
-                    ||!manifest.version().equals(info.getProperty("version"))||!manifest.commit().equals(info.getProperty("commit")))throw new IOException("Update build identity is not the expected Fabric 26.3 release");
+                    ||!manifest.version().equals(info.getProperty("version"))||!manifest.commit().equals(info.getProperty("commit"))||!manifest.distribution().equals(info.getProperty("distribution","legacy")))throw new IOException("Update build identity is not the expected Fabric 26.3 release");
             String json;try(InputStream in=zip.getInputStream(fabric)){byte[] bytes=in.readNBytes(65537);if(bytes.length>65536)throw new IOException("Oversized Fabric metadata");json=new String(bytes,java.nio.charset.StandardCharsets.UTF_8);}
             if(!java.util.regex.Pattern.compile("\"id\"\\s*:\\s*\"hivemind\"").matcher(json).find())throw new IOException("Update mod ID is not hivemind");
         }
@@ -32,10 +38,10 @@ public final class UpdateInstaller {
         Path target=Path.of(p.getProperty("target")).toAbsolutePath().normalize(),staged=Path.of(p.getProperty("staged")).toRealPath();
         if(!target.getParent().equals(mods)||Files.isSymbolicLink(target)||!target.getFileName().toString().endsWith(".jar")||!staged.getParent().equals(updates)
                 ||!plan.toRealPath().getParent().equals(updates))throw new IOException("Update plan leaves this Minecraft instance");
-        UpdateManifest expected=new UpdateManifest(p.getProperty("version"),p.getProperty("commit"),Long.parseLong(p.getProperty("size")),p.getProperty("sha256"),java.net.URI.create(p.getProperty("url")));
+        UpdateManifest expected=new UpdateManifest(p.getProperty("version"),p.getProperty("commit"),Long.parseLong(p.getProperty("size")),p.getProperty("sha256"),java.net.URI.create(p.getProperty("url")),p.getProperty("distribution","legacy"));
         long pid=Long.parseLong(p.getProperty("pid"));if(pid<1)throw new IOException("Invalid parent process");
         if(waitForGame){var parent=ProcessHandle.of(pid);if(parent.isPresent())parent.get().onExit().get(7,TimeUnit.DAYS);}
-        verify(staged,expected);
+        verify(staged,expected);compatible(distribution(target),expected.distribution());
         Path backups=updates.resolve("backups");Files.createDirectories(backups);Path backup=backups.resolve("hivemind-"+System.currentTimeMillis()+".jar");
         if(Files.exists(target))Files.copy(target,backup,StandardCopyOption.COPY_ATTRIBUTES);
         Path replacement=mods.resolve(".hivemind-update-"+UUID.randomUUID()+".tmp");

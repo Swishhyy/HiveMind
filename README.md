@@ -52,7 +52,7 @@ HiveMind runs on the Minecraft client of a bot account and turns it into a worke
 
 ## Install
 
-1. Download `hivemind-<version>.jar` from the [latest release](https://github.com/Swishhyy/HiveMind/releases/latest) and put it in the bot client's `mods` folder.
+1. For bot accounts, download `hivemind-<version>.jar`; for your own manual character, download `hivemind-player-<version>.jar` from the [latest release](https://github.com/Swishhyy/HiveMind/releases/latest) and put **one** edition in that Minecraft instance's `mods` folder. Remove the previous HiveMind JAR first; both editions use the same mod ID.
 2. If you used a development build before 0.1.0.0, remove that jar first. Packages, the mod ID and config files are now `hivemind`; old configs are not migrated.
 3. Optional controller: download `hivemind-controller-<version>-windows-x64.zip`, extract the whole folder and run `HiveMindController.exe`. On Linux, macOS or a server, run `java -jar hivemind-controller.jar`. Open the dashboard link it prints. Then copy the **Bot connection command** from **Settings** into each bot's chat once, while it is on the target server. See [CONTROLLER.md](CONTROLLER.md).
 
@@ -110,7 +110,7 @@ Every option is available through `#set <setting> <value>`. With Mod Menu instal
 Building needs Java 25.
 
 ```sh
-./gradlew build                                      # Fabric mod: fabric/build/libs/hivemind-<version>.jar
+./gradlew build                                      # Shared Fabric build; CI packages the bot and player editions
 python3 scripts/build-distributions.py controller    # standalone controller (Java 17)
 bash scripts/check-mining-policies.sh                # behavior policy checks, no Minecraft needed
 bash scripts/check-controller.sh                     # controller, network and updater checks
@@ -133,15 +133,15 @@ HiveMind is a fork of [Baritone](https://github.com/cabaletta/baritone) by leiju
 
 ### Player sharing and map orders
 
-Install the same Fabric mod on your own client, run `#client player`, then use the connection command from the controller's **Settings** page. Player mode is saved per Minecraft instance. Your position and observations feed the shared map and the bots; HiveMind overlays and automation stay off on your screen. Nearby loaded players can be detected through ESP without displaying it to you. Those contacts expire after six seconds and are search hints, not recorded visual sightings or base evidence. Nothing scans entities that the server has not sent to your client.
+Install `hivemind-player-<version>.jar` on your own client, then use the connection command from the controller's **Settings** page. The player edition starts in manual sharing mode and cannot switch to bot mode, even with an existing bot configuration. Your position and observations feed the shared map and the bots; HiveMind overlays and automation stay off on your screen. Nearby loaded players can be detected through ESP without displaying it to you. Those contacts expire after six seconds and are search hints, not recorded visual sightings or base evidence. Nothing scans entities that the server has not sent to your client.
 
-The controller labels player clients separately and does not send them bot work, settings, trust policies or automatic session actions. `#client bot` locally restores bot capability; use `#roam on`, `#resume` or a new task to start work again.
+The controller labels player clients separately and does not send them bot work, settings, trust policies or automatic session actions. The player JAR refuses `#client bot`. Install the standard `hivemind-<version>.jar` on bot accounts; it defaults to bot mode and retains existing local role choices during upgrades.
 
 Right-click terrain on the atlas, select an online bot in that dimension and choose **Go here** or **Explore here**. Explore accepts a radius of 32–2048 blocks and surveys a finite grid by elytra or on foot. Commands are pinned to the clicked dimension, and will be rejected if the bot changes dimension before executing. Unmapped clicks are labeled approximate. Keyboard: focus the map and press Shift+F10 to command its center; Escape closes the menu.
 
 Manual equivalents: `#scout go minecraft:overworld 100 -200`, `#scout explore minecraft:overworld 100 -200 256`, and `#scout status` / `#scout stop`.
 
-### Reliable operations and itineraries (0.1.0.6)
+### Reliable operations and itineraries (0.1.0.7)
 
 The controller's Commands page explains each client's **Task**, **Blocker**, **Next** action and flight decision. It also shows round-trip latency, estimated bytes sent/received, queued frames and recovery count. Stale reports are labeled. Traffic totals refer to the current connection, not lifetime usage.
 
@@ -170,3 +170,5 @@ Use `#botbase resupply` to request a full reserve refill without replacing curre
 Use `#botbase status`, `#botbase scan`, or `#botbase clear`. Clearing the anchor leaves registered chests intact; use `#deposit remove <id>` for containers you no longer want used. To configure one shared location for several bots, select **All bots** in the controller and send `#botbase set minecraft:overworld 100 64 -200 16`, substituting your coordinates. Bot base commands affect autonomous clients; player-mode clients remain manual.
 
 Death recovery compares inventory after respawn rather than assuming all items dropped. `#recover status` shows pending, retained, lost, partial or empty observations; `#recover now` targets missing items only. Auto requires the server's full player inventory sync and a settling period. Set `botDeathInventoryMode` to `auto` (default), `keep`, or `drop` under controller **Companions**, or through `#set`, for unusual server plugins. Observations are per server/save and reassessed after each death; they do not claim access to a remote gamerule.
+
+Separate client editions: the standard bot filename remains `hivemind-<version>.jar`, with the existing `hivemind-26.3-update.properties` update URL. The locked manual player edition is `hivemind-player-<version>.jar`, using `hivemind-player-26.3-update.properties`. Both support the same first-join automatic-update consent and `#update` controls. Downloads and install plans verify the edition as well as the checksum; updates replace the installed JAR in place and preserve its filename. Old standard JARs continue updating through the existing channel, including saved manual-role configurations. To adopt the locked player package, manually replace the old mod once, then its own updater handles later releases. Install only one edition per instance. The controller is still a separate application.
