@@ -45,6 +45,7 @@ final class NetworkControls {
     private final Map<String,String> managed=new LinkedHashMap<>();
     private final Map<UUID,Pending> pending=new LinkedHashMap<>();
     private final Map<String,Receipt> receipts=new LinkedHashMap<>();
+    private final Map<UUID,Long> chatRequests=new LinkedHashMap<>();
     private final Map<String,Receipt> applied=new LinkedHashMap<>();
     private final Map<UUID,Long> lastSync=new HashMap<>();
     private Defaults group;
@@ -61,6 +62,14 @@ final class NetworkControls {
         Map<String,String> values=new LinkedHashMap<>();
         for(String key:saved.stringPropertyNames())values.put(key,saved.getProperty(key));
         setValues(NetworkSettings.normalize(values));
+    }
+    String botCommandList(){var nodes=PlayerBotOrders.targets(states(System.currentTimeMillis()),"all",System.currentTimeMillis());return nodes.isEmpty()?"No fresh online bots reported yet":"Online bots: "+String.join(", ",nodes.stream().map(s->s.reporterName()+" ("+s.reporter()+")").toList());}
+    String requestBotCommand(String selector,String command){
+        long now=System.currentTimeMillis();var nodes=PlayerBotOrders.targets(states(now),selector,now);if(nodes.isEmpty())throw new IllegalStateException("No fresh online autonomous bots; wait for telemetry or use #bots list");
+        command=ControlRules.command(command);UUID id=UUID.randomUUID(),target=selector.equalsIgnoreCase("all")?null:nodes.get(0).reporter();
+        chatRequests.values().removeIf(time->now-time>120000);if(chatRequests.size()>=64)throw new IllegalStateException("Too many pending bot commands");chatRequests.put(id,now);
+        if(!enqueue(new WebControlAction(id,target,Action.COMMAND,"",command,now))){chatRequests.remove(id);throw new IllegalStateException("Command queue is busy");}
+        return "Sent #"+command+" to "+String.join(", ",nodes.stream().map(State::reporterName).toList())+"; waiting for bot confirmations";
     }
     boolean enqueue(WebControlAction action){return !closed&&actions.offer(action);}
     private Identity who(){return parent.localIdentity();}
@@ -112,7 +121,9 @@ final class NetworkControls {
         return new Receipt(who().id(),who().name(),id,requester,success,shorten(message,500),now);
     }
     private void remember(Receipt receipt){
-        receipts.put(receipt.id()+":"+receipt.reporter(),receipt);
+        String receiptKey=receipt.id()+":"+receipt.reporter();boolean fresh=!receipts.containsKey(receiptKey);
+        receipts.put(receiptKey,receipt);
+        if(fresh&&receipt.requester().equals(who().id())&&chatRequests.containsKey(receipt.id()))hivemind.api.utils.Helper.HELPER.logDirect("["+receipt.reporterName()+"] "+(receipt.success()?"":"Failed: ")+receipt.message());
         while(receipts.size()>256)receipts.remove(receipts.keySet().iterator().next());
     }
     private void dispatch(Request request,long now){
@@ -122,6 +133,7 @@ final class NetworkControls {
         }
     }
     void tick(long now){
+        chatRequests.values().removeIf(time->now-time>120000);
         WebControlAction action;int count=0;
         while(count++<8&&(action=actions.poll())!=null){
             String description=action.action()==Action.COMMAND?action.value():action.action()==Action.SETTING?"Set "+action.key()+" = "+action.value():(action.value().equals("true")?"Trust ":"Untrust ")+action.key();
@@ -188,7 +200,10 @@ final class NetworkControls {
         }
         var target=bot.getCommandManager().getCommand(label);if(target==null)throw new IllegalArgumentException("Unknown bot command");
         String first=expanded.second().isEmpty()?"":expanded.second().get(0).getValue().toLowerCase(Locale.ROOT);bot.getAutonomy().beforeCommand(label,first);
-        target.execute(label,args);bot.getAutonomy().afterCommand(label,first);return "Accepted #"+command+"; "+status();
+        target.execute(label,args);bot.getAutonomy().afterCommand(label,first);
+        if(label.equals("deposit")&&first.equals("point")&&bot.getCommandManager().getCommand("storagepoint") instanceof hivemind.command.defaults.StoragePointCommand storage)return storage.result();
+        if(target instanceof hivemind.command.defaults.BotBaseCommand base)return base.result();
+        return "Accepted #"+command+"; "+status();
     }
     OperationsPackets.Snapshot activity(long now){
         Map<String,String> details=new LinkedHashMap<>();var ctx=bot.getPlayerContext();boolean online=ctx.player()!=null&&ctx.world()!=null;

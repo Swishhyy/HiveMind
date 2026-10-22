@@ -11,9 +11,12 @@ import hivemind.utils.network.BotBaseStore;
 import java.util.*;
 import java.util.stream.Stream;
 public final class BotBaseCommand extends Command {
+    private String result="";
+    public String result(){return result;}
+    private void report(String message){result+=(result.isEmpty()?"":"; ")+message;logDirect(message);}
     public BotBaseCommand(IHiveMind bot){super(bot,"botbase","bot");}
     @Override public void execute(String label,IArgConsumer args)throws CommandException{
-        var bot=(HiveMind)hivemind;if(ctx.player()==null||ctx.world()==null)throw new CommandInvalidStateException("Join a world first");
+        result="";var bot=(HiveMind)hivemind;if(ctx.player()==null||ctx.world()==null)throw new CommandInvalidStateException("Join a world first");
         if(label.equals("bot")&&!args.getString().equalsIgnoreCase("base"))throw new CommandInvalidStateException("Use #bot base set/status/scan/resupply/clear");
         String action=args.hasAny()?args.getString().toLowerCase(Locale.ROOT):"status";
         try{
@@ -23,14 +26,14 @@ public final class BotBaseCommand extends Command {
                 WorldRoutes.Endpoint point;int radius=16;
                 if(args.hasAny()&&args.peekString().contains(":")){String dimension=args.getString();int x=args.getAs(Integer.class),y=args.getAs(Integer.class),z=args.getAs(Integer.class);point=new WorldRoutes.Endpoint(dimension,x,y,z);if(args.hasAny())radius=args.getAs(Integer.class);}
                 else {point=MiningRouteAccess.endpoint(ctx,ctx.playerFeet());if(args.hasAny())radius=args.getAs(Integer.class);}args.requireMax(0);
-                store.set(new BotBaseStore.Base(point,radius));int chests=BotBaseAccess.scan(ctx);logDirect("Bot base saved: "+point+" · radius "+radius+" · "+chests+" loaded supply containers found");if(chests==0)logDirect("Containers will be discovered when this bot reaches the base; only loaded containers are scanned.");return;
+                store.set(new BotBaseStore.Base(point,radius));int chests=BotBaseAccess.scan(ctx);report("Bot base saved: "+point+" · radius "+radius+" · "+chests+" loaded supply containers found");if(chests==0)report("Containers will be discovered when this bot reaches the base; only loaded containers are scanned.");return;
             }
             args.requireMax(0);
             switch(action){
-                case "status"->logDirect("Bot base: "+store.get()+" · "+bot.getShulkerProcess().reserveStatus());
-                case "scan"->logDirect("Bot base scan found "+BotBaseAccess.scan(ctx)+" loaded supply containers");
-                case "clear"->{if(bot.getOperations().isActive()||bot.getDepositProcess().isActive())throw new IllegalStateException("Finish the supply trip first");store.set(null);logDirect("Bot base cleared. Registered storage remains; remove it with #deposit remove if needed.");}
-                case "resupply"->{if(bot.isPlayerClient())throw new IllegalStateException("Player clients remain under manual control");bot.getOperations().requestRestock();logDirect("Resupply requested; the current task is preserved");}
+                case "status"->report("Bot base: "+store.get()+" · "+bot.getShulkerProcess().reserveStatus());
+                case "scan"->report("Bot base scan found "+BotBaseAccess.scan(ctx)+" loaded supply containers");
+                case "clear"->{if(bot.getOperations().isActive()||bot.getDepositProcess().isActive())throw new IllegalStateException("Finish the supply trip first");store.set(null);report("Bot base cleared. Registered storage remains; remove it with #deposit remove if needed.");}
+                case "resupply"->{if(bot.isPlayerClient())throw new IllegalStateException("Player clients remain under manual control");bot.getOperations().requestRestock();report("Resupply requested; the current task is preserved");}
                 default->throw new IllegalArgumentException("Use #botbase set [radius], set <dimension> <x> <y> <z> [radius], status, scan, resupply or clear");
             }
         }catch(IllegalArgumentException|IllegalStateException e){throw new CommandInvalidStateException(e.getMessage());}

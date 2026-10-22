@@ -24,5 +24,5 @@ public final class ClientRole {
     public void set(String role){requireRole(role);if(locked)return;Properties p=new Properties();p.setProperty("role",role);AtomicProperties.write(file,p);player=role.equals("player");}
     public static boolean player(Map<String,String> session){return session.getOrDefault("role","bot").equals("player");}
     public static boolean remoteAllowed(String label){return Set.of("status","update").contains(label);}
-    public static boolean localAllowed(String label){return Set.of("backup","meet","bring","client","network","net","set","modified","mod","hivemind","modifiedsettings","reset","reloadall","saveall","help","version","status","trust","mark","mapmark","update","stop","cancel","pause","paused").contains(label);}
+    public static boolean localAllowed(String label){return Set.of("bots","backup","meet","bring","client","network","net","set","modified","mod","hivemind","modifiedsettings","reset","reloadall","saveall","help","version","status","trust","mark","mapmark","update","stop","cancel","pause","paused").contains(label);}
 }

@@ -77,6 +77,10 @@ public final class ControlChecks {
             Request command=request(A.id(),Action.COMMAND,"","#mine 64 netherite",now);
             List<Packet> dispatch=coordinator.handle(command,List.of(HOST.id(),A.id(),B.id()),now);
             check(dispatch.size()==1&&dispatch.get(0) instanceof Execute execute&&execute.target().equals(A.id())&&execute.command().equals("mine 64 netherite"),"A quick command keeps its selected target and normal command syntax");
+            String storageCommand=PlayerBotOrders.chest("add",new hivemind.utils.mining.WorldRoutes.Endpoint("minecraft:the_nether",-30,65,70),"supplies");
+            Request configure=request(B.id(),Action.COMMAND,"",storageCommand,now);var configured=coordinator.handle(configure,List.of(A.id(),B.id()),now);
+            check(configured.size()==1&&configured.get(0) instanceof Execute edit&&edit.target().equals(B.id())&&edit.requester().equals(A.id())&&edit.command().equals(storageCommand),"Remote storage edits must preserve the bot target, pinned location and player receipt recipient");
+            check(coordinator.handle(configure,List.of(B.id()),now).isEmpty(),"Storage setup requests must be deduplicated like other commands");
             check(coordinator.handle(command,List.of(A.id()),now).isEmpty(),"A repeated request ID cannot run a command twice");
             check(coordinator.handle(request(who("Offline").id(),Action.COMMAND,"","stop",now),List.of(A.id()),now).get(0) instanceof Receipt receipt&&!receipt.success(),"Offline commands are reported as not run");
             check(coordinator.handle(request(null,Action.COMMAND,"","network key new",now),List.of(A.id()),now).get(0) instanceof Receipt receipt&&!receipt.success(),"The quick-command transport cannot edit keys or execute arbitrary commands");

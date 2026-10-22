@@ -45,6 +45,7 @@ public final class DepositCommand extends Command {
         String action = args.hasAny() ? args.getString().toLowerCase(Locale.ROOT) : "now";
         HiveMind instance = (HiveMind) hivemind;
         DepositProcess process = instance.getDepositProcess();
+        if(action.equals("point")){instance.getCommandManager().getCommand("storagepoint").execute("storagepoint",args);return;}
         if (action.equals("set") || action.equals("add")) {
             BlockPos pos = args.hasAny() ? args.getDatatypePost(RelativeBlockPos.INSTANCE, ctx.playerFeet())
                     : ctx.getSelectedBlock().orElseThrow(() -> new CommandInvalidStateException("Look directly at the chest to save"));
