@@ -68,11 +68,11 @@ Run these in the bot client's chat:
 #job status                shows the current task, progress, health and hunger
 #stalk PlayerName          watches a player from cover
 #kill PlayerName auto      stalks, then attacks with crystals, anchors or melee
-#network web               opens the local map and dashboard in your browser
+#network web               starts the local map and dashboard and prints a link to it
 #stop                      stops everything
 ```
 
-From your main account, whisper commands to the bot, for example `/msg BotName #mine 32 netherite`. Only private messages from trusted UUIDs are accepted, and trust and storage settings can only be changed locally on the bot.
+From your main account, whisper commands to the bot, for example `/msg BotName #mine 32 netherite`. Only private messages from trusted UUIDs are accepted, and whispers cannot change trust, storage or other settings. Change those on the bot itself, or through the dashboard.
 
 ## Command cheat sheet
 
