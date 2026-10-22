@@ -3,7 +3,7 @@ package hivemind.utils.bot;
 import hivemind.HiveMind;
 import hivemind.api.utils.IPlayerContext;
 import hivemind.utils.network.SupplyReserves;
-import hivemind.behavior.ElytraBehavior;
+import hivemind.process.elytra.ElytraBehavior;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.item.*;
 import java.util.*;
