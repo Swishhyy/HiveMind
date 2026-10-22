@@ -27,7 +27,7 @@ public final class SessionBehavior extends Behavior {
         wasOnline=online;
         if(session.takeDisconnect()&&online){
             hivemind.getFlight().cancel();hivemind.getInputOverrideHandler().clearAllKeys();
-            ctx.world().disconnect(Component.literal("[HiveMind] "+session.status()));return;
+            if(ctx.world() instanceof net.minecraft.client.multiplayer.ClientLevel level)level.disconnect(Component.literal("[HiveMind] "+session.status()));return;
         }
         boolean controlled=hivemind.getNetwork().controllerConnected();
         if(!online&&session.shouldConnect(now,controlled)&&(mc.gui.screen()==null||mc.gui.screen() instanceof TitleScreen||mc.gui.screen() instanceof DisconnectedScreen)){

@@ -65,7 +65,7 @@ Commands in HiveMind:
 - `version` to get the version of HiveMind you're running
 - `damn` daniel
 
-All the settings and documentation are <a href="https://github.com/cabaletta/baritone/blob/master/src/api/java/baritone/api/Settings.java">here</a>. If you find HTML easier to read than Javadoc, you can look <a href="https://baritone.leijurv.com/baritone/api/Settings.html#field.detail">here</a>.
+Settings are documented in [Settings.java](src/api/java/hivemind/api/Settings.java). Bot configuration and controller setup are covered in [CONTROLLER.md](CONTROLLER.md).
 
 There are about a hundred settings, but here are some fun / interesting / important ones that you might want to look at changing in normal usage of HiveMind. The documentation for each can be found at the above links.
 

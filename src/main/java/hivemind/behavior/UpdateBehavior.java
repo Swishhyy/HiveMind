@@ -1,6 +1,7 @@
 /* HiveMind, LGPL-3.0. */
 package hivemind.behavior;
 import hivemind.HiveMind;
+import hivemind.api.utils.Helper;
 import hivemind.api.HiveMindAPI;
 import hivemind.api.event.events.TickEvent;
 import hivemind.api.event.events.type.EventState;
@@ -19,6 +20,6 @@ public final class UpdateBehavior extends Behavior {
                 service.consent(yes);showing=false;ctx.minecraft().gui.setScreen(null);
             },Component.literal("Enable HiveMind automatic updates?"),Component.literal("Download new Fabric 26.3 releases from Swishhyy/HiveMind. Install after Minecraft closes; activate next launch. You can change this with #update or the controller.")));
         }
-        if(!announced&&Boolean.parseBoolean(service.snapshot().get("restart"))){logDirect("HiveMind update downloaded. Close and relaunch Minecraft to finish installing.");announced=true;}
+        if(!announced&&Boolean.parseBoolean(service.snapshot().get("restart"))){Helper.HELPER.logDirect("HiveMind update downloaded. Close and relaunch Minecraft to finish installing.");announced=true;}
     }
 }

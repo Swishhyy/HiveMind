@@ -140,6 +140,8 @@ tasks.register('updateHelper', Exec) {
     commandLine 'python3', 'scripts/build-distributions.py', 'helper'
 }
 processResources {
+    inputs.property 'hivemindVersion', project.version
+    inputs.property 'hivemindCommit', System.getenv('GITHUB_SHA') ?: 'git rev-parse HEAD'.execute().text.trim()
     dependsOn tasks.named('updateHelper')
     from(layout.buildDirectory.dir('generated/update'))
     doLast {

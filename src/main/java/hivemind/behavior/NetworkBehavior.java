@@ -24,6 +24,8 @@ import hivemind.api.event.events.TickEvent;
 import hivemind.api.event.events.type.EventState;
 import hivemind.api.utils.Helper;
 import hivemind.utils.IRenderer;
+import hivemind.utils.bot.AtomicProperties;
+import hivemind.utils.bot.SessionRuntime;
 import hivemind.utils.mining.MiningRouteAccess;
 import hivemind.utils.network.*;
 import hivemind.utils.network.NetworkProtocol.*;
@@ -109,6 +111,7 @@ public final class NetworkBehavior extends Behavior {
                 case HOST -> BotNetwork.host(who, options.key(), options.bind(), options.port(), history);
                 case JOIN -> BotNetwork.join(who, options.key(), options.host(), options.port(), history);
             };
+            if(options.mode()==NetworkConfig.Mode.JOIN)saveLink();
         }
         if (viewer != null && viewer.port() != options.webPort()) { viewer.close(); viewer = null; }
         if (options.webPort() != 0 && viewer == null && System.currentTimeMillis() >= nextWebAttempt) {
@@ -127,10 +130,12 @@ public final class NetworkBehavior extends Behavior {
     private void saveLink(){
         if(config==null||root==null||rememberedIdentity==null||config.options().mode()!=NetworkConfig.Mode.JOIN)return;
         Properties p=new Properties();p.setProperty("root",root.toAbsolutePath().toString());p.setProperty("id",rememberedIdentity.id().toString());p.setProperty("name",rememberedIdentity.name());p.setProperty("scope",rememberedIdentity.scope());
-        hivemind.utils.bot.AtomicProperties.write(resumeFile,p);
+        var server=ctx.minecraft().getCurrentServer();p.setProperty("server",server==null?SessionRuntime.get(ctx.minecraft().gameDirectory.toPath()).server():server.ip);
+        AtomicProperties.write(resumeFile,p);
     }
     private void restoreLink(){
-        Properties p=hivemind.utils.bot.AtomicProperties.read(resumeFile);if(!p.containsKey("root"))return;
+        Properties p=AtomicProperties.read(resumeFile);if(!p.containsKey("root"))return;
+        if(!p.getProperty("server","").equals(SessionRuntime.get(ctx.minecraft().gameDirectory.toPath()).server()))return;
         Path saved=Path.of(p.getProperty("root")).toAbsolutePath().normalize();
         if(!saved.startsWith(hivemind.getDirectory().toAbsolutePath().normalize()))throw new IllegalStateException("Controller link leaves the HiveMind folder");
         var next=new NetworkConfig(saved,clientKey.key());if(next.options().mode()!=NetworkConfig.Mode.JOIN)return;

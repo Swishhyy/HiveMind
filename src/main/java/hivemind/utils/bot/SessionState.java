@@ -53,7 +53,7 @@ public final class SessionState {
         return status;
     }
     public boolean takeDisconnect(){boolean value=disconnectRequested;disconnectRequested=false;return value;}
-    public boolean shouldConnect(long now,boolean controllerConnected){return !connected&&!server.isBlank()&&now>=holdUntil&&now>=nextAttempt&&(connectRequested||automatic&&!controllerConnected);}
+    public boolean shouldConnect(long now,boolean controllerConnected){return !connected&&!server.isBlank()&&now>=holdUntil&&now>=nextAttempt&&(connectRequested||(automatic||holdUntil>0&&holdUntil<Long.MAX_VALUE)&&!controllerConnected);}
     public void attempted(long now,long baseDelay){
         attempts=Math.min(10,attempts+1);connectRequested=false;
         nextAttempt=now+Math.min(300000,Math.max(5000,baseDelay)*(1L<<Math.min(5,attempts-1)));
