@@ -16,6 +16,7 @@ public final class Main {
             if(!args[i].startsWith("--")||!allowed.contains(args[i].substring(2))||i+1==args.length)throw new IllegalArgumentException("Unknown/incomplete option; use --help");
             String key=args[i].substring(2);if(options.put(key,args[++i])!=null)throw new IllegalArgumentException("Duplicate option "+key);
         }
+        if(ControllerUpdater.beforeStart(args))return;
         Path root=Path.of(options.getOrDefault("data","hivemind-controller-data"));
         Controller controller=new Controller(root,options.getOrDefault("bind","0.0.0.0"),Integer.parseInt(options.getOrDefault("port","28766")),options.getOrDefault("web-bind","127.0.0.1"),Integer.parseInt(options.getOrDefault("web-port","28767")),options.containsKey("public-url")?URI.create(options.get("public-url")):null,options.getOrDefault("advertise","127.0.0.1"),options.getOrDefault("scope","hivemind"));
         Runtime.getRuntime().addShutdownHook(new Thread(controller::close,"HiveMind-controller-shutdown"));

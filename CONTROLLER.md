@@ -4,7 +4,7 @@ The controller runs without Minecraft and owns the network relay, coordination, 
 
 ## Start
 
-Windows: download `hivemind-controller-0.1.0.9-windows-x64.zip`, extract the **whole folder**, and run `HiveMindController.exe`. Its Java runtime is included; keep the neighboring folders beside the executable. The console prints a clickable dashboard address containing its access token. Open it, go to **Settings**, and copy the **Bot connection command** into each client's chat once while joined to the intended server.
+Windows: download `hivemind-controller-0.1.0.10-windows-x64.zip`, extract the **whole folder**, and run `HiveMindController.exe`. Its Java runtime is included; keep the neighboring folders beside the executable. The console prints a clickable dashboard address containing its access token. Open it, go to **Settings**, and copy the **Bot connection command** into each client's chat once while joined to the intended server.
 
 Linux, macOS or a server with Java 17+: `java -jar hivemind-controller.jar`. The same dashboard and connection command work there. Minecraft clients still require Java 25 and Fabric 26.3.
 
@@ -36,6 +36,15 @@ Under **Settings → Sessions**, enable `botCombatLog`, choose `botCombatLogHeal
 Combat logging sends a real disconnect; a server may keep an avatar present or reject subsequent joins. It cannot undo server-side combat tags. Reconnecting uses the client's already authenticated Minecraft account. It does not sign into Microsoft accounts or launch a closed/crashed Minecraft JVM. Keep clients running, or use your existing launcher/process supervisor to restart crashed game instances. Saved named tracking orders remain in the client; map history, policies and reconnect decisions remain in the controller. Raw combat clicks and live entity references stay in Minecraft.
 
 ## Automatic updates
+
+The standalone controller **0.1.0.10 and newer checks its own update channel on every launch, before opening the relay/dashboard**. A newer controller is downloaded and verified by SHA-256, size, version and controller identity. A separate helper waits for the current process to exit, backs up the old JAR, installs the replacement and starts it with the same working directory and command-line options. This works with both the JAR and the portable Windows executable; the Windows runtime includes the helper's Java launcher. Keep the installation folder writable. Saved maps, keys, settings and trust are untouched.
+
+If a check/download fails or the internet is unavailable, the installed controller starts. Failed replacement retains the installed version and retries on a later launch rather than looping. The previous JAR is kept beside the installation in `.hivemind-controller-updates/previous.jar`. Startup updates replace the controller application JAR; a future Java runtime/launcher change requires replacing the portable folder.
+
+**One-time upgrade:** older controllers do not have this updater. Download/extract 0.1.0.10 once, retaining your existing data folder and startup options; subsequent controller updates happen on launch.
+
+Controller, bot and player versions are independent. This release is **controller 0.1.0.10**, **bot 0.1.0.9**, **player 0.1.0.9**. An unchanged component retains the exact published file, checksum and update manifest, so a bot-only release does not download/restart the controller. Shared runtime/network changes may require multiple components to update. Existing bot/player filenames and update-channel URLs remain unchanged.
+
 
 Each instance asks once on its first server join whether to enable automatic downloads from **Swishhyy/HiveMind GitHub Releases**, for Fabric 26.3 only. You can change it per client or across connected clients on **Updates**, or use:
 
