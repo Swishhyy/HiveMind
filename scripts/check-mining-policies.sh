@@ -15,6 +15,8 @@ fi
     src/main/java/hivemind/utils/bot/TrustedControl.java \
     src/main/java/hivemind/utils/bot/AutonomyPolicy.java \
     src/main/java/hivemind/utils/bot/FlightPolicy.java \
+    src/main/java/hivemind/utils/bot/TakeoffState.java \
+    src/test/java/hivemind/utils/bot/TakeoffChecks.java \
     src/main/java/hivemind/utils/bot/PortableSupplyPolicy.java \
     src/main/java/hivemind/utils/bot/PortableBoxStore.java \
     src/main/java/hivemind/utils/social/ClutchPolicy.java \
@@ -88,3 +90,5 @@ java -cp "$task_classes:src/main/resources" hivemind.utils.bot.AutonomyChecks
 java -cp "$task_classes:src/main/resources" hivemind.utils.bot.FlightCombatChecks
 java -cp "$task_classes:src/main/resources" hivemind.utils.bot.SurveyChecks
 java -cp "$task_classes:src/main/resources" hivemind.utils.bot.CombatSupplyChecks
+
+java -cp "$task_classes:src/main/resources" hivemind.utils.bot.TakeoffChecks

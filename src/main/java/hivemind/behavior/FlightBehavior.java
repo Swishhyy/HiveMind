@@ -24,6 +24,7 @@ import hivemind.api.process.IHiveMindProcess;
 import hivemind.process.ElytraProcess;
 import hivemind.process.elytra.ElytraBehavior;
 import hivemind.utils.bot.FlightPolicy;
+import hivemind.utils.bot.TakeoffState;
 import hivemind.utils.bot.AerialSurvey;
 import hivemind.utils.bot.FlightPolicy.Mode;
 import hivemind.utils.bot.FlightPolicy.Point;
@@ -35,6 +36,7 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.levelgen.Heightmap;
+import net.minecraft.world.phys.AABB;
 import java.util.*;
 
 /** Owned transport, urgent escape and observed-player pursuit using the native flight navigator. */
@@ -111,14 +113,15 @@ public final class FlightBehavior extends Behavior {
         if(!supplied(requested)||ctx.minecraft().gui.screen()!=null||ctx.player().isInWater()||ctx.player().isInLava()
                 ||ctx.player().containerMenu!=ctx.player().inventoryMenu||!ctx.player().inventoryMenu.getCarried().isEmpty())return false;
         if(requested!=Mode.ESCAPE&&(hivemind.getConflictProcess().isActive()||hivemind.getSurvivalProcess().isActive()||hivemind.getSculkProcess().isActive()||ctx.player().isUsingItem()))return false;
+        if(!ctx.player().isFallFlying()&&!ctx.player().onGround()&&(ctx.player().getDeltaMovement().y>=-.08||!clearTakeoffColumn(ctx.playerFeet())))return false;
         BlockPos launch=ctx.player().isFallFlying()||!ctx.player().onGround()?null:findTakeoff(now);
-        if(!ctx.player().isFallFlying()&&ctx.player().onGround()&&launch==null)return false;
+        if(!ctx.player().isFallFlying()&&ctx.player().onGround()&&launch==null){reason="Walking to clearer ground for takeoff";return false;}
         if(!equipWings(requested)){backoff(now,requested);reason="Walking: carried wings could not be equipped";return false;}
         if(ctx.player().isUsingItem()&&ctx.minecraft().gameMode!=null)ctx.minecraft().gameMode.releaseUsingItem(ctx.player());
         try{
             if(requested!=Mode.PURSUIT)destination=cruiseDestination(destination,requested);
             flight.travelFor(task,new hivemind.api.pathing.goals.GoalBlock(destination),launch,requested==Mode.ESCAPE);
-            owner=task;mode=requested;started=lastReplan=now;world=ctx.world();takeoff=launch;airborne=ctx.player().isFallFlying();
+            owner=task;mode=requested;started=lastReplan=now;world=ctx.world();takeoff=launch==null?ctx.playerFeet().immutable():launch;airborne=false;
             nextSurveyPoint=null;
             lastDestination=point(destination);reason=label(requested,destination);return true;
         }catch(RuntimeException e){reason="Flight retry: "+e.getMessage();backoff(now,requested);return false;}
@@ -144,15 +147,40 @@ public final class FlightBehavior extends Behavior {
         if(now<nextTakeoffSearch)return null;
         nextTakeoffSearch=now+1000;blockedTakeoffs.values().removeIf(until->until<now);
         BlockPos feet=ctx.playerFeet(),best=null;double score=Double.POSITIVE_INFINITY;
-        for(int x=-8;x<=8;x++)for(int z=-8;z<=8;z++)for(int y=-2;y<=3;y++){
-            BlockPos p=feet.offset(x,y,z);if(blockedTakeoffs.containsKey(p)||!ctx.world().hasChunkAt(p)||!ctx.world().getWorldBorder().isWithinBounds(p)
+        for(int x=-12;x<=12;x++)for(int z=-12;z<=12;z++)for(int y=-2;y<=3;y++){
+            double value=x*x+z*z+Math.abs(y)*4;if(value>=score)continue;
+            BlockPos p=feet.offset(x,y,z);
+            if(blockedTakeoffs.keySet().stream().anyMatch(blocked->TakeoffState.sameFailedArea(point(p),point(blocked)))
+                    ||!ctx.world().hasChunkAt(p)||!ctx.world().getWorldBorder().isWithinBounds(p)
                     ||!ctx.world().getBlockState(p).getFluidState().isEmpty()||!ctx.world().getBlockState(p.above()).getFluidState().isEmpty()
-                    ||ctx.world().getBlockState(p.below()).getCollisionShape(ctx.world(),p.below()).isEmpty())continue;
-            var box=ctx.player().getBoundingBox().move(p.getX()+.5-ctx.player().getX(),p.getY()-ctx.player().getY(),p.getZ()+.5-ctx.player().getZ()).expandTowards(0,2,0);
-            double value=x*x+z*z+Math.abs(y)*4;
-            if(value<score&&ctx.world().noCollision(ctx.player(),box)){score=value;best=p.immutable();}
+                    ||ctx.world().getBlockState(p.below()).getCollisionShape(ctx.world(),p.below()).isEmpty()
+                    ||!clearTakeoffColumn(p)||!clearTakeoffExit(p))continue;
+            score=value;best=p.immutable();
         }
         return best;
+    }
+    private boolean clearTakeoffColumn(BlockPos point){
+        // Use standing dimensions even if an unsuccessful glide left the player in the short wing pose.
+        for(int y=0;y<10;y++)if(!ctx.world().getBlockState(point.above(y)).getFluidState().isEmpty())return false;
+        AABB column=new AABB(point.getX()+.1,point.getY(),point.getZ()+.1,point.getX()+.9,point.getY()+9.8,point.getZ()+.9);
+        return ctx.world().hasChunkAt(point)&&ctx.world().getWorldBorder().isWithinBounds(point)
+                &&(ctx.world().dimension()!=Level.OVERWORLD||ctx.world().canSeeSky(point.above()))&&ctx.world().noCollision(ctx.player(),column);
+    }
+    private boolean clearTakeoffExit(BlockPos point){
+        // A narrow vertical hole through leaves is not an exit for a boosted glider. Require one open lane.
+        for(int direction=0;direction<8;direction++){
+            double angle=direction*Math.PI/4,dx=Math.cos(angle)*8,dz=Math.sin(angle)*8;
+            double cx=point.getX()+.5,cz=point.getZ()+.5;
+            AABB lane=new AABB(Math.min(cx,cx+dx)-.5,point.getY()+.8,Math.min(cz,cz+dz)-.5,
+                    Math.max(cx,cx+dx)+.5,point.getY()+4.8,Math.max(cz,cz+dz)+.5);
+            if(ctx.world().hasChunkAt(BlockPos.containing(lane.minX,lane.minY,lane.minZ))&&ctx.world().hasChunkAt(BlockPos.containing(lane.maxX,lane.minY,lane.maxZ))
+                    &&ctx.world().hasChunkAt(BlockPos.containing(lane.minX,lane.minY,lane.maxZ))&&ctx.world().hasChunkAt(BlockPos.containing(lane.maxX,lane.minY,lane.minZ))
+                    &&ctx.world().getWorldBorder().isWithinBounds(BlockPos.containing(cx+dx,point.getY(),cz+dz))&&ctx.world().noCollision(ctx.player(),lane))return true;
+        }
+        return false;
+    }
+    private void blockTakeoff(BlockPos site,long now){
+        blockedTakeoffs.put(site,now+60000);while(blockedTakeoffs.size()>64)blockedTakeoffs.remove(blockedTakeoffs.entrySet().stream().min(Map.Entry.comparingByValue()).orElseThrow().getKey());
     }
     /** Three normal SWAP clicks exchange two inventory slots without leaving an item on the cursor. */
     private void exchangeChest(int source){
@@ -192,13 +220,13 @@ public final class FlightBehavior extends Behavior {
         }
         if(owner==null){restoreArmor();return;}
         long now=System.currentTimeMillis();
+        if(hivemind.getElytraProcess() instanceof ElytraProcess flight)airborne|=flight.takeoffCompleted();
         if(!hivemind.getElytraProcess().isActive()){
             if(hivemind.getStalkProcess().isActive())hivemind.getStalkProcess().transported();
-            if(!airborne){if(takeoff!=null)blockedTakeoffs.put(takeoff,now+30000);backoff(now,mode);reason="Takeoff blocked; walking briefly before retrying";}
+            if(!airborne){if(takeoff!=null)blockTakeoff(takeoff,now);blockTakeoff(ctx.playerFeet().immutable(),now);backoff(now,mode);reason="Takeoff obstructed; moving away before trying another launch";}
             else reason="Landed; ready for the next flight";
             owner=null;targetId=null;restoreArmor();return;
         }
-        airborne|=ctx.player().isFallFlying();
         if(hivemind.getAutonomy().paused())return;
         if(!owner.isActive()){
             if(ctx.player().isFallFlying()&&hivemind.getElytraProcess() instanceof ElytraProcess flight){reason="Landing: parent task is held or finished";flight.requestLanding();}

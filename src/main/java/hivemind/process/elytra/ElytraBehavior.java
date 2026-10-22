@@ -805,6 +805,7 @@ public final class ElytraBehavior implements Helper {
         public final AABB boundingBox;
         public final boolean ignoreLava;
         public final FireworkBoost boost;
+        public final boolean launchBoost;
         public final IAimProcessor aimProcessor;
 
         /**
@@ -830,6 +831,8 @@ public final class ElytraBehavior implements Helper {
                 fireworkTicksExisted = ElytraBehavior.this.getAttachedFirework().map(e -> e.tickCount).orElse(null);
             }
             this.boost = new FireworkBoost(fireworkTicksExisted, ElytraBehavior.this.minimumBoostTicks);
+            this.launchBoost=process.needsLaunchBoost()&&ctx.player().isFallFlying()&&!ctx.player().onGround()
+                    &&!this.boost.isBoosted()&&ElytraBehavior.this.remainingFireworkTicks<=0&&ElytraBehavior.this.remainingSetBackTicks<=0;
 
             ITickableAimProcessor aim = ElytraBehavior.this.hivemind.getLookBehavior().getAimProcessor().fork();
             if (async) {
@@ -855,7 +858,8 @@ public final class ElytraBehavior implements Helper {
                     && Objects.equals(this.motion, other.motion)
                     && Objects.equals(this.boundingBox, other.boundingBox)
                     && this.ignoreLava == other.ignoreLava
-                    && Objects.equals(this.boost, other.boost);
+                    && Objects.equals(this.boost, other.boost)
+                    && this.launchBoost==other.launchBoost;
         }
     }
 
@@ -1085,6 +1089,15 @@ public final class ElytraBehavior implements Helper {
         final IntTriFunction<PitchResult> solve = (ticks, ticksBoosted, ticksBoostDelay) ->
                 this.solvePitch(context, goal, relaxation, pitches.iterator(), ticks, ticksBoosted, ticksBoostDelay);
 
+        // A short unboosted solution near the first path node used to win, leaving a new
+        // glide without enough speed to leave the ground. Prefer a collision-checked launch
+        // boost, simulating its full minimum duration instead of blindly firing a rocket.
+        if(context.launchBoost){
+            for(int delay=1;delay<=3;delay++){
+                PitchResult departure=solve.apply(12,10,delay);
+                if(departure!=null)return new Pair<>(departure.pitch,true);
+            }
+        }
         final List<IntTriple> tests = new ArrayList<>();
 
         if (context.boost.isBoosted()) {
