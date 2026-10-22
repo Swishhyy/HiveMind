@@ -71,9 +71,10 @@ public final class FlightBehavior extends Behavior {
         if(HiveMind.settings().allowInventory.value)for(int i=0;i<36;i++)durability=Math.max(durability,wingDurability(ctx.player().getInventory().getItem(i)));
         return FlightPolicy.supplied(requested,durability,rockets(),HiveMind.settings().botFlightRocketReserve.value,HiveMind.settings().elytraMinFireworksBeforeLanding.value,HiveMind.settings().elytraMinimumDurability.value);
     }
-    public boolean capable(){return supplied(Mode.TRAVEL);}
-    public boolean survey(IHiveMindProcess task,BlockPos point){return start(task,point,Mode.SURVEY);}
+    public boolean capable(){return !hivemind.getOperations().walking()&&supplied(Mode.TRAVEL);}
+    public boolean survey(IHiveMindProcess task,BlockPos point){if(hivemind.getOperations().walking())return false;return start(task,point,Mode.SURVEY);}
     public boolean travel(IHiveMindProcess task,BlockPos point){
+        if(hivemind.getOperations().walking())return false;
         if(flying())return owner==task;
         if(ctx.player()==null||Math.hypot(point.getX()-ctx.player().getX(),point.getZ()-ctx.player().getZ())<Math.max(96,HiveMind.settings().botFlightMinimumDistance.value))return false;
         return start(task,point,Mode.TRAVEL);
@@ -110,6 +111,7 @@ public final class FlightBehavior extends Behavior {
             if(!flight.retargetFor(task,destination,requested==Mode.ESCAPE))return false;
             owner=task;mode=requested;nextSurveyPoint=null;started=now;lastDestination=point(destination);lastReplan=now;reason=label(requested,destination);return true;
         }
+        if(requested!=Mode.ESCAPE&&!hivemind.getOperations().prepareTrip(destination))return false;
         if(!supplied(requested)||ctx.minecraft().gui.screen()!=null||ctx.player().isInWater()||ctx.player().isInLava()
                 ||ctx.player().containerMenu!=ctx.player().inventoryMenu||!ctx.player().inventoryMenu.getCarried().isEmpty())return false;
         if(requested!=Mode.ESCAPE&&(hivemind.getConflictProcess().isActive()||hivemind.getSurvivalProcess().isActive()||hivemind.getSculkProcess().isActive()||ctx.player().isUsingItem()))return false;
@@ -180,6 +182,7 @@ public final class FlightBehavior extends Behavior {
         return false;
     }
     private void blockTakeoff(BlockPos site,long now){
+        hivemind.getOperations().warn(site,"Failed elytra launch",60000);
         blockedTakeoffs.put(site,now+60000);while(blockedTakeoffs.size()>64)blockedTakeoffs.remove(blockedTakeoffs.entrySet().stream().min(Map.Entry.comparingByValue()).orElseThrow().getKey());
     }
     /** Three normal SWAP clicks exchange two inventory slots without leaving an item on the cursor. */
@@ -218,7 +221,7 @@ public final class FlightBehavior extends Behavior {
         if(event.getType()==TickEvent.Type.OUT||ctx.player()==null||ctx.world()==null||!ctx.player().isAlive()||world!=null&&world!=ctx.world()){
             cancel();world=ctx.world();armorSlot=-1;armor=ItemStack.EMPTY;blockedTakeoffs.clear();return;
         }
-        if(owner==null){restoreArmor();return;}
+        if(owner==null){restoreArmor();if(hivemind.getOperations().walking())reason="Walking away from a failed launch area before retrying flight";else if(!supplied(Mode.TRAVEL))reason=!HiveMind.settings().botUseElytra.value?"Walking: elytra use is disabled":rockets()<Math.max(HiveMind.settings().botFlightRocketReserve.value,HiveMind.settings().elytraMinFireworksBeforeLanding.value)?"Walking: rockets are below the flight reserve":"Walking: no usable elytra with enough durability";return;}
         long now=System.currentTimeMillis();
         if(hivemind.getElytraProcess() instanceof ElytraProcess flight)airborne|=flight.takeoffCompleted();
         if(!hivemind.getElytraProcess().isActive()){

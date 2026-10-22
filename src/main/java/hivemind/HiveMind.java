@@ -86,6 +86,7 @@ public class HiveMind implements IHiveMind {
     private final JobManager jobManager;
     private final hivemind.utils.network.ClientRole clientRole;
     private final ScoutProcess scoutProcess;
+    private final OperationsProcess operations;
     private final BotControlBehavior botControl;
     private final NetworkBehavior network;
     private final AutonomyBehavior autonomy;
@@ -139,6 +140,7 @@ public class HiveMind implements IHiveMind {
         {
             this.followProcess           = this.registerProcess(FollowProcess::new);
             this.mineProcess             = this.registerProcess(MineProcess::new);
+            this.operations              = this.registerProcess(OperationsProcess::new);
             this.scoutProcess            = this.registerProcess(ScoutProcess::new);
             this.roamProcess             = this.registerProcess(RoamProcess::new);
             this.depositProcess          = this.registerProcess(DepositProcess::new);
@@ -186,6 +188,7 @@ public class HiveMind implements IHiveMind {
         this.registerBehavior(this.network);
         this.registerBehavior(this.flight);
         this.registerBehavior(this.autonomy);
+        this.registerBehavior(this.operations);
         this.registerBehavior(this.combat);
         this.registerBehavior(this.clutch);
         this.registerBehavior(new UpdateBehavior(this));
@@ -279,6 +282,7 @@ public class HiveMind implements IHiveMind {
     public RepairProcess getRepairProcess() { return this.repairProcess; }
     public hivemind.utils.network.ClientRole getClientRole() { return clientRole; }
     public boolean isPlayerClient() { return clientRole != null && clientRole.player(); }
+    public OperationsProcess getOperations(){return operations;}
     public ScoutProcess getScoutProcess() { return scoutProcess; }
     public JobManager getJobManager() { return this.jobManager; }
     public BotControlBehavior getBotControl() { return this.botControl; }

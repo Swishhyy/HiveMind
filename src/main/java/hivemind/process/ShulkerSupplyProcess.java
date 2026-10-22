@@ -99,8 +99,9 @@ public final class ShulkerSupplyProcess extends HiveMindProcessHelper implements
         }
         return wanted;
     }
-    public boolean requestItems(Map<String,Integer> targets){
-        return request(targets.entrySet().stream().map(entry->new Need(s->BotItems.ordinary(s)&&BuiltInRegistries.ITEM.getKey(s.getItem()).toString().equals(entry.getKey()),entry.getValue(),entry.getKey())).toList());
+    public boolean requestItems(Map<String,Integer> targets){return requestItems(targets,false);}
+    public boolean requestItems(Map<String,Integer> targets,boolean variants){
+        return request(targets.entrySet().stream().map(entry->new Need(s->(variants?BotItems.expeditionSupply(s):BotItems.ordinary(s))&&BuiltInRegistries.ITEM.getKey(s.getItem()).toString().equals(entry.getKey()),entry.getValue(),entry.getKey())).toList());
     }
     public boolean requestSupplies(){return ctx.player()!=null&&request(loadout());}
     private boolean request(List<Need> wanted){

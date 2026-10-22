@@ -63,6 +63,7 @@ public final class AutonomyBehavior extends Behavior {
     public void replaceWork(){load();clear();hivemind.getFlight().cancel();}
     private boolean workCommand(String label,String first){
         if(Set.of("status","list","history","sightings","report","supported").contains(first))return false;
+        if(label.equals("scout")&&Set.of("add","list","move","remove","pause","clear","status").contains(first))return false;
         if(label.equals("job"))return Set.of("resume","start").contains(first);
         return Set.of("scout","mine","follow","goto","path","explore","farm","build","gettoblock","deposit","deliver","escort","recover","gather","repair","elytra").contains(label);
     }

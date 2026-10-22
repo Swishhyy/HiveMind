@@ -20,6 +20,7 @@ package hivemind.utils.mining;
 import org.junit.Test;
 
 public final class MiningPoliciesTest {
+    @Test public void itinerariesRecoveryAndTeamOperationsPreserveManualAndHistoryBoundaries() throws Exception {hivemind.utils.network.OperationsChecks.runAll();}
     @Test public void mapOrdersAreBoundedAndPlayerRolesRemainManual() throws Exception {hivemind.utils.bot.MapPlayerChecks.runAll();}
     @Test public void portableSuppliesRetainTheBoxAndClutchesUseTheActualFallWindow() throws Exception {hivemind.utils.bot.CombatSupplyChecks.runAll();}
     @Test public void surveysExpandAndResumeWithoutRepeatingOldAnchors() throws Exception {hivemind.utils.bot.SurveyChecks.runAll();}

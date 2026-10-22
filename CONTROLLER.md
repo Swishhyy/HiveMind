@@ -4,7 +4,7 @@ The controller runs without Minecraft and owns the network relay, coordination, 
 
 ## Start
 
-Windows: download `hivemind-controller-0.1.0.3-windows-x64.zip`, extract the **whole folder**, and run `HiveMindController.exe`. Its Java runtime is included; keep the neighboring folders beside the executable. The console prints a clickable dashboard address containing its access token. Open it, go to **Settings**, and copy the **Bot connection command** into each client's chat once while joined to the intended server.
+Windows: download `hivemind-controller-0.1.0.4-windows-x64.zip`, extract the **whole folder**, and run `HiveMindController.exe`. Its Java runtime is included; keep the neighboring folders beside the executable. The console prints a clickable dashboard address containing its access token. Open it, go to **Settings**, and copy the **Bot connection command** into each client's chat once while joined to the intended server.
 
 Linux, macOS or a server with Java 17+: `java -jar hivemind-controller.jar`. The same dashboard and connection command work there. Minecraft clients still require Java 25 and Fabric 26.3.
 
@@ -64,3 +64,19 @@ The controller labels player clients separately and does not send them bot work,
 Right-click terrain on the atlas, select an online bot in that dimension and choose **Go here** or **Explore here**. Explore accepts a radius of 32–2048 blocks and surveys a finite grid by elytra or on foot. Commands are pinned to the clicked dimension, and will be rejected if the bot changes dimension before executing. Unmapped clicks are labeled approximate. Keyboard: focus the map and press Shift+F10 to command its center; Escape closes the menu.
 
 Manual equivalents: `#scout go minecraft:overworld 100 -200`, `#scout explore minecraft:overworld 100 -200 256`, and `#scout status` / `#scout stop`.
+
+### Reliable operations and itineraries (0.1.0.4)
+
+The controller's Commands page explains each client's **Task**, **Blocker**, **Next** action and flight decision. It also shows round-trip latency, estimated bytes sent/received, queued frames and recovery count. Stale reports are labeled. Traffic totals refer to the current connection, not lifetime usage.
+
+On the map, right-click and enable **Append to queue** to chain go/explore/check tasks. **Check here** visits a point and watches for ten seconds. Select one bot in **Map task queue** to reorder/remove entries, pause/resume/clear them, or append a **storage return** which deposits before advancing. Remaining tasks survive restart; an interrupted active survey restarts its current task, rather than pretending it was completed. Dimension mismatches hold the queue until resolved. Routes and search radii can be toggled in the map legend.
+
+Commands: `#scout add explore minecraft:overworld 100 -200 256`, `#scout add check minecraft:overworld 150 -250`, `#scout add return`, `#scout list`, `#scout pause`, `#scout resume`, `#scout remove <id>`, `#scout move <id> <position>`, `#scout clear`. A new direct go/explore/check command replaces the itinerary; appending preserves it. Other manual work parks an active itinerary instead of silently discarding it.
+
+Before long-distance travel, expedition checks use carried shulkers and registered storage for food, building blocks, rocket reserves, totems and replacements for nearly broken worn armor. Healthy matching spare armor is equipped through normal inventory actions. Item components and enchantments are retained. Storage shortages show a reason and a retry cooldown while the bot continues with available supplies; ordinary survival and flight reserve checks still apply. Configure `botExpeditionSupplies`, `botExpeditionRockets` (32), `botExpeditionTotems` (1), and `botStuckRecovery` through Settings or `#set`. Only actual accessible stock is used.
+
+Player-mode clients can request `#meet`, `#backup`, or `#bring rockets 64` (`#bring <item> [quantity]` supports other items). Selection requires a healthy idle bot in the same dimension; a bot that becomes busy before the request arrives rejects it. Meet goes to your requested location. Backup meets and escorts under existing defense settings. Deliveries require the existing handoff confirmation. Your character remains manual and its overlays stay off.
+
+Bots searching for the same target partition survey directions among live team members, share firsthand sightings and short-lived ESP hints, and spread support positions toward likely escape paths. ESP hints appear separately on the map and expire after six seconds; they do not create base evidence or historical sighting hotspots. Terrain scanning slows while stationary, unchanged tiles are suppressed, and network congestion defers terrain sampling while control messages keep priority.
+
+Upgrade controller and clients together: this version uses network protocol 7. Keep existing controller data when replacing the standalone application.

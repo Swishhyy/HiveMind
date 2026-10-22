@@ -74,7 +74,8 @@ public class PathingControlManager implements IPathingControlManager {
             if (preservePortalWork && (proc == hivemind.getMineProcess() || proc == hivemind.getDepositProcess()
                     || proc == hivemind.getPortalTravelProcess() || proc == hivemind.getSurvivalProcess()
                     || proc == hivemind.getJobManager() || proc == hivemind.getCompanionProcess()
-                    || proc == hivemind.getWorkstationProcess() || proc == hivemind.getRepairProcess())) {
+                    || proc == hivemind.getWorkstationProcess() || proc == hivemind.getRepairProcess()
+                    || proc == hivemind.getScoutProcess() || proc == hivemind.getOperations())) {
                 continue;
             }
             proc.onLostControl();

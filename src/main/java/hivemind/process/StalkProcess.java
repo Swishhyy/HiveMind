@@ -463,7 +463,9 @@ public final class StalkProcess extends HiveMindProcessHelper implements IBehavi
         if(safe){hivemind.getInputOverrideHandler().clearAllKeys();ctx.playerController().resetBlockRemoving();}
         double range=ctx.player().distanceToSqr(target);
         if(range<spacing*spacing)return path(new GoalRetreat(List.of(new GoalRetreat.Threat(target.blockPosition(),spacing+2))));
-        if(range>(spacing+10)*(spacing+10))return path(new GoalNear(target.blockPosition(),spacing+3));
+        double heading=hivemind.getNetwork().team().heading(Kind.HUNT,targetId);var velocity=target.getDeltaMovement();
+        BlockPos intercept=target.blockPosition().offset((int)Math.round(Math.max(-24,Math.min(24,velocity.x*30))+Math.cos(heading)*(spacing+3)),0,(int)Math.round(Math.max(-24,Math.min(24,velocity.z*30))+Math.sin(heading)*(spacing+3)));
+        if(range>(spacing+10)*(spacing+10)||ctx.playerFeet().distSqr(intercept)>64)return path(new GoalNear(intercept,3));
         return watch(target,safe);
     }
     private boolean watchRange(Player target,boolean settled) {
@@ -841,7 +843,7 @@ public final class StalkProcess extends HiveMindProcessHelper implements IBehavi
     }
     private BlockPos chooseSurvey(boolean aerial){
         if(survey==null||aerial!=surveyAir){
-            surveyAir=aerial;BlockPos origin=aerial&&searchAnchor!=null?searchAnchor:ctx.playerFeet();
+            surveyAir=aerial;BlockPos origin=searchAnchor!=null?searchAnchor:ctx.playerFeet();
             survey=new SurveyRoute(MiningRouteAccess.root(ctx),"search-"+targetId+(aerial?"-air":"-ground"),MiningRouteAccess.endpoint(ctx,origin),
                     aerial?HiveMind.settings().botFlightSurveySpacing.value:Math.max(64,SocialPolicy.searchRadius(HiveMind.settings().stalkSearchRadius.value)/4),
                     hivemind.getNetwork().team().heading(hunt?Kind.HUNT:Kind.STALK,targetId));
@@ -853,7 +855,7 @@ public final class StalkProcess extends HiveMindProcessHelper implements IBehavi
         BlockPos point=null;
         for(int attempt=0;attempt<64;attempt++){
             BlockPos candidate=MiningRouteAccess.position(survey.next());
-            if(!ctx.world().getWorldBorder().isWithinBounds(candidate)||candidate.distSqr(ctx.playerFeet())<48*48)continue;
+            if(!hivemind.getNetwork().team().searchSector(candidate,MiningRouteAccess.position(survey.origin()),targetId,hunt)||!ctx.world().getWorldBorder().isWithinBounds(candidate)||candidate.distSqr(ctx.playerFeet())<48*48)continue;
             point=candidate;if(!hivemind.getNetwork().mapped(candidate))break;
         }
         survey.save();if(point==null)return null;

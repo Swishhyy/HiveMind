@@ -56,6 +56,7 @@ public final class DefaultCommands {
                 new StalkCommand(hivemind),
                 new NetworkCommand(hivemind),
                 new ClientCommand(hivemind),
+                new AssistanceCommand(hivemind),
                 new ScoutCommand(hivemind),
                 new UpdateCommand(hivemind),
                 new SessionCommand(hivemind),

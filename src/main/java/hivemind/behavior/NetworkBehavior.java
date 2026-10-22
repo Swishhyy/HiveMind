@@ -85,7 +85,7 @@ public final class NetworkBehavior extends Behavior {
         Path current = MiningRouteAccess.root(ctx); NetworkConfig next = new NetworkConfig(current,clientKey.key());
         config = next; nextSetup = nextWebAttempt = 0; ensure();
     }
-    Identity localIdentity() {
+    public Identity localIdentity() {
         if(ctx.player()==null||ctx.world()==null){if(rememberedIdentity==null)throw new IllegalStateException("No client identity");return rememberedIdentity;}
         String server;
         if (!config.options().scope().isEmpty()) server = "server-label:" + config.options().scope();
@@ -126,7 +126,14 @@ public final class NetworkBehavior extends Behavior {
     }
     public String pageUrl() { if (viewer == null) throw new IllegalStateException(webError.isEmpty() ? "Use network web [port] to start the local page" : webError); return viewer.url(); }
     public List<Identity> peers() { return network == null ? List.of() : network.peers(); }
-    BotNetwork transport(){return network;}
+    public BotNetwork transport(){return network;}
+    public void publishOperation(ControlPackets.Packet packet){if(network!=null)network.publish(packet);}
+    public void requestAssistance(String mode,String item,String quantity){
+        ensure();if(network==null||!network.connected())throw new IllegalStateException("Connect this client to the bot network first");
+        var point=MiningRouteAccess.endpoint(ctx,ctx.playerFeet());long now=System.currentTimeMillis();UUID target=AssistancePolicy.choose(network.states().stream().filter(s->!s.reporter().equals(localIdentity().id())).toList(),network.operations(),point,now);
+        String command="#assist "+mode+" "+ctx.player().getGameProfile().name()+" "+point.dimension()+" "+point.x()+" "+point.y()+" "+point.z()+(mode.equals("bring")?" "+item+" "+quantity:"");
+        if(!controls.enqueue(new WebControlAction(UUID.randomUUID(),target,ControlPackets.Action.COMMAND,"",command,now)))throw new IllegalStateException("Command queue is busy; retry shortly");
+    }
     public boolean controllerConnected(){return network!=null&&!network.isHost()&&network.connected();}
     private void saveLink(){
         if(config==null||root==null||rememberedIdentity==null||config.options().mode()!=NetworkConfig.Mode.JOIN)return;
@@ -153,7 +160,7 @@ public final class NetworkBehavior extends Behavior {
             else{atlas.accept(message,now);terrain.accept(message,now);}
         }
         controls.tick(now);
-        if(viewer!=null&&now-lastPage>=1000){viewer.snapshot(atlas.json(now,network.status(),"minecraft:overworld",peers()));viewer.controls(controls.json(now));lastPage=now;}
+        if(viewer!=null&&now-lastPage>=1000){viewer.snapshot(ObservationView.json(atlas.json(now,network.status(),"minecraft:overworld",peers()),contacts.values(),now));viewer.controls(controls.json(now));lastPage=now;}
         if(now-lastSave>=30000){save(atlas);saveTerrain();lastSave=now;}
     }
     public NetworkTeamwork team(){return team;}
@@ -220,6 +227,7 @@ public final class NetworkBehavior extends Behavior {
             ensure();
             if(rememberedIdentity!=null&&!java.nio.file.Files.exists(resumeFile))saveLink();
             if (network != null) for (Message message : network.drain(128)) {
+                if(message instanceof OperationsPackets.Obstacle obstacle){hivemind.getOperations().accept(obstacle,now);continue;}
                 if(message instanceof ControlPackets.Contact contact){
                     contacts.values().removeIf(p->!p.valid(now));var old=contacts.get(contact.player());
                     if(contact.valid(now)&&(old==null||old.observedAt()<contact.observedAt())){contacts.remove(contact.player());contacts.put(contact.player(),contact);while(contacts.size()>512)contacts.remove(contacts.keySet().iterator().next());}continue;
@@ -233,7 +241,7 @@ public final class NetworkBehavior extends Behavior {
             boolean scouting=network!=null||viewer!=null||hivemind.getRoamProcess().isActive()||hivemind.getStalkProcess().isActive()||hivemind.getFlight().flying();
             if(ctx.player().isAlive()&&scouting)sampler.tick(now);
             if (scouting && ctx.player().isAlive() && now - lastScan >= 1000) { scan(now); lastScan = now; }
-            if (viewer != null && now - lastPage >= 1000) { viewer.snapshot(atlas.json(now, network == null ? "Local observations · network off" : network.status(), MiningRouteAccess.dimension(ctx), peers()));viewer.controls(controls.json(now));lastPage = now; }
+            if (viewer != null && now - lastPage >= 1000) { viewer.snapshot(ObservationView.json(atlas.json(now, network == null ? "Local observations · network off" : network.status(), MiningRouteAccess.dimension(ctx), peers()),contacts.values(),now));viewer.controls(controls.json(now));lastPage = now; }
             if (now - lastSave >= 30000) { save(atlas);saveTerrain(); lastSave = now; }
             if (storageError != null) { String problem = storageError; storageError = null; throw new IllegalStateException(problem); }
         } catch (RuntimeException e) {

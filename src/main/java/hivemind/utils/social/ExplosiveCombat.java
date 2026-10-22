@@ -366,7 +366,7 @@ public final class ExplosiveCombat {
             BlockPos center=target.blockPosition();
             for(int dx=-3;dx<=3;dx++)for(int dz=-3;dz<=3;dz++)for(int dy=-3;dy<=2;dy++) {
                 BlockPos pos=center.offset(dx,dy,dz);
-                if(!ctx.world().hasChunkAt(pos)||pos.distSqr(ctx.playerFeet())>36)continue;
+                if(bot.getOperations().placementBlocked(pos)||!ctx.world().hasChunkAt(pos)||pos.distSqr(ctx.playerFeet())>36)continue;
                 boolean existing=style==CombatStyle.CRYSTAL?base(pos):ctx.world().getBlockState(pos).is(Blocks.RESPAWN_ANCHOR);
                 if(!existing&&(!replaceable(pos)||!emptyBody(pos)))continue;
                 if(style==CombatStyle.CRYSTAL&&!crystalSpace(pos))continue;
@@ -736,6 +736,7 @@ public final class ExplosiveCombat {
     private Step waitStep() { return new Step(null,false,null); }
     private Step problem(String reason,CombatStyle requested) {
         warning=remaining();
+        if(plan!=null&&(useRejected||reason.startsWith("Server did not confirm")))bot.getOperations().warn(plan.pos(),"Placement not confirmed",15000);
         if(plan!=null&&plan.style()==CombatStyle.CRYSTAL&&base(plan.pos()))reusableCrystalBase=plan.pos();
         if(plan!=null)rejected.add(plan.style());else rejected.addAll(List.of(CombatStyle.CRYSTAL,CombatStyle.ANCHOR));
         lastProblem=reason;stage=Stage.SELECT;plan=null;ticks=idleTicks=supportIndex=0;blockConfirmed=useRejected=false;firingPoint=null;firingUntil=0;

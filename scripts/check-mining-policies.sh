@@ -24,6 +24,13 @@ fi
     src/test/java/hivemind/utils/bot/CombatSupplyChecks.java \
     src/main/java/hivemind/utils/bot/MapOrder.java \
     src/main/java/hivemind/utils/network/ClientRole.java \
+    src/test/java/hivemind/utils/network/OperationsChecks.java \
+    src/main/java/hivemind/utils/network/AssistancePolicy.java \
+    src/main/java/hivemind/utils/network/TaskQueue.java \
+    src/main/java/hivemind/utils/network/RecoveryPolicy.java \
+    src/main/java/hivemind/utils/network/OperationsPackets.java \
+    src/main/java/hivemind/utils/network/ObservationView.java \
+    src/main/java/hivemind/utils/network/ControlView.java \
     src/test/java/hivemind/utils/bot/MapPlayerChecks.java \
     src/main/java/hivemind/utils/bot/SurveyPolicy.java \
     src/main/java/hivemind/utils/bot/SurveyRoute.java \
@@ -77,6 +84,7 @@ fi
     src/test/java/hivemind/utils/mining/WorldRouteChecks.java \
     src/test/java/hivemind/utils/mining/WastePolicyChecks.java \
     src/test/java/hivemind/utils/social/SocialPolicyChecks.java
+java -cp "$task_classes" hivemind.utils.network.OperationsChecks
 java -cp "$task_classes" hivemind.utils.bot.MapPlayerChecks
 java -cp "$task_classes" hivemind.utils.mining.MiningPolicyChecks
 java -cp "$task_classes" hivemind.utils.mining.WorldRouteChecks

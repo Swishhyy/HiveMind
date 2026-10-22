@@ -46,7 +46,7 @@ assert.equal(mesh.pick([back,front],project,hit.x,hit.y).h,73,'Overlapping surfa
 console.log('Map picking checks passed: elevated terrain, negative coordinates, frontmost surfaces and unmapped fallback.');
 // Exercise the production map-order functions against live client roles and dimensions.
 (async()=>{
-const elements=new Map(),dom=id=>{if(!elements.has(id))elements.set(id,{value:'',checked:false,hidden:true});return elements.get(id);};
+const elements=new Map(),dom=id=>{if(!elements.has(id))elements.set(id,Object.assign(node(),{value:'',checked:false,hidden:true}));return elements.get(id);};
 dom('map').getContext=()=>({});dom('dimension').value='minecraft:overworld';dom('projection').value='iso';dom('search').value='';dom('age').value='2592000000';
 const sandbox=vm.createContext({document:{getElementById:dom},location:{hash:''},Date,console,AbortSignal,URLSearchParams,setTimeout:()=>{}}),scripts=[...html.matchAll(/<script[^>]*>([\s\S]*?)<\/script>/g)].map(m=>m[1]);
 vm.runInContext(scripts[0],sandbox);vm.runInContext(scripts[1].split("canvas.addEventListener('wheel'")[0],sandbox);
@@ -61,5 +61,14 @@ vm.runInContext("control.bots[0].dimension='minecraft:the_nether'",sandbox);awai
 vm.runInContext("control.bots[0].dimension='minecraft:overworld'",sandbox);dom('map-order-radius').value='9999';await vm.runInContext("mapSend('explore')",sandbox);assert.equal(sandbox.sent.length,1,'Invalid radii must not queue work');
 sandbox.testTile={d:'minecraft:overworld',x:-2,z:1,c:0x778844,y:160};vm.runInContext("terrain.tiles=[testTile];markers=[];center={x:0,z:0};scale=4;",sandbox);
 const result=vm.runInContext("(()=>{const p=screen(-24,24,160);return mapPick(p.x,p.y);})()",sandbox);assert.equal(result.x,-24);assert.equal(result.z,24);assert.equal(result.mapped,true,'Production picking must recover elevated negative terrain coordinates');
+vm.runInContext("control.bots[0].dimension='minecraft:overworld'",sandbox);dom('map-order-radius').value='256';dom('map-order-append').checked=true;await vm.runInContext("mapSend('explore')",sandbox);
+assert.equal(sandbox.sent.at(-1)[2],'#scout add explore minecraft:overworld -30 40 256','Append must preserve existing tasks instead of replacing the queue');
+function node(){return {children:[],append(...children){this.children.push(...children);},replaceChildren(...children){this.children=children;}};}
+for(const value of elements.values())Object.assign(value,node());sandbox.document.createElement=()=>node();
+const queueFunctions=scripts[1].slice(scripts[1].indexOf('function formatBytes('),scripts[1].indexOf('function renderControls('));vm.runInContext(queueFunctions,sandbox);
+vm.runInContext("activeTarget='bot';control.operations={bot:{t:Date.now(),paused:false,tasks:[{id:1,kind:'explore',d:'minecraft:overworld',x:0,z:0,radius:256},{id:2,kind:'check',d:'minecraft:overworld',x:100,z:100,radius:0}]}};renderItinerary();",sandbox);
+assert.equal(dom('itinerary').children.length,2);const firstActions=dom('itinerary').children[0].children[1].children;assert.equal(firstActions[0].disabled,true,'The first queue task cannot move above position 1');await firstActions[1].onclick();assert.equal(sandbox.sent.at(-1)[2],'#scout move 1 2');assert.equal(sandbox.sent.at(-1)[4],'bot','Queue edits must target one bot');
+vm.runInContext("activeTarget='all';renderItinerary();",sandbox);assert.equal(dom('queue-clear').disabled,true,'Queue mutations must not accidentally broadcast');
+
 console.log('Map order UI checks passed: exact targets, manual client exclusion, stale dimensions, radius bounds and terrain picking.');
 })().catch(error=>{console.error(error);process.exitCode=1;});
