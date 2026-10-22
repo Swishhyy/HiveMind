@@ -80,7 +80,20 @@ public final class TeamChecks {
             check(new TerrainStore(root.resolve("other-server")).snapshot(now).isEmpty(),"Terrain is isolated between Minecraft servers");
             try{new Tile(A.id(),A.name(),"minecraft:overworld",0,0,"00","0040".repeat(256),now);throw new AssertionError("Short tile accepted");}catch(IllegalArgumentException expected){}
             try{new Tile(A.id(),A.name(),"minecraft:overworld",Integer.MAX_VALUE,0,"639844".repeat(256),"0040".repeat(256),now);throw new AssertionError("Unbounded tile coordinate accepted");}catch(IllegalArgumentException expected){}
-            check(!new TerrainStore().accept(tile(now-31L*86400000),now),"Old terrain expires");
+            check(new TerrainStore().accept(tile(now-365L*86400000),now),"Explored terrain must survive the age limit used for player sightings");
+            check(!new TerrainStore().accept(tile(now+NetworkProtocol.CLOCK_SKEW_MS+1),now),"Durable terrain must still reject timestamps beyond allowed clock skew");
+            Path legacyRoot=root.resolve("legacy");Properties legacy=new Properties();legacy.setProperty("count","1");legacy.setProperty("entry.0",Base64.getEncoder().encodeToString(NetworkProtocol.encode(tile(now-365L*86400000))));
+            hivemind.utils.bot.AtomicProperties.write(legacyRoot.resolve("bot-network-terrain.properties"),legacy);
+            TerrainStore migrating=new TerrainStore(legacyRoot);migrating.save();
+            check(new TerrainStore(legacyRoot).tile("minecraft:overworld",-2,3)!=null,"Legacy terrain must migrate to region archives without losing historical chunks");
+            String rgb="639844".repeat(256),heights="0040".repeat(256);
+            for(int x=0;x<4100;x++)loaded.accept(new Tile(A.id(),A.name(),"minecraft:overworld",x,-40,rgb,heights,now+2),now+2);
+            check(loaded.tile("minecraft:overworld",0,-40)!=null&&loaded.tile("minecraft:overworld",4099,-40)!=null,"New exploration must not evict old terrain after 4096 chunks");
+            loaded.save();TerrainStore archive=new TerrainStore(root);
+            check(archive.tile("minecraft:overworld",0,-40)!=null&&archive.tile("minecraft:overworld",4099,-40)!=null,"Compressed region archives must retain all explored areas across restart");
+            check(archive.index(now+366L*86400000).contains("\"x\":4099"),"A distant historical tile must remain in the map index without a bot currently there");
+            check(archive.index(now+366L*86400000).contains("\"c\":6527044,\"y\":65.0"),"The whole-map overview must include color and height without fetching every detail tile");
+            archive.clear();archive.save();check(new TerrainStore(root).snapshot(now+2).isEmpty(),"An explicit history clear must remove archived regions too");
         }finally{try(var paths=Files.walk(root)){for(Path path:paths.sorted(Comparator.reverseOrder()).toList())Files.deleteIfExists(path);}}
     }
     private static void relay()throws Exception{
@@ -105,6 +118,9 @@ public final class TeamChecks {
             check(client.send(HttpRequest.newBuilder(URI.create(base+query)).GET().build(),HttpResponse.BodyHandlers.ofString()).statusCode()==401,"Tiles require the page token");
             var response=client.send(HttpRequest.newBuilder(URI.create(base+query)).header("Authorization","Bearer "+token).GET().build(),HttpResponse.BodyHandlers.ofString());
             check(response.statusCode()==200&&response.body().contains("639844"),"Authenticated tile API returns sampled colors");
+            var compressed=client.send(HttpRequest.newBuilder(URI.create(base+query)).header("Authorization","Bearer "+token).header("Accept-Encoding","gzip").GET().build(),HttpResponse.BodyHandlers.ofByteArray());
+            check(compressed.statusCode()==200&&compressed.headers().firstValue("Content-Encoding").orElse("").equals("gzip"),"Terrain details support compressed browser transfer");
+            try(var in=new java.util.zip.GZIPInputStream(new java.io.ByteArrayInputStream(compressed.body()))){check(new String(in.readAllBytes(),StandardCharsets.UTF_8).contains("639844"),"Compressed responses retain the same terrain payload");}
             check(client.send(HttpRequest.newBuilder(URI.create(base+query+"&x=4")).header("Authorization","Bearer "+token).GET().build(),HttpResponse.BodyHandlers.ofString()).statusCode()==400,"Duplicate tile coordinates are rejected");
             check(client.send(HttpRequest.newBuilder(URI.create(base+"api/terrain")).header("Authorization","Bearer "+token).header("Origin","https://unrelated.example").GET().build(),HttpResponse.BodyHandlers.ofString()).statusCode()==403,"An unrelated origin cannot read terrain");
         }

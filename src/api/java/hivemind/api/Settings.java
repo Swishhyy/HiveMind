@@ -442,6 +442,10 @@ public final class Settings {
     /** Nearby server-loaded entities may be acquired behind cover; visual reports still require line of sight. */
     public final Setting<Boolean> botEntityAwareness = new Setting<>(true);
     public final Setting<Integer> botEntityAwarenessRange = new Setting<>(512);
+    public final Setting<Boolean> botRenderEntityESP = new Setting<>(true);
+    public final Setting<Boolean> botRenderMobESP = new Setting<>(false);
+    /** Terrain sampling/view radius in blocks, constrained to chunks actually loaded by the server. */
+    public final Setting<Integer> botTerrainViewRange = new Setting<>(128);
     public final Setting<Integer> botFlightSurveySpacing = new Setting<>(128);
     public final Setting<Integer> botFlightSurveyHeight = new Setting<>(48);
     public final Setting<Boolean> networkShareSightings = new Setting<>(true);

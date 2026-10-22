@@ -21,6 +21,13 @@ for(const scale of [.05,.3,.6,1.2,1.99,2,4]){
     for(let i=1;i<cells.length;i++)assert.ok(cells[i-1].wx+cells[i-1].wz<=cells[i].wx+cells[i].wz,'Painter order must stay consistent across chunks');
 }
 assert.equal(mesh.cells([{d:low.d,x:5,z:5}],cache,1).length,0,'Unobserved tiles cannot become invented terrain');
+const old={d:low.d,x:500,z:-500,c:0x73944b,y:65,t:1};
+const overview=mesh.cells([old],new Map(),.05);
+assert.equal(overview.length,1,'Historical terrain must remain visible after detail cache eviction or while bots are elsewhere');
+assert.equal(overview[0].h,65);assert.equal(overview[0].rgb,old.c);assert.equal(overview[0].wx,8000);
+const oldNeighbor={...old,x:501,y:90};
+const overviewCliff=mesh.cells([old,oldNeighbor],new Map(),.05);
+assert.equal(overviewCliff.find(c=>c.wx===8000).east,90,'Uncached overview tiles must also join cliffs without leaving gaps');
 assert.equal(mesh.level(low,16).cells[0].rgb,0x73944b,'Overview color must retain a uniform tile');
 assert.throws(()=>mesh.prepare({...low,rgb:'broken'}),/Invalid terrain/);
 console.log('Atlas checks passed: stable heights across zoom, chunk-edge cliffs, signed coordinates, bounded detail and script syntax.');
