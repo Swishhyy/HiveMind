@@ -63,6 +63,17 @@ public class MixinMinecraft {
         BaritoneAPI.getProvider().getPrimaryBaritone();
     }
 
+    @Inject(method = "pauseIfInactive", at = @At("HEAD"), cancellable = true)
+    private void keepBotRunningWhenUnfocused(CallbackInfo ci) {
+        // The automatic focus-loss menu makes roaming inactive, cancels its owned flight,
+        // and prevents saved orders from restarting. In singleplayer it also pauses the world.
+        // Only intercept automatic pausing: Escape, other screens and bot pause/stop still work.
+        // Leave options.pauseOnLostFocus untouched, including its saved value in options.txt.
+        if (this.player != null && this.level != null) {
+            ci.cancel();
+        }
+    }
+
     @Inject(
             method = "tick",
             at = @At(
