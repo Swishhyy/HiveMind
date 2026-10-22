@@ -26,6 +26,7 @@ public final class MapPlayerChecks {
             rejects(()->role.set("all"));check(new ClientRole(root).player(),"Bad input changed role");role.set("bot");check(!new ClientRole(root).player(),"Local opt-in did not enable bot mode");
         }finally{try(var paths=Files.walk(root)){for(Path p:paths.sorted(Comparator.reverseOrder()).toList())Files.delete(p);}}
         long now=System.currentTimeMillis();var contact=new Contact(UUID.randomUUID(),"Player",UUID.randomUUID(),"Target",new Endpoint("minecraft:overworld",-17,70,32),now);
+        check(!new NetworkAtlas().accept(contact,now),"ESP detections must not become persistent sightings or hotspot evidence");
         check(NetworkProtocol.decode(NetworkProtocol.encode(contact)).equals(contact),"Contact packet did not round trip");check(contact.valid(now+5999)&&!contact.valid(now+6001),"ESP contacts must expire quickly");
         check(TrustedControl.command("#scout explore minecraft:overworld -100 150 256")!=null&&TrustedControl.command("#client bot")==null,"Only local commands may change the role");
     }

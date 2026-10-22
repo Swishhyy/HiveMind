@@ -44,3 +44,22 @@ assert.equal(mesh.pick([],project,400,265),null,'Unmapped terrain must use the e
 const back={wx:0,wz:0,h:64,step:16},front={wx:4,wz:4,h:73,step:16},hit=project(8,8,73);
 assert.equal(mesh.pick([back,front],project,hit.x,hit.y).h,73,'Overlapping surfaces must pick the frontmost rendered cell');
 console.log('Map picking checks passed: elevated terrain, negative coordinates, frontmost surfaces and unmapped fallback.');
+// Exercise the production map-order functions against live client roles and dimensions.
+(async()=>{
+const elements=new Map(),dom=id=>{if(!elements.has(id))elements.set(id,{value:'',checked:false,hidden:true});return elements.get(id);};
+dom('map').getContext=()=>({});dom('dimension').value='minecraft:overworld';dom('projection').value='iso';dom('search').value='';dom('age').value='2592000000';
+const sandbox=vm.createContext({document:{getElementById:dom},location:{hash:''},Date,console,AbortSignal,URLSearchParams,setTimeout:()=>{}}),scripts=[...html.matchAll(/<script[^>]*>([\s\S]*?)<\/script>/g)].map(m=>m[1]);
+vm.runInContext(scripts[0],sandbox);vm.runInContext(scripts[1].split("canvas.addEventListener('wheel'")[0],sandbox);
+vm.runInContext("function playerClient(bot){return bot.session?.role==='player';} globalThis.sent=[];async function sendAction(...args){sent.push(args);return true;}",sandbox);
+vm.runInContext(scripts[2].split("canvas.addEventListener('contextmenu'")[0],sandbox);
+sandbox.fixture=[{id:'bot',dimension:'minecraft:overworld',t:Date.now(),session:{connected:'true'}},{id:'player',dimension:'minecraft:overworld',t:Date.now(),session:{role:'player',connected:'true'}},{id:'nether',dimension:'minecraft:the_nether',t:Date.now()},{id:'offline',dimension:'minecraft:overworld',t:Date.now(),online:false}];
+vm.runInContext("control.bots=fixture;mapOrderPoint={dimension:'minecraft:overworld',x:-30,z:40};",sandbox);
+assert.deepEqual(Array.from(vm.runInContext('mapEligible(mapOrderPoint).map(b=>b.id)',sandbox)),['bot'],'Map orders must exclude manual, offline and cross-dimension clients');
+dom('map-order-target').value='bot';dom('map-order-radius').value='256';await vm.runInContext("mapSend('explore')",sandbox);
+assert.equal(sandbox.sent[0][2],'#scout explore minecraft:overworld -30 40 256');assert.equal(sandbox.sent[0][4],'bot','Click orders must target exactly one eligible bot');
+vm.runInContext("control.bots[0].dimension='minecraft:the_nether'",sandbox);await vm.runInContext("mapSend('go')",sandbox);assert.equal(sandbox.sent.length,1,'Stale menus must not command a bot that changed dimension');
+vm.runInContext("control.bots[0].dimension='minecraft:overworld'",sandbox);dom('map-order-radius').value='9999';await vm.runInContext("mapSend('explore')",sandbox);assert.equal(sandbox.sent.length,1,'Invalid radii must not queue work');
+sandbox.testTile={d:'minecraft:overworld',x:-2,z:1,c:0x778844,y:160};vm.runInContext("terrain.tiles=[testTile];markers=[];center={x:0,z:0};scale=4;",sandbox);
+const result=vm.runInContext("(()=>{const p=screen(-24,24,160);return mapPick(p.x,p.y);})()",sandbox);assert.equal(result.x,-24);assert.equal(result.z,24);assert.equal(result.mapped,true,'Production picking must recover elevated negative terrain coordinates');
+console.log('Map order UI checks passed: exact targets, manual client exclusion, stale dimensions, radius bounds and terrain picking.');
+})().catch(error=>{console.error(error);process.exitCode=1;});
