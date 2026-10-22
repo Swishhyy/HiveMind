@@ -136,14 +136,14 @@ javadoc {
 // The helper runs after the game exits; it has no Minecraft or Fabric dependencies.
 tasks.register('updateHelper', Exec) {
     inputs.files(fileTree('src/main/java/hivemind/utils/update'), file('scripts/build-distributions.py'))
-    outputs.file(layout.buildDirectory.file('generated/update/assets/hivemind/update-helper.jar'))
+    outputs.file(layout.buildDirectory.file('generated/update/assets/hivemind/update-helper.bin'))
     commandLine 'python3', 'scripts/build-distributions.py', 'helper'
 }
 processResources {
     inputs.property 'hivemindVersion', project.version
     inputs.property 'hivemindCommit', System.getenv('GITHUB_SHA') ?: 'git rev-parse HEAD'.execute().text.trim()
     dependsOn tasks.named('updateHelper')
-    from(layout.buildDirectory.dir('generated/update'))
+    from(layout.buildDirectory.dir('generated/update')) { exclude '**/*.jar' }
     doLast {
         def revision = System.getenv('GITHUB_SHA') ?: 'git rev-parse HEAD'.execute().text.trim()
         new File(destinationDir, 'hivemind-build.properties').text = "application=hivemind\nversion=${project.version}\nminecraft=26.3\nloader=fabric\ncommit=${revision}\n"

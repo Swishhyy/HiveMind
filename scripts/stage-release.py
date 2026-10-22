@@ -10,7 +10,7 @@ with zipfile.ZipFile(jar) as archive:
     info=dict(line.split('=',1) for line in archive.read('hivemind-build.properties').decode().splitlines() if '=' in line)
     if info!={'application':'hivemind','version':version,'minecraft':'26.3','loader':'fabric','commit':commit}:raise SystemExit('Jar build identity differs from the release')
     if not any(name.startswith('hivemind/') and name.endswith('.class') for name in archive.namelist()) or any(name.startswith('baritone/') for name in archive.namelist()):raise SystemExit('Jar namespace is not HiveMind')
-    if 'assets/hivemind/update-helper.jar' not in archive.namelist():raise SystemExit('Update helper not bundled')
+    if 'assets/hivemind/update-helper.bin' not in archive.namelist():raise SystemExit('Update helper not bundled')
 out=Path('build/release');out.mkdir(parents=True,exist_ok=True)
 shutil.copy(jar,out/jar.name);shutil.copy('build/distributions/hivemind-controller.jar',out/'hivemind-controller.jar')
 checksum=hashlib.sha256(jar.read_bytes()).hexdigest()

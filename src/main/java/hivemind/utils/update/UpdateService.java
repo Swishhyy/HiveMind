@@ -50,7 +50,7 @@ public final class UpdateService implements AutoCloseable {
         if(currentJar==null||!Files.isRegularFile(currentJar)||Files.isSymbolicLink(currentJar)||!currentJar.toRealPath().getParent().equals(mods))throw new IOException("Install this release into the instance mods folder first");
         Path updates=instance.resolve("hivemind/updates");Files.createDirectories(updates);
         Path helper=updates.resolve("update-helper.jar");
-        try(InputStream in=UpdateService.class.getResourceAsStream("/assets/hivemind/update-helper.jar")){
+        try(InputStream in=UpdateService.class.getResourceAsStream("/assets/hivemind/update-helper.bin")){
             if(in==null)throw new IOException("Update helper is missing");Files.copy(in,helper,StandardCopyOption.REPLACE_EXISTING);
         }
         status="Downloading "+manifest.version();byte[] data=fetcher.get(manifest.url(),(int)manifest.size());

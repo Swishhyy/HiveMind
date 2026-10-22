@@ -63,6 +63,7 @@ public final class JobManager extends HiveMindProcessHelper implements IBehavior
         paused = !queue.isEmpty(); completedMining = false;
         reason = queue.isEmpty() ? "No jobs" : "Saved jobs are paused; use job resume";
     }
+    public boolean runningJobs(){ensureLoaded();return !paused&&!queue.isEmpty();}
     public boolean hasQueuedJobs(){ensureLoaded();return !queue.isEmpty();}
     public UUID requestOwner() { return requestOwner; }
     public void withOwner(UUID owner, Runnable task) {

@@ -169,7 +169,10 @@ final class NetworkControls {
     private String run(String text)throws Exception{
         String command=ControlRules.command(text);var expanded=CommandManager.expand(command);
         String label=expanded.first().toLowerCase(Locale.ROOT);var args=new ArgConsumer(bot.getCommandManager(),expanded.second());
-        if(label.equals("session"))return SessionRuntime.get(bot.getPlayerContext().minecraft().gameDirectory.toPath()).command(command,System.currentTimeMillis());
+        if(label.equals("session")){
+            bot.getCommandManager().getCommand(label).execute(label,args);
+            return SessionRuntime.get(bot.getPlayerContext().minecraft().gameDirectory.toPath()).status();
+        }
         if(label.equals("update")){
             var target=bot.getCommandManager().getCommand(label);target.execute(label,args);return UpdateRuntime.service().summary();
         }

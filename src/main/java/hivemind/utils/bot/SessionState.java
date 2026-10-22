@@ -7,21 +7,23 @@ public final class SessionState {
     private final Path file;
     private String server,name,status="Waiting for first server join";
     private boolean connected,disconnectRequested,connectRequested;
-    private long holdUntil,nextAttempt,damageAt,joinedAt;
+    private long holdUntil,nextAttempt,damageAt,joinedAt,resumeJob;
     private int attempts,hostilePlayers;
     private boolean automatic=true;
     public SessionState(Path instance){
         file=instance.resolve("hivemind/session.properties");Properties p=AtomicProperties.read(file);
         server=p.getProperty("server","");name=p.getProperty("name","Minecraft server");
-        holdUntil=Long.parseLong(p.getProperty("holdUntil","0"));nextAttempt=0;
+        holdUntil=Long.parseLong(p.getProperty("holdUntil","0"));resumeJob=Long.parseLong(p.getProperty("resumeJob","0"));nextAttempt=0;
     }
     public String server(){return server;}public String name(){return name;}
     public boolean connected(){return connected;}
     public String status(){return status;}
+    public long resumeJob(){return resumeJob;}
+    public void resumeJob(long id){if(resumeJob!=id){resumeJob=id;save();}}
     public void automatic(boolean value){automatic=value;}
     public void observe(boolean online,String address,String label,long now,long retryDelay){
         if(online){
-            if(address!=null&&!address.isBlank()&&(!address.equals(server)||!Objects.equals(label,name))){server=address;name=label;save();}
+            if(address!=null&&!address.isBlank()&&(!address.equals(server)||!Objects.equals(label,name))){if(!address.equals(server))resumeJob=0;server=address;name=label;save();}
             if(!connected){joinedAt=now;holdUntil=0;connectRequested=false;status="Connected";save();}
             connected=true;
             if(now-joinedAt>60000)attempts=0;
@@ -64,5 +66,5 @@ public final class SessionState {
         return Map.of("connected",""+connected,"server",server.substring(0,Math.min(128,server.length())),"status",status,"holdUntil",""+holdUntil,"nextAttempt",""+nextAttempt,
             "damageAt",""+damageAt,"hostiles",""+hostilePlayers,"attempts",""+attempts,"automatic",""+automatic);
     }
-    private void save(){Properties p=new Properties();p.setProperty("server",server);p.setProperty("name",Objects.toString(name,"Minecraft server"));p.setProperty("holdUntil",""+holdUntil);AtomicProperties.write(file,p);}
+    private void save(){Properties p=new Properties();p.setProperty("server",server);p.setProperty("name",Objects.toString(name,"Minecraft server"));p.setProperty("holdUntil",""+holdUntil);p.setProperty("resumeJob",""+resumeJob);AtomicProperties.write(file,p);}
 }

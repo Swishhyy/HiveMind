@@ -12,6 +12,7 @@ import net.minecraft.network.chat.Component;
 public final class SessionBehavior extends Behavior {
     private float health=20;
     private boolean wasOnline;
+    private long resumeAt;
     public SessionBehavior(HiveMind bot){super(bot);}
     @Override public void onTick(TickEvent event){
         if(event.getState()!=EventState.PRE||hivemind!=HiveMindAPI.getProvider().getPrimaryHiveMind())return;
@@ -20,6 +21,12 @@ public final class SessionBehavior extends Behavior {
         var server=mc.getCurrentServer();session.automatic(HiveMind.settings().botAutoReconnect.value);
         session.observe(online,server==null?null:server.ip,server==null?null:server.name,now,HiveMind.settings().botReconnectDelayMS.value);
         if(online){
+            if(!wasOnline)resumeAt=now+5000;
+            if(session.resumeJob()!=0&&now>=resumeAt&&ctx.player().isAlive()&&!hivemind.getAutonomy().paused()){
+                var jobs=hivemind.getJobManager();var queued=jobs.jobs();
+                if(!queued.isEmpty()&&queued.get(0).id()==session.resumeJob())jobs.resumeJobs();
+                session.resumeJob(0);
+            }
             float current=ctx.player().getHealth();if(wasOnline&&current<health)session.damage(now);health=current;
             session.hostiles((int)ctx.world().players().stream().filter(p->p!=ctx.player()&&p.isAlive()&&!p.isSpectator()&&!p.isCreative()
                 &&!hivemind.getNetwork().isTeammate(p.getUUID())&&!hivemind.getBotControl().isTrusted(p.getUUID())&&p.distanceToSqr(ctx.player())<=48*48).count());

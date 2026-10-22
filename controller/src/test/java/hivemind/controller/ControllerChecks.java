@@ -26,6 +26,7 @@ public final class ControllerChecks {
         check(NetworkSettings.all().size()<=128,"Settings exceed protocol bounds");
         SessionState session=new SessionState(data);session.observe(true,"example.test","Example",now,10000);session.command("session logout 60",now);check(session.takeDisconnect(),"Logout not requested");session.observe(false,null,null,now+1,10000);
         check(!session.shouldConnect(now+59000,false)&&session.shouldConnect(now+60001,false),"Reconnect did not respect cooldown");
+        session.resumeJob(1234);check(new SessionState(data).resumeJob()==1234,"Mining resume anchor did not survive restart");
         session.command("session logout",now);check(!new SessionState(data).shouldConnect(now+86400000,false),"Manual offline intent did not survive restart");
         session.command("session reconnect",now+1);check(session.shouldConnect(now+1,true),"Explicit reconnect could not run through controller");session.attempted(now,5000);check(!session.shouldConnect(now+1000,false),"Reconnect backoff missing");
         Identity a=new Identity(UUID.randomUUID(),"BotA",NetworkProtocol.scope("server-label:test")),b=new Identity(UUID.randomUUID(),"BotB",a.scope());

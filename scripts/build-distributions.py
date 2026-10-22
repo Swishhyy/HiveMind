@@ -19,7 +19,7 @@ def compile_to(output,sources):
 def helper():
     out=Path('build/helper-classes')
     compile_to(out,[JAVA/'update/UpdateManifest.java',JAVA/'update/UpdateInstaller.java'])
-    jar=Path('build/generated/update/assets/hivemind/update-helper.jar');jar.parent.mkdir(parents=True,exist_ok=True)
+    jar=Path('build/generated/update/assets/hivemind/update-helper.bin');jar.parent.mkdir(parents=True,exist_ok=True)
     run('jar','--create','--file',jar,'--main-class','hivemind.utils.update.UpdateInstaller','-C',out,'.')
 def controller():
     out=Path('build/controller-classes')
