@@ -11,7 +11,7 @@ public final class CrystalTargetingTest {
     private final AABB crystal = new AABB(0, 1, 0, 2, 3, 2);
 
     private static Predicate<Vec3> pastBase(Vec3 eye) {
-        return point -> !BlastPolicy.blockedByCube(0, 0, 0, eye.x, eye.y, eye.z, point.x, point.y, point.z);
+        return point -> !BlastPolicy.blockedByCube(-1, 0, 0, eye.x, eye.y, eye.z, point.x, point.y, point.z);
     }
 
     @Test public void aShorelineLedgeDoesNotHideTheWholeCrystal() {
