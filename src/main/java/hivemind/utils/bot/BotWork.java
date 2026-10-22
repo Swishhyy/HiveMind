@@ -25,7 +25,7 @@ public final class BotWork {
         return !bot.isPlayerClient()&&(foreground(bot)||bot.getRoamProcess().isActive());
     }
     public static boolean foreground(HiveMind bot){
-        return !bot.isPlayerClient() && (bot.getScoutProcess().isActive() || bot.getMineProcess().isActive() || bot.getDepositProcess().isActive()
+        return !bot.isPlayerClient() && (bot.getCompanionProcess().awaitingDeathInventory() || bot.getScoutProcess().isActive() || bot.getMineProcess().isActive() || bot.getDepositProcess().isActive()
                 || bot.getStalkProcess().isActive() || bot.getFollowProcess().isActive()
                 || bot.getCustomGoalProcess().isActive() || bot.getBuilderProcess().isActive()
                 || bot.getExploreProcess().isActive() || bot.getFarmProcess().isActive()

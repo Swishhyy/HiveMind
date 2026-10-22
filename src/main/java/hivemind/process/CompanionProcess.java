@@ -56,7 +56,30 @@ public final class CompanionProcess extends HiveMindProcessHelper implements IBe
     private final Set<String> fetched=new HashSet<>();
     private final Map<UUID,Seen> seen=new HashMap<>();
     private Path seenRoot;
-    private Map<String,Integer> lastInventory=Map.of();
+    private Map<String,Integer> lastInventory=Map.of(),settlingInventory=Map.of();
+    private DeathInventory deathInventory;
+    private long respawnAliveAt,inventoryStableAt;
+    private Object inventorySyncPlayer;
+    private long inventorySyncAt;
+    public boolean awaitingDeathInventory(){return deathInventory!=null&&deathInventory.outcome()==DeathInventory.Outcome.PENDING;}
+    public String deathInventoryStatus(){if(ctx.player()==null||ctx.world()==null)return "Unknown";return new DeathInventory(MiningRouteAccess.root(ctx)).outcome().name().toLowerCase(Locale.ROOT)+" (mode "+HiveMind.settings().botDeathInventoryMode.value+")";}
+    public void onInventoryContents(int id){if(id==0&&ctx.player()!=null){inventorySyncPlayer=ctx.player();inventorySyncAt=System.currentTimeMillis();}}
+    private void assessRespawnInventory(long now){
+        if(!awaitingDeathInventory())return;
+        var saved=MiningRouteAccess.locations(ctx).death();if(saved==null||saved.time()!=deathInventory.time())return;
+        if(!ctx.player().isAlive()){respawnAliveAt=inventoryStableAt=0;return;}
+        var inventory=captureInventory();if(respawnAliveAt==0){respawnAliveAt=inventoryStableAt=now;settlingInventory=inventory;}
+        if(!inventory.equals(settlingInventory)){settlingInventory=inventory;inventoryStableAt=now;}
+        String mode=HiveMind.settings().botDeathInventoryMode.value.toLowerCase(Locale.ROOT);
+        if(!DeathInventory.ready(mode,inventorySyncPlayer==ctx.player()&&inventorySyncAt>=deathInventory.time(),now-respawnAliveAt,now-inventoryStableAt))return;
+        var outcome=mode.equals("keep")?DeathInventory.Outcome.RETAINED:DeathInventory.classify(deathInventory.before(),inventory);
+        var missing=mode.equals("keep")?Map.<String,Integer>of():DeathInventory.missing(deathInventory.before(),inventory);
+        MiningRouteAccess.locations(ctx).setDeath(missing.isEmpty()?null:new BotLocations.Death(saved.point(),saved.time(),missing,saved.attempts()));
+        deathInventory.finish(outcome);
+        String detail=missing.isEmpty()?"Inventory retained or empty; no gear retrieval needed":"Missing "+missing.values().stream().mapToInt(Integer::intValue).sum()+" recorded items; use #recover now when safe";
+        notifyOwner("Death inventory: "+outcome.name().toLowerCase(Locale.ROOT)+". "+detail);
+        hivemind.getNetwork().addMarker("death","Bot death: "+outcome.name().toLowerCase(Locale.ROOT),detail,saved.point(),ctx.player().getUUID(),now);
+    }
     private final Set<UUID> failedRecoveryItems=new HashSet<>();
     private final Set<Integer> beforeEntities=new HashSet<>();
     private long deadline,lastSeen,dropTime;
@@ -84,6 +107,7 @@ public final class CompanionProcess extends HiveMindProcessHelper implements IBe
         return ctx.minecraft().getConnection().getOnlinePlayers().stream().filter(info->info.getProfile().name().equalsIgnoreCase(name)&&!info.getProfile().id().equals(ctx.player().getUUID())).findFirst().orElseThrow(()->new IllegalArgumentException("That player is not online"));
     }
     public void recover(){
+        if(awaitingDeathInventory())throw new IllegalStateException("Waiting for confirmed respawn inventory; use #set botDeathInventoryMode keep/drop only if this server needs an override");
         var saved=MiningRouteAccess.locations(ctx).death();if(saved==null||saved.items().isEmpty())throw new IllegalStateException("No dropped inventory was recorded for this server/save");
         if(saved.attempts()>=Math.max(1,Math.min(10,HiveMind.settings().recoveryMaxAttempts.value)))throw new IllegalStateException("Recovery attempt limit reached; inspect the site before using recover reset");
         begin(Kind.RECOVER);death=new BotLocations.Death(saved.point(),saved.time(),saved.items(),saved.attempts()+1);MiningRouteAccess.locations(ctx).setDeath(death);
@@ -113,7 +137,9 @@ public final class CompanionProcess extends HiveMindProcessHelper implements IBe
             int attempts=kind==Kind.RECOVER&&death!=null?death.attempts():0;
             var current=captureInventory();
             var record=new BotLocations.Death(MiningRouteAccess.endpoint(ctx,ctx.playerFeet()),System.currentTimeMillis(),current.isEmpty()?lastInventory:current,attempts);
-            MiningRouteAccess.locations(ctx).setDeath(record);notifyOwner("Death recorded at "+record.point()+"; use recover after respawning");
+            deathInventory=new DeathInventory(MiningRouteAccess.root(ctx));deathInventory.record(record.time(),record.items());
+            respawnAliveAt=inventoryStableAt=0;inventorySyncPlayer=null;inventorySyncAt=0;
+            MiningRouteAccess.locations(ctx).setDeath(record);notifyOwner("Death recorded at "+record.point()+"; checking retained items after respawn before offering recovery");
         }catch(RuntimeException e){logDirect("Could not save recovery point: "+e.getMessage());}
     }
     private Map<String,Integer> captureInventory(){
@@ -131,7 +157,7 @@ public final class CompanionProcess extends HiveMindProcessHelper implements IBe
         }catch(RuntimeException e){return fail(e.getMessage());}
     }
     private PathingCommand travel(WorldRoutes.Endpoint point,boolean failed,boolean safe,boolean finish){
-        if(!MiningRouteAccess.dimension(ctx).equals(point.dimension())){hivemind.getPortalTravelProcess().start(point.dimension());return pause();}
+        if(!MiningRouteAccess.dimension(ctx).equals(point.dimension())){if(!hivemind.getPortalTravelProcess().isActive())hivemind.getPortalTravelProcess().start(point.dimension());return defer();}
         if(failed)return fail("No usable route to "+point);
         GoalNear goal=new GoalNear(MiningRouteAccess.position(point),2);
         if(goal.isInGoal(ctx.playerFeet())&&safe){if(finish){notifyOwner(status+"; returned to the starting point");onLostControl();return new PathingCommand(null,PathingCommandType.CANCEL_AND_SET_GOAL);}return null;}
@@ -242,11 +268,12 @@ public final class CompanionProcess extends HiveMindProcessHelper implements IBe
     private PathingCommand defer(){return new PathingCommand(null,PathingCommandType.DEFER);}
     @Override public void onTick(TickEvent event){
         if(event.getType()==TickEvent.Type.OUT||ctx.world()==null||ctx.player()==null){
-            if(!hivemind.getPortalTravelProcess().canPreserveTransition(null)){seen.clear();seenRoot=null;lastInventory=Map.of();}
+            if(!hivemind.getPortalTravelProcess().canPreserveTransition(null)){seen.clear();seenRoot=null;lastInventory=Map.of();deathInventory=null;respawnAliveAt=inventoryStableAt=0;inventorySyncPlayer=null;inventorySyncAt=0;}
             return;
         }
         if(ctx.worldData()==null)return;
-        Path currentRoot=MiningRouteAccess.root(ctx);if(!currentRoot.equals(seenRoot)){seen.clear();lastInventory=Map.of();seenRoot=currentRoot;}
+        Path currentRoot=MiningRouteAccess.root(ctx);if(!currentRoot.equals(seenRoot)){seen.clear();lastInventory=Map.of();seenRoot=currentRoot;deathInventory=new DeathInventory(currentRoot);respawnAliveAt=inventoryStableAt=0;}
+        assessRespawnInventory(System.currentTimeMillis());
         if(ctx.player().isAlive())lastInventory=captureInventory();
         if(isActive()&&nowExpired()&&hivemind.getPathingControlManager().mostRecentInControl().map(process->process.priority()<0).orElse(true)){
             fail("Task timed out; inspect supplies and issue a fresh command");hivemind.getPathingBehavior().softCancelIfSafe();

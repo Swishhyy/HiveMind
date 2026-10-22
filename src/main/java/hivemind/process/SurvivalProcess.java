@@ -70,6 +70,7 @@ public final class SurvivalProcess extends HiveMindProcessHelper implements IBeh
                 HiveMind.settings().botEatAtHunger.value);
     }
     public boolean beforeMining() {
+        if(hivemind.getCompanionProcess().awaitingDeathInventory())return true;
         if (!HiveMind.settings().botSurvival.value || ctx.player() == null || ctx.player().isCreative()) return false;
         if (isActive()) return true;
         if (hivemind.getMineProcess().isActive() && !careNeeded() && !BotInventory.needsFood(ctx)

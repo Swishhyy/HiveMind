@@ -45,6 +45,7 @@ fi
     src/main/java/hivemind/utils/bot/JobStore.java \
     src/main/java/hivemind/utils/bot/SurvivalPolicy.java \
     src/main/java/hivemind/utils/bot/SculkPolicy.java \
+    src/main/java/hivemind/utils/bot/DeathInventory.java \
     src/main/java/hivemind/utils/bot/BotLocations.java \
     src/main/java/hivemind/utils/bot/MiningZone.java \
     src/main/java/hivemind/utils/bot/GatherPlanner.java \

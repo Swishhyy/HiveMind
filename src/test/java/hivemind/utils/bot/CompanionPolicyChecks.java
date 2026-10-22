@@ -25,6 +25,22 @@ import java.util.*;
 public final class CompanionPolicyChecks {
     public static void main(String[] args)throws Exception{runAll();System.out.println("Companion checks passed: recipes, handoff quantities, recovery state, repair targets, mining zones");}
     public static void runAll()throws Exception{
+        var before=Map.of("minecraft:elytra",2,"minecraft:totem_of_undying",4,"minecraft:firework_rocket",128);
+        check(DeathInventory.classify(before,before)==DeathInventory.Outcome.RETAINED,"Keep inventory must skip retrieval");
+        check(DeathInventory.classify(before,Map.of())==DeathInventory.Outcome.LOST,"Empty synced respawn inventory must record losses");
+        var after=Map.of("minecraft:elytra",2,"minecraft:totem_of_undying",3,"minecraft:bread",64);
+        check(DeathInventory.classify(before,after)==DeathInventory.Outcome.PARTIAL,"Partial keep plugins must preserve retained gear");
+        check(DeathInventory.missing(before,after).equals(Map.of("minecraft:totem_of_undying",1,"minecraft:firework_rocket",128)),"Only missing counts belong in recovery, ignoring extra respawn items");
+        check(DeathInventory.classify(Map.of(),Map.of())==DeathInventory.Outcome.EMPTY,"Dying with no items must not imply keep inventory");
+        check(!DeathInventory.ready("auto",false,30000,30000)&&!DeathInventory.ready("auto",true,2999,2000)&&!DeathInventory.ready("auto",true,4000,1499)&&DeathInventory.ready("auto",true,4000,1500),"Auto must await authoritative inventory sync and settle time");
+        check(DeathInventory.ready("keep",false,4000,2000)&&DeathInventory.ready("drop",false,4000,2000),"Explicit overrides support unusual servers without full inventory packets");
+        Path deathRoot=Files.createTempDirectory("hivemind-death-checks");try{
+            var state=new DeathInventory(deathRoot);state.record(100,before);state=new DeathInventory(deathRoot);check(state.time()==100&&state.before().equals(before)&&state.outcome()==DeathInventory.Outcome.PENDING,"A disconnect must retain a pending pre-death snapshot");
+            state.finish(DeathInventory.Outcome.RETAINED);check(new DeathInventory(deathRoot).outcome()==DeathInventory.Outcome.RETAINED,"Observed outcome persists");
+            state.record(200,before);check(state.outcome()==DeathInventory.Outcome.PENDING,"A later death must be reassessed even after keep inventory was observed");
+            check(new DeathInventory(deathRoot.resolve("other-server")).outcome()==DeathInventory.Outcome.UNKNOWN,"Server/save outcomes cannot leak");
+        }finally{try(var paths=Files.walk(deathRoot)){for(var p:paths.sorted(Comparator.reverseOrder()).toList())Files.delete(p);}}
+
         var zone=MiningZone.between(WorldRoutes.OVERWORLD,20,90,30,-20,-64,-30);
         check(zone.contains(WorldRoutes.OVERWORLD,-20,-64,30)&&zone.contains(WorldRoutes.OVERWORLD,20,90,-30),"Inclusive normalized corners");
         check(!zone.contains(WorldRoutes.NETHER,0,20,0)&&!zone.contains(WorldRoutes.OVERWORLD,21,20,0),"Dimensions and coordinates cannot escape a boundary");

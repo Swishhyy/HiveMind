@@ -4,7 +4,7 @@ The controller runs without Minecraft and owns the network relay, coordination, 
 
 ## Start
 
-Windows: download `hivemind-controller-0.1.0.5-windows-x64.zip`, extract the **whole folder**, and run `HiveMindController.exe`. Its Java runtime is included; keep the neighboring folders beside the executable. The console prints a clickable dashboard address containing its access token. Open it, go to **Settings**, and copy the **Bot connection command** into each client's chat once while joined to the intended server.
+Windows: download `hivemind-controller-0.1.0.6-windows-x64.zip`, extract the **whole folder**, and run `HiveMindController.exe`. Its Java runtime is included; keep the neighboring folders beside the executable. The console prints a clickable dashboard address containing its access token. Open it, go to **Settings**, and copy the **Bot connection command** into each client's chat once while joined to the intended server.
 
 Linux, macOS or a server with Java 17+: `java -jar hivemind-controller.jar`. The same dashboard and connection command work there. Minecraft clients still require Java 25 and Fabric 26.3.
 
@@ -65,7 +65,7 @@ Right-click terrain on the atlas, select an online bot in that dimension and cho
 
 Manual equivalents: `#scout go minecraft:overworld 100 -200`, `#scout explore minecraft:overworld 100 -200 256`, and `#scout status` / `#scout stop`.
 
-### Reliable operations and itineraries (0.1.0.5)
+### Reliable operations and itineraries (0.1.0.6)
 
 The controller's Commands page explains each client's **Task**, **Blocker**, **Next** action and flight decision. It also shows round-trip latency, estimated bytes sent/received, queued frames and recovery count. Stale reports are labeled. Traffic totals refer to the current connection, not lifetime usage.
 
@@ -92,3 +92,5 @@ At your supply area run `#botbase set` (alias `#bot base set`). It saves the anc
 Use `#botbase resupply` to request a full reserve refill without replacing current work. The bot tries carried boxes and registered stock, or travels to a configured base to discover its containers. It returns to the interrupted location and resumes its task. Registered Nether portals are required for cross-dimension trips; arbitrary unloaded chests are never scanned remotely. Stock shortages and insufficient inventory room are reported rather than assumed successful.
 
 Use `#botbase status`, `#botbase scan`, or `#botbase clear`. Clearing the anchor leaves registered chests intact; use `#deposit remove <id>` for containers you no longer want used. To configure one shared location for several bots, select **All bots** in the controller and send `#botbase set minecraft:overworld 100 64 -200 16`, substituting your coordinates. Bot base commands affect autonomous clients; player-mode clients remain manual.
+
+Death recovery compares inventory after respawn rather than assuming all items dropped. `#recover status` shows pending, retained, lost, partial or empty observations; `#recover now` targets missing items only. Auto requires the server's full player inventory sync and a settling period. Set `botDeathInventoryMode` to `auto` (default), `keep`, or `drop` under controller **Companions**, or through `#set`, for unusual server plugins. Observations are per server/save and reassessed after each death; they do not claim access to a remote gamerule.

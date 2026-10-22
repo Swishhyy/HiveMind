@@ -194,7 +194,7 @@ public abstract class MixinClientPlayNetHandler extends ClientCommonPacketListen
         for (IHiveMind ihivemind : HiveMindAPI.getProvider().getAllHiveMinds()) {
             LocalPlayer player = ihivemind.getPlayerContext().player();
             if (player != null && player.connection == (ClientPacketListener) (Object) this) {
-                if (ihivemind instanceof HiveMind bot) bot.getCompanionProcess().recordDeath();
+                if (ihivemind instanceof HiveMind bot && !bot.isPlayerClient()) bot.getCompanionProcess().recordDeath();
                 ihivemind.getGameEventHandler().onPlayerDeath();
                 ihivemind.getPathingBehavior().cancelEverything();
             }
@@ -218,6 +218,7 @@ public abstract class MixinClientPlayNetHandler extends ClientCommonPacketListen
     private void onBotContainerContents(ClientboundContainerSetContentPacket packet, CallbackInfo ci) {
         IHiveMind instance = HiveMindAPI.getProvider().getHiveMindForConnection((ClientPacketListener) (Object) this);
         if (instance instanceof HiveMind bot) {
+            if(!bot.isPlayerClient())bot.getCompanionProcess().onInventoryContents(packet.containerId());
             bot.getDepositProcess().onContainerContents(packet.containerId());
             bot.getWorkstationProcess().onContents(packet.containerId());
             bot.getShulkerProcess().onContents(packet.containerId());

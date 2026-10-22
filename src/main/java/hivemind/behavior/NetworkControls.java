@@ -197,6 +197,7 @@ final class NetworkControls {
         details.put("blocker",bot.isPlayerClient()?"":bot.getOperations().blocker());details.put("next",bot.isPlayerClient()?"Share observations without controlling this character":bot.getOperations().nextAction());
         if(online&&!bot.isPlayerClient()&&bot.getSurvivalProcess().isActive())details.put("blocker",bot.getSurvivalProcess().status());
         if(online&&!bot.isPlayerClient())details.put("loadout",bot.getShulkerProcess().reserveStatus());
+        if(online&&!bot.isPlayerClient())details.put("deathInventory",bot.getCompanionProcess().deathInventoryStatus());
         details.put("flight",bot.isPlayerClient()?"Manual":bot.getFlight().status());details.put("recoveries",""+bot.getOperations().recoveries());
         details.put("available",""+(online&&!bot.isPlayerClient()&&!hivemind.utils.bot.BotWork.foreground(bot)&&!bot.getJobManager().hasQueuedJobs()&&!bot.getAutonomy().paused()&&bot.getAutonomy().order()==null));
         if(parent.transport()!=null)details.putAll(parent.transport().health());

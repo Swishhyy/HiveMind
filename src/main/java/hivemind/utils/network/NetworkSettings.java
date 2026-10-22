@@ -103,6 +103,7 @@ public final class NetworkSettings {
         bool("Companions","escortDefendOwner deliveryRequireHandoff repairToolsBeforeReplace");
         number("Companions","integer",3,16,"escortDistance");
         number("Companions","integer",1,8,"deliveryApproachDistance");
+        choice("Companions","botDeathInventoryMode","auto","keep","drop");
         number("Companions","integer",1,32,"recoveryMaxAttempts");
         number("Companions","integer",1,128,"recoverySearchRadius");
         number("Companions","integer",0,2304,"repairAtDurability");

@@ -152,7 +152,7 @@ public final class JobManager extends HiveMindProcessHelper implements IBehavior
         if (event.getType() == TickEvent.Type.OUT || ctx.world() == null || ctx.player() == null) return;
         try {
             ensureLoaded();
-            if (paused || queue.isEmpty()) return;
+            if (paused || queue.isEmpty() || hivemind.getCompanionProcess().awaitingDeathInventory()) return;
             if (current != null) {
                 if (hivemind.getMineProcess().isActive() || hivemind.getDepositProcess().isActive()
                         || hivemind.getPortalTravelProcess().isActive() || hivemind.getSurvivalProcess().isActive()) return;
