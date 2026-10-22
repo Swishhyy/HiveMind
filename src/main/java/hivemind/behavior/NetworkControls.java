@@ -197,7 +197,7 @@ final class NetworkControls {
         details.put("blocker",bot.isPlayerClient()?"":bot.getOperations().blocker());details.put("next",bot.isPlayerClient()?"Share observations without controlling this character":bot.getOperations().nextAction());
         if(online&&!bot.isPlayerClient()&&bot.getSurvivalProcess().isActive())details.put("blocker",bot.getSurvivalProcess().status());
         details.put("flight",bot.isPlayerClient()?"Manual":bot.getFlight().status());details.put("recoveries",""+bot.getOperations().recoveries());
-        details.put("available",""+(online&&!bot.isPlayerClient()&&!hivemind.utils.bot.BotWork.foreground(bot)&&!bot.getJobManager().hasQueuedJobs()&&!bot.getAutonomy().paused()));
+        details.put("available",""+(online&&!bot.isPlayerClient()&&!hivemind.utils.bot.BotWork.foreground(bot)&&!bot.getJobManager().hasQueuedJobs()&&!bot.getAutonomy().paused()&&bot.getAutonomy().order()==null));
         if(parent.transport()!=null)details.putAll(parent.transport().health());
         var queue=online&&!bot.isPlayerClient()?bot.getScoutProcess().queue():null;
         if(online&&!bot.isPlayerClient()&&bot.getPathingBehavior().getGoal()!=null)details.put("goal",bot.getPathingBehavior().getGoal().toString());

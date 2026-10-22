@@ -130,7 +130,7 @@ public final class NetworkBehavior extends Behavior {
     public void publishOperation(ControlPackets.Packet packet){if(network!=null)network.publish(packet);}
     public void requestAssistance(String mode,String item,String quantity){
         ensure();if(network==null||!network.connected())throw new IllegalStateException("Connect this client to the bot network first");
-        var point=MiningRouteAccess.endpoint(ctx,ctx.playerFeet());long now=System.currentTimeMillis();UUID target=AssistancePolicy.choose(network.states(),network.operations(),point,now);
+        var point=MiningRouteAccess.endpoint(ctx,ctx.playerFeet());long now=System.currentTimeMillis();UUID target=AssistancePolicy.choose(network.states().stream().filter(s->!s.reporter().equals(localIdentity().id())).toList(),network.operations(),point,now);
         String command="#assist "+mode+" "+ctx.player().getGameProfile().name()+" "+point.dimension()+" "+point.x()+" "+point.y()+" "+point.z()+(mode.equals("bring")?" "+item+" "+quantity:"");
         if(!controls.enqueue(new WebControlAction(UUID.randomUUID(),target,ControlPackets.Action.COMMAND,"",command,now)))throw new IllegalStateException("Command queue is busy; retry shortly");
     }
