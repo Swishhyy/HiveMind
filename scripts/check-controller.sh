@@ -11,6 +11,10 @@ if ! command -v javac >/dev/null 2>&1; then task_javac=(java -m jdk.compiler/com
  src/main/java/hivemind/utils/bot/SessionState.java \
  src/main/java/hivemind/utils/update/*.java \
  src/test/java/hivemind/utils/update/UpdateChecks.java \
- controller/src/test/java/hivemind/controller/ControllerChecks.java
+ controller/src/test/java/hivemind/controller/ControllerChecks.java \
+ controller/src/test/java/hivemind/controller/ControllerUpdateChecks.java
 java -cp "$task_classes:build/controller-classes" hivemind.utils.update.UpdateChecks
 java -cp "$task_classes:build/controller-classes" hivemind.controller.ControllerChecks
+
+java -cp "$task_classes:build/controller-classes" hivemind.controller.ControllerUpdateChecks
+python3 scripts/check-component-releases.py

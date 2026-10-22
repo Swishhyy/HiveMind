@@ -22,6 +22,11 @@ with tempfile.TemporaryDirectory() as directory:
             fabric=json.loads(z.read('fabric.mod.json'));assert fabric['id']=='hivemind' and fabric['mixins']==['mixins.hivemind.json']
             assert fabric['name']==('HiveMind Player' if role=='player' else 'HiveMind')
             assert z.read('META-INF/jars/native.jar')==b'nested dependency' and z.read('assets/hivemind/update-helper.bin')==b'helper'
+    # A player-only release keeps the common build version but must identify its own edition/version everywhere.
+    separate=root/'hivemind-player-0.1.0.10.jar'
+    metadata=packager.properties(packager.package(source,separate,'0.1.0.10',commit,'player',build_version=version,release_version='0.1.0.12').encode())
+    assert metadata['version']=='0.1.0.10' and '/v0.1.0.12/' in metadata['url']
+    with zipfile.ZipFile(separate) as z:assert json.loads(z.read('fabric.mod.json'))['version']=='0.1.0.10' and packager.properties(z.read('hivemind-build.properties'))['version']=='0.1.0.10'
     try:packager.package(source,root/'bad.jar',version,'b'*40,'player')
     except ValueError:pass
     else:raise AssertionError('Mismatched release commit accepted')

@@ -44,12 +44,19 @@ jobs:
       - name: Package portable Windows executable with Java runtime
         shell: pwsh
         run: |
-          $version = (Select-String '^mod_version=(.+)$' gradle.properties).Matches.Groups[1].Value
-          jpackage --type app-image --input build/distributions --main-jar hivemind-controller.jar --main-class hivemind.controller.Main --name HiveMindController --dest build/windows --app-version $version --win-console --add-modules java.base,java.desktop,java.net.http,jdk.httpserver,jdk.crypto.ec,java.logging,java.naming
+          $version = (Select-String '^controller_version=(.+)$' gradle.properties).Matches.Groups[1].Value
+          # Retain java.exe: the startup updater launches a separate JVM before replacing the app JAR.
+          jlink --add-modules java.base,java.desktop,java.net.http,jdk.httpserver,jdk.crypto.ec,java.logging,java.naming --output build/controller-runtime --strip-debug --no-header-files --no-man-pages
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          jpackage --runtime-image build/controller-runtime --type app-image --input build/distributions --main-jar hivemind-controller.jar --main-class hivemind.controller.Main --name HiveMindController --dest build/windows --app-version $version --win-console
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           Copy-Item CONTROLLER.md build/windows/HiveMindController/README.md
           Copy-Item LICENSE build/windows/HiveMindController/LICENSE
           & build/windows/HiveMindController/HiveMindController.exe --help
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          javac --release 17 -cp build/controller-classes -d build/controller-test-classes controller/src/test/java/hivemind/controller/ControllerUpdateChecks.java
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & build/windows/HiveMindController/runtime/bin/java.exe -cp "build/controller-test-classes;build/controller-classes" hivemind.controller.ControllerUpdateChecks
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           New-Item -ItemType Directory -Force build/release | Out-Null
           Compress-Archive -Path build/windows/HiveMindController -DestinationPath "build/release/hivemind-controller-$version-windows-x64.zip"

@@ -116,7 +116,9 @@ bash scripts/check-mining-policies.sh                # behavior policy checks, n
 bash scripts/check-controller.sh                     # controller, network and updater checks
 ```
 
-GitHub Actions builds every push. A successful build on `main` publishes a release for the version in `gradle.properties`, together with the Windows controller, checksums and the update manifest.
+GitHub Actions builds every push. A successful build on `main` publishes `release_version` from `gradle.properties`. Components have independent versions: `mod_version` (bot), `player_version`, and `controller_version`; `previous_release` names the preceding bundle. Source-input checks require changes to bump the affected component and reject unnecessary bumps. Unchanged components reuse their exact published assets and manifests. Shared Minecraft code changes require both client versions to advance; controller-only changes leave both clients alone. The release includes all three updater channels and a component index.
+
+The standalone controller checks for updates before starting its relay/dashboard, installs verified controller updates, and relaunches with the same options. Install controller 0.1.0.10 once to gain this feature; older controllers cannot update themselves. The bot and player editions remain 0.1.0.9 in this controller-only release. See [CONTROLLER.md](CONTROLLER.md#automatic-updates).
 
 ## Status and limits
 

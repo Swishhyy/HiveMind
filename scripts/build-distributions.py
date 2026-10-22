@@ -26,8 +26,9 @@ def controller():
     sources=list((JAVA/'network').glob('*.java'))+[JAVA/'bot/AtomicProperties.java',JAVA/'bot/StorageRule.java',JAVA/'bot/TrustedControl.java',JAVA/'mining/WorldRoutes.java']+list(Path('controller/src/main/java').rglob('*.java'))
     compile_to(out,sources)
     shutil.copytree('src/main/resources/assets',out/'assets',dirs_exist_ok=True)
-    version=next(line.split('=',1)[1] for line in Path('gradle.properties').read_text().splitlines() if line.startswith('mod_version='))
-    (out/'hivemind-controller.properties').write_text('version='+version+'\n')
+    version=next(line.split('=',1)[1] for line in Path('gradle.properties').read_text().splitlines() if line.startswith('controller_version='))
+    commit=os.environ.get('GITHUB_SHA') or subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()
+    (out/'hivemind-controller.properties').write_text('application=hivemind-controller\njava=17\nversion='+version+'\ncommit='+commit+'\n')
     for name in ('LICENSE','COPYING','COPYING.LESSER'):
         if Path(name).exists():shutil.copy(name,out/name)
     jar=Path('build/distributions/hivemind-controller.jar');jar.parent.mkdir(parents=True,exist_ok=True)
