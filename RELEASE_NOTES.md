@@ -1,13 +1,12 @@
-HiveMind's first release: **0.1.0.0**, for **Minecraft 26.3 / Fabric**.
+**HiveMind 0.1.0.1** — elytra takeoff fix for **Minecraft 26.3 / Fabric**.
 
-- Renamed the mod ID, Java packages/API, commands, configs, assets and build artifacts to HiveMind. Existing Baritone configs are not migrated. Remove the old Baritone/HiveMind development jar before installing this first release; keep one HiveMind mod jar in the instance's mods directory.
-- Standalone controller with shared map, commands, trust, global/individual settings, persistent bot history and coordinated tasks. The dashboard and bot network survive an individual client disconnect/crash.
-- Session controls and optional controller-directed combat logging, timed relogging and reconnect backoff. A running client remains remotely controllable on the game menu.
-- Per-client first-join update prompt, manual/automatic updates and dashboard controls. Verified updates install after Minecraft closes, with a backup, for the next launch.
-- Autonomous mining/logistics, shared exploration and sightings, persistent tracking orders, elytra search/escape, auto respawn, reactive melee/crystal combat, auto totems, portable shulker supplies and improved bucket clutch handling.
+- Keep the launch phase active as the bot rises and falls. A jump changing the bot's Y position no longer sends it walking back to the original launch block before it can activate its elytra.
+- Use a normal jump, release, then a fresh jump press during descent to deploy the wings. Prepare the flight path before jumping and cancel the ground path before setting launch input.
+- Prefer a simulated, collision-checked rocket boost during initial glide activation, rather than accepting a short unboosted path that drops the bot back onto the ground.
+- Require sustained gliding with actual travel or climb before marking takeoff successful. Brief wing deployments and repeated jumps no longer disable the failed-launch timeout.
+- Select launch sites using standing dimensions, open overhead clearance and a clear departure lane. Avoid launching beneath Overworld tree canopies; search farther for open ground.
+- Recover from a stalled takeoff, stop boosting into the obstruction, and avoid that nearby launch area for a minute. Ground contact after a completed flight starts a fresh departure near the bot instead of returning to its old launch point.
 
-**Downloads:** `hivemind-0.1.0.0.jar` is the Fabric client mod. Windows users can extract the entire controller zip and run `HiveMindController.exe`; it includes Java. Other systems can run `java -jar hivemind-controller.jar` with Java 17+. The Minecraft client requires Java 25. Full setup: [controller guide](https://github.com/Swishhyy/HiveMind/blob/main/CONTROLLER.md).
+Update with `#update install`, or use **Updates → Download and install** in the controller. Close and relaunch Minecraft after downloading. The existing controller remains compatible; replacing it is optional for this client fix.
 
-The controller does not log into Microsoft accounts or start a closed Minecraft process. Clients execute real game actions, so movement/combat and server-specific disconnect behavior still require live gameplay verification.
-
-Based on Baritone, retaining its LGPL-3.0 license and upstream contributor credits.
+[Setup guide](https://github.com/Swishhyy/HiveMind/blob/main/CONTROLLER.md). Automated takeoff regression checks cover jump/release/glide handoff, airborne launch latching, real flight progress, failed-glide recovery and landing far from the launch point. Live gameplay still needs verification on your server.

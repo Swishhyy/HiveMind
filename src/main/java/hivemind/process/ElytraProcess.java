@@ -43,6 +43,8 @@ import hivemind.process.elytra.*;
 import hivemind.utils.HiveMindProcessHelper;
 import hivemind.utils.PathingCommandContext;
 import hivemind.utils.bot.FlightPolicy;
+import hivemind.utils.bot.TakeoffState;
+import hivemind.utils.bot.FlightPolicy.Point;
 import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.multiplayer.ClientLevel;
@@ -83,18 +85,18 @@ public class ElytraProcess extends HiveMindProcessHelper implements IHiveMindPro
     private boolean allowAboveRoof;
     private IHiveMindProcess travelOwner;
     private boolean autonomousTravel;
-    private int takeoffTicks;
+    private TakeoffState takeoffState;
     private boolean requestedLanding;
     private boolean emergencyTravel;
     private BlockPos takeoffPoint;
-    private int launchTicks;
     private boolean deferPathInitialization;
     @Override public boolean isTemporary(){return autonomousTravel;}
     public boolean ownedBy(IHiveMindProcess owner){return travelOwner==owner&&isActive();}
     public void travelFor(IHiveMindProcess owner,Goal destination,BlockPos takeoff,boolean emergency){
         deferPathInitialization=true;
         try{pathTo(destination);}finally{deferPathInitialization=false;}
-        travelOwner=owner;autonomousTravel=true;emergencyTravel=emergency;takeoffPoint=takeoff;takeoffTicks=launchTicks=0;
+        travelOwner=owner;autonomousTravel=true;emergencyTravel=emergency;takeoffPoint=takeoff;
+        takeoffState=new TakeoffState(takeoff==null?null:new Point(takeoff.getX()+.5,takeoff.getY(),takeoff.getZ()+.5));
         // Vanilla auto-jump waits for a walking fall before computing this path. Autonomous
         // ground takeoff needs its flight path NOW, otherwise the solver never uses a rocket.
         behavior.pathManager.pathToDestination(takeoff==null?ctx.playerFeet():takeoff);
@@ -108,6 +110,9 @@ public class ElytraProcess extends HiveMindProcessHelper implements IHiveMindPro
         return true;
     }
     public void requestLanding(){requestedLanding=true;}
+    public boolean takeoffCompleted(){return takeoffState!=null&&takeoffState.completed();}
+    public boolean needsLaunchBoost(){return travelOwner!=null&&takeoffState!=null&&takeoffState.launching()&&!requestedLanding&&!goingToLandingSpot;}
+    public boolean takeoffFailed(){return takeoffState!=null&&takeoffState.failed();}
     private final Semaphore npfSema = new Semaphore(1);
 
     private static final int SHORT_LANDING_COLUMN_HEIGHT = 15;
@@ -123,7 +128,8 @@ public class ElytraProcess extends HiveMindProcessHelper implements IHiveMindPro
     }
 
     public void onLostControl(boolean destroyNpf) {
-        travelOwner=null;takeoffTicks=launchTicks=0;requestedLanding=emergencyTravel=false;takeoffPoint=null;
+        travelOwner=null;requestedLanding=emergencyTravel=false;takeoffPoint=null;
+        hivemind.getInputOverrideHandler().clearAllKeys();
         this.state = State.START_FLYING; // TODO: null state?
         this.goingToLandingSpot = false;
         this.landingSpot = null;
@@ -155,8 +161,8 @@ public class ElytraProcess extends HiveMindProcessHelper implements IHiveMindPro
     @Override
     public void resetState() {
         BlockPos destination = this.currentDestination();
-        IHiveMindProcess owner=travelOwner;boolean emergency=emergencyTravel;BlockPos takeoff=takeoffPoint;
-        this.onLostControl();this.travelOwner=owner;this.emergencyTravel=emergency;this.takeoffPoint=takeoff;
+        IHiveMindProcess owner=travelOwner;boolean emergency=emergencyTravel;BlockPos takeoff=takeoffPoint;TakeoffState progress=takeoffState;
+        this.onLostControl();this.travelOwner=owner;this.emergencyTravel=emergency;this.takeoffPoint=takeoff;this.takeoffState=progress;
         if (destination != null) {
             this.pathTo0(destination, false);
             if(travelOwner!=null)behavior.pathManager.pathToDestination(takeoffPoint==null?ctx.playerFeet():takeoffPoint);
@@ -209,6 +215,42 @@ public class ElytraProcess extends HiveMindProcessHelper implements IHiveMindPro
             onLostControl();
             logDirect(AUTO_JUMP_FAILURE_MSG);
             return new PathingCommand(null, PathingCommandType.CANCEL_AND_SET_GOAL);
+        }
+
+        if(travelOwner!=null&&takeoffState!=null&&this.state!=State.LANDING&&!goingToLandingSpot){
+            if(!ctx.player().isFallFlying()&&(requestedLanding||shouldLandForSafety())){
+                onLostControl();return new PathingCommand(null,PathingCommandType.CANCEL_AND_SET_GOAL);
+            }
+            var position=ctx.player().position();
+            TakeoffState.Action action=takeoffState.advance(new Point(position.x,position.y,position.z),ctx.player().onGround(),ctx.player().isFallFlying(),
+                ctx.player().horizontalCollision||ctx.player().verticalCollision&&!ctx.player().onGround(),!behavior.pathManager.getPath().isEmpty(),ctx.player().getDeltaMovement().y);
+            if(action==TakeoffState.Action.RECOVER){
+                if(!ctx.player().isFallFlying()||ctx.player().onGround()){
+                    onLostControl();return new PathingCommand(null,PathingCommandType.CANCEL_AND_SET_GOAL);
+                }
+                if(groundBelowLaunch()){
+                    // Stop boosting into the obstruction. Normal glide physics settle onto known nearby ground.
+                    behavior.landingMode=true;hivemind.getInputOverrideHandler().clearAllKeys();
+                    hivemind.getLookBehavior().updateTarget(new Rotation(ctx.player().getYRot(),65),false);
+                    return new PathingCommand(null,PathingCommandType.CANCEL_AND_SET_GOAL);
+                }
+                // A cliff/drop needs the normal safe landing search rather than a blind downward turn.
+                requestedLanding=true;
+            }else if(action==TakeoffState.Action.FINISHED){
+                // Ground contact after a real flight starts a new departure at the current location.
+                onLostControl();return new PathingCommand(null,PathingCommandType.CANCEL_AND_SET_GOAL);
+            }else if(action==TakeoffState.Action.APPROACH){
+                return new PathingCommand(new GoalNear(takeoffPoint,0),PathingCommandType.REVALIDATE_GOAL_AND_PATH);
+            }else if(!ctx.player().isFallFlying()){
+                hivemind.getPathingBehavior().secretInternalSegmentCancel();
+                hivemind.getInputOverrideHandler().clearAllKeys();
+                if(action!=TakeoffState.Action.WAIT&&currentDestination()!=null){
+                    Rotation aim=RotationUtils.calcRotationFromVec3d(ctx.playerHead(),Vec3.atCenterOf(currentDestination()),ctx.playerRotations());
+                    hivemind.getLookBehavior().updateTarget(new Rotation(aim.getYaw(),-25),false);
+                }
+                hivemind.getInputOverrideHandler().setInputForceState(Input.JUMP,action==TakeoffState.Action.JUMP);
+                return new PathingCommand(null,PathingCommandType.CANCEL_AND_SET_GOAL);
+            }
         }
 
         boolean safetyLanding = requestedLanding;
@@ -299,17 +341,6 @@ public class ElytraProcess extends HiveMindProcessHelper implements IHiveMindPro
             return new PathingCommand(null, PathingCommandType.REQUEST_PAUSE);
         }
 
-        if(travelOwner!=null&&(this.state==State.FLYING||this.state==State.START_FLYING)&&!ctx.player().isFallFlying()){
-            if(requestedLanding||shouldLandForSafety()||++takeoffTicks>400){onLostControl();return new PathingCommand(null,PathingCommandType.CANCEL_AND_SET_GOAL);}
-            if(takeoffPoint!=null&&!new GoalNear(takeoffPoint,0).isInGoal(ctx.playerFeet()))
-                return new PathingCommand(new GoalNear(takeoffPoint,0),PathingCommandType.REVALIDATE_GOAL_AND_PATH);
-            if(behavior.pathManager.getPath().isEmpty())return new PathingCommand(null,emergencyTravel?PathingCommandType.DEFER:PathingCommandType.REQUEST_PAUSE);
-            // Ordinary jump, release, glide request. No non-vanilla lift or movement packets.
-            if(++launchTicks>120){onLostControl();return new PathingCommand(null,PathingCommandType.CANCEL_AND_SET_GOAL);}
-            hivemind.getInputOverrideHandler().clearAllKeys();
-            hivemind.getInputOverrideHandler().setInputForceState(Input.JUMP,ctx.player().onGround()?launchTicks%20==1:ctx.player().getDeltaMovement().y<-.05&&launchTicks%4<2);
-            return new PathingCommand(null,PathingCommandType.CANCEL_AND_SET_GOAL);
-        }
         if (this.state == State.FLYING || this.state == State.START_FLYING) {
             this.state = ctx.player().onGround() && HiveMind.settings().elytraAutoJump.value
                     ? State.LOCATE_JUMP
@@ -388,6 +419,17 @@ public class ElytraProcess extends HiveMindProcessHelper implements IHiveMindPro
         return new PathingCommand(null, PathingCommandType.CANCEL_AND_SET_GOAL);
     }
 
+    private boolean groundBelowLaunch(){
+        BlockPos feet=ctx.player().blockPosition();
+        for(int down=1;down<=4;down++){
+            BlockPos block=feet.below(down);if(!ctx.world().hasChunkAt(block))return false;
+            BlockState state=ctx.world().getBlockState(block);
+            if(!state.getFluidState().isEmpty())return false;
+            if(!state.getCollisionShape(ctx.world(),block).isEmpty())return true;
+        }
+        return false;
+    }
+
     public void landingSpotIsBad(BetterBlockPos endPos) {
         badLandingSpots.add(endPos);
         goingToLandingSpot = false;
@@ -454,7 +496,7 @@ public class ElytraProcess extends HiveMindProcessHelper implements IHiveMindPro
 
     @Override
     public void pathTo(BlockPos destination) {
-        travelOwner=null;autonomousTravel=emergencyTravel=false;takeoffPoint=null;
+        travelOwner=null;autonomousTravel=emergencyTravel=false;takeoffPoint=null;takeoffState=null;
         if (!isSupportedPos(destination)) {
             throw new IllegalArgumentException("The goal must be within bounds to use elytra flight.");
         }
@@ -471,8 +513,8 @@ public class ElytraProcess extends HiveMindProcessHelper implements IHiveMindPro
             return;
         }
         IHiveMindProcess owner=this.travelOwner;boolean landing=this.requestedLanding,emergency=this.emergencyTravel;
-        BlockPos takeoff=this.takeoffPoint;int elapsed=takeoffTicks,launch=launchTicks;
-        this.onLostControl(false);this.travelOwner=owner;this.requestedLanding=landing;this.emergencyTravel=emergency;this.takeoffPoint=takeoff;this.takeoffTicks=elapsed;this.launchTicks=launch;
+        BlockPos takeoff=this.takeoffPoint;TakeoffState progress=this.takeoffState;
+        this.onLostControl(false);this.travelOwner=owner;this.requestedLanding=landing;this.emergencyTravel=emergency;this.takeoffPoint=takeoff;this.takeoffState=progress;
         this.predictingTerrain = ctx.player().level().dimension() == Level.NETHER && HiveMind.settings().elytraPredictTerrain.value;
         this.allowTight = HiveMind.settings().elytraAllowTightSpaces.value;
         this.allowAboveBuildLimit = HiveMind.settings().elytraAllowAboveBuildLimit.value;
