@@ -232,6 +232,7 @@ public abstract class MixinClientPlayNetHandler extends ClientCommonPacketListen
         if (instance instanceof Baritone bot) {
             bot.getDepositProcess().onContainerContents(packet.containerId());
             bot.getWorkstationProcess().onContents(packet.containerId());
+            bot.getShulkerProcess().onContents(packet.containerId());
         }
     }
 

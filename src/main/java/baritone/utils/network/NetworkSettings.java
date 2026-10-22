@@ -39,6 +39,8 @@ public final class NetworkSettings {
     }
     private static final Map<String, Spec> SPECS = new LinkedHashMap<>();
     static {
+        bool("Combat","botKillAura botAutoCrystal botAutoTotem");
+        bool("Survival","botUseShulkers botEmergencyBucketClutch");
         bool("Autonomy","botAutoRespawn botPersistentTracking botPeriodicReports botReportAllTrusted botUseElytra botElytraCombatEscape botElytraPursuit botAerialSearch botEntityAwareness");
         number("Autonomy","long",1000,30000,"botRespawnDelayMS");
         number("Autonomy","long",30000,3600000,"botReportIntervalMS");

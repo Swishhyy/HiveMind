@@ -75,6 +75,7 @@ public class Baritone implements IBaritone {
     private final MineProcess mineProcess;
     private final RoamProcess roamProcess;
     private final DepositProcess depositProcess;
+    private final ShulkerSupplyProcess shulkerProcess;
     private final PortalTravelProcess portalTravelProcess;
     private final ConflictProcess conflictProcess;
     private final SculkProcess sculkProcess;
@@ -88,6 +89,8 @@ public class Baritone implements IBaritone {
     private final AutonomyBehavior autonomy;
     private final FlightBehavior flight;
     private final EntityAwareness awareness;
+    private final CombatBehavior combat;
+    private final BucketClutchBehavior clutch;
     private final StalkProcess stalkProcess;
     private final GetToBlockProcess getToBlockProcess;
     private final CustomGoalProcess customGoalProcess;
@@ -134,6 +137,7 @@ public class Baritone implements IBaritone {
             this.mineProcess             = this.registerProcess(MineProcess::new);
             this.roamProcess             = this.registerProcess(RoamProcess::new);
             this.depositProcess          = this.registerProcess(DepositProcess::new);
+            this.shulkerProcess          = this.registerProcess(ShulkerSupplyProcess::new);
             this.portalTravelProcess     = this.registerProcess(PortalTravelProcess::new);
             this.conflictProcess         = this.registerProcess(ConflictProcess::new);
             this.stalkProcess            = this.registerProcess(StalkProcess::new);
@@ -158,6 +162,8 @@ public class Baritone implements IBaritone {
         this.botControl = new BotControlBehavior(this);
         this.network = new NetworkBehavior(this);
         this.awareness = new EntityAwareness(this);
+        this.combat = new CombatBehavior(this);
+        this.clutch = new BucketClutchBehavior(this);
         this.flight = new FlightBehavior(this);
         this.autonomy = new AutonomyBehavior(this);
         this.commandManager = new CommandManager(this);
@@ -168,12 +174,15 @@ public class Baritone implements IBaritone {
         this.registerBehavior(this.stalkProcess);
         this.registerBehavior(this.sculkProcess);
         this.registerBehavior(this.survivalProcess);
+        this.registerBehavior(this.shulkerProcess);
         this.registerBehavior(this.companionProcess);
         this.registerBehavior(this.jobManager);
         this.registerBehavior(this.botControl);
         this.registerBehavior(this.network);
         this.registerBehavior(this.flight);
         this.registerBehavior(this.autonomy);
+        this.registerBehavior(this.combat);
+        this.registerBehavior(this.clutch);
     }
 
     public void registerBehavior(IBehavior behavior) {
@@ -268,6 +277,9 @@ public class Baritone implements IBaritone {
     public AutonomyBehavior getAutonomy(){return autonomy;}
     public FlightBehavior getFlight(){return flight;}
     public EntityAwareness getAwareness(){return awareness;}
+    public CombatBehavior getCombat(){return combat;}
+    public BucketClutchBehavior getClutch(){return clutch;}
+    public ShulkerSupplyProcess getShulkerProcess(){return shulkerProcess;}
 
     public StalkProcess getStalkProcess() { return this.stalkProcess; }
 

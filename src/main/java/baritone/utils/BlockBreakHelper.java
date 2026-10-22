@@ -74,6 +74,8 @@ public final class BlockBreakHelper {
                     .anyMatch(area -> area.contains(target.getX(), target.getY(), target.getZ()));
             boolean protectedContainer = BaritoneAPI.getSettings().protectContainers.value
                     && ConstructionPolicy.isContainer(BuiltInRegistries.BLOCK.getKey(ctx.world().getBlockState(target).getBlock()).getPath());
+            boolean ownedPortable=BaritoneAPI.getProvider().getBaritoneForPlayer(ctx.player()) instanceof Baritone bot&&bot.getShulkerProcess().ownsForRecovery(target);
+            if(ownedPortable)protectedContainer=false;
             boolean sculk = false;
             if (BaritoneAPI.getSettings().mineAvoidSculk.value && BaritoneAPI.getProvider().getBaritoneForPlayer(ctx.player()) instanceof Baritone bot) {
                 sculk = SculkPolicy.sculk(BuiltInRegistries.BLOCK.getKey(ctx.world().getBlockState(target).getBlock()).getPath())
@@ -87,7 +89,7 @@ public final class BlockBreakHelper {
                     outsideZone = zone == null || !zone.contains(MiningRouteAccess.dimension(ctx),target.getX(),target.getY(),target.getZ());
                 }
             }
-            if (protectedArea || protectedContainer || sculk || outsideZone) {
+            if (protectedArea || protectedContainer || sculk || outsideZone&&!ownedPortable) {
                 stopBreakingBlock();
                 return;
             }

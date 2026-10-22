@@ -116,6 +116,7 @@ public final class StalkProcess extends BaritoneProcessHelper implements IBehavi
     public StalkProcess(Baritone bot) { super(bot);explosives=new ExplosiveCombat(bot); }
     @Override public boolean isActive() { return targetId!=null; }
     public boolean hunting() { return isActive()&&hunt; }
+    public String combatStyle(){return combatStyle.name().toLowerCase(Locale.ROOT);}
     public UUID target(){return targetId;}
     public BlockPos teamPoint(){BlockPos blast=explosives.teamPoint();return blast!=null?blast:vantage!=null?vantage:ctx.player()==null?null:ctx.playerFeet().immutable();}
     public boolean teamExplosives(){return hunting()&&!meleeFallback&&combatStyle!=CombatStyle.MELEE&&phase!=Phase.SCATTER&&equipmentReady(combatStyle)&&ctx.player().getHealth()>Baritone.settings().killRetreatHealth.value;}
@@ -125,6 +126,21 @@ public final class StalkProcess extends BaritoneProcessHelper implements IBehavi
     private boolean quietPhase() { return phase==Phase.SEARCH||phase==Phase.WATCH||phase==Phase.DRINK||phase==Phase.APPROACH&&!reachedRear; }
     /** An engaged hunt keeps fighting; only low health or being outnumbered withdraws it. */
     public boolean committedCombat() { return isActive()&&hunt&&(phase==Phase.APPROACH||phase==Phase.ATTACK); }
+    public Player auraTarget(){
+        return isActive()&&hunt&&phase==Phase.ATTACK&&(combatStyle==CombatStyle.MELEE||meleeFallback)
+                &&baritone.getPathingControlManager().mostRecentInControl().orElse(null)==this?loaded(targetId):null;
+    }
+    public void onMeleeStrike(net.minecraft.world.entity.LivingEntity target){
+        if(!isActive()||!hunt||phase!=Phase.ATTACK||!target.getUUID().equals(targetId))return;
+        lastStrike=System.currentTimeMillis();if(!target.isBlocking())attackCount++;
+    }
+    public void reactiveExplosives(){
+        if(!isActive()||!hunt||phase!=Phase.ATTACK||combatStyle==CombatStyle.MELEE||meleeFallback
+                ||baritone.getPathingControlManager().mostRecentInControl().orElse(null)!=this)return;
+        Player target=loaded(targetId);if(target==null)return;
+        int cycles=explosives.confirmedCycles();explosives.reactiveTick(target,combatStyle);
+        if(cycles!=explosives.confirmedCycles())lastStrike=System.currentTimeMillis();
+    }
     /** Eating would stand the bot still beside the target, so care waits until a hunt's fight and retreat are over. */
     public boolean suppressesCare() { return isActive()&&hunt&&(committedCombat()||phase==Phase.SCATTER); }
     public boolean holdsUse() { return ownsUse&&baritone.getPathingControlManager().mostRecentInControl().orElse(null)==this; }
@@ -286,6 +302,7 @@ public final class StalkProcess extends BaritoneProcessHelper implements IBehavi
     /** Restore needed supplies displaced by flight; one normal inventory swap at a time. */
     public boolean prepareSupplies(CombatStyle style){
         if(!Baritone.settings().allowInventory.value||ctx.player()==null||!ctx.player().isAlive()||ctx.minecraft().gameMode==null||baritone.getConflictProcess().isActive()||baritone.getSculkProcess().isActive()||baritone.getElytraProcess().isActive()||ctx.player().containerMenu!=ctx.player().inventoryMenu||!ctx.player().inventoryMenu.getCarried().isEmpty())return false;
+        if(baritone.getShulkerProcess().requestSupplies())return true;
         long now=System.currentTimeMillis();if(now<nextSupplyMove)return true;
         List<java.util.function.Predicate<ItemStack>> needs=new ArrayList<>();
         needs.add(stack->(stack.is(ItemTags.SWORDS)||stack.is(ItemTags.AXES))&&(!stack.isDamageableItem()||stack.getMaxDamage()-stack.getDamageValue()>Math.max(1,Baritone.settings().botToolReserve.value)));
@@ -689,8 +706,7 @@ public final class StalkProcess extends BaritoneProcessHelper implements IBehavi
         ctx.player().getInventory().setSelectedSlot(selected);ctx.playerController().syncHeldItem();
         if(MeleeCombat.aim(ctx,baritone,target)&&ctx.player().getAttackStrengthScale(0)>=0.95f) {
             if(!baritone.getNetwork().team().clearStrike(target))return path(new GoalNear(target.blockPosition().offset((int)Math.round(Math.cos(baritone.getNetwork().team().heading(Kind.HUNT,targetId))*3),0,(int)Math.round(Math.sin(baritone.getNetwork().team().heading(Kind.HUNT,targetId))*3)),1));
-            ctx.minecraft().gameMode.attack(ctx.player(),target);ctx.player().swing(InteractionHand.MAIN_HAND,SwingAnimation.DEFAULT,false);lastStrike=now;
-            if(!blocking)attackCount++; // a raised shield proves PvP is on, so blocked swings do not count toward the no-damage check
+            baritone.getCombat().melee(target);
         }return pause();
     }
     private void fallBackToMelee(String reason) {
@@ -747,13 +763,7 @@ public final class StalkProcess extends BaritoneProcessHelper implements IBehavi
     }
     /** Keeps an inventory totem in the offhand; a popped totem is replaced on a following tick. */
     private void equipTotem() {
-        if(totemDelay>0)totemDelay--;
-        if(!Baritone.settings().killUseTotems.value||ctx.player().getOffhandItem().is(Items.TOTEM_OF_UNDYING)||totemDelay>0)return;
-        if(ctx.player().containerMenu!=ctx.player().inventoryMenu||!ctx.player().inventoryMenu.getCarried().isEmpty())return;
-        for(int slot=0;slot<36;slot++)if(ctx.player().getInventory().getItem(slot).is(Items.TOTEM_OF_UNDYING)) {
-            ctx.playerController().windowClick(ctx.player().inventoryMenu.containerId,slot<9?slot+36:slot,40,ContainerInput.SWAP,ctx.player());
-            totemDelay=4;return;
-        }
+        baritone.getCombat().ensureTotem();
     }
     private boolean noticeable() {
         boolean invisible=ctx.player().hasEffect(MobEffects.INVISIBILITY),hidden=visuallyHidden();

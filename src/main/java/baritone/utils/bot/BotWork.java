@@ -31,6 +31,6 @@ public final class BotWork {
                 || bot.getExploreProcess().isActive() || bot.getFarmProcess().isActive()
                 || bot.getGetToBlockProcess().isActive() || bot.getSurvivalProcess().isActive()
                 || bot.getCompanionProcess().isActive() || bot.getWorkstationProcess().isActive()
-                || bot.getRepairProcess().isActive();
+                || bot.getRepairProcess().isActive() || bot.getShulkerProcess().isActive();
     }
 }

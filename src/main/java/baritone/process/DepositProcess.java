@@ -61,7 +61,7 @@ import java.nio.file.Path;
 
 /** A temporary mining interruption. It never drops items or transfers worn equipment. */
 public final class DepositProcess extends BaritoneProcessHelper {
-    private enum Stage { IDLE, TRAVEL, OPEN, TRANSFER, RETURN }
+    private enum Stage { IDLE, PORTABLE, TRAVEL, OPEN, TRANSFER, RETURN }
 
     private Stage stage = Stage.IDLE;
     private Path tripRoot;
@@ -154,6 +154,9 @@ public final class DepositProcess extends BaritoneProcessHelper {
         if (isActive()) throw new IllegalStateException("A storage trip is already active");
         if (targets.isEmpty() || targets.size()>128 || targets.values().stream().anyMatch(n->n<1||n>1000000)) throw new IllegalArgumentException("Invalid withdrawal request");
         if (ctx.player().containerMenu != ctx.player().inventoryMenu || !ctx.player().containerMenu.getCarried().isEmpty()) throw new IllegalStateException("Close containers and clear the cursor before fetching items");
+        if(baritone.getShulkerProcess().requestItems(targets)){
+            tripRoot=MiningRouteAccess.root(ctx);fetchTargets=Map.copyOf(targets);fetch=resupply=true;lastFetchError=null;transition(Stage.PORTABLE);return;
+        }
         MiningRouteAccess.deposits(ctx); BlockPos feet=ctx.playerFeet();
         remainingChests.clear();remainingChests.addAll(MiningRouteAccess.store(ctx).orderedDeposits(MiningRouteAccess.dimension(ctx),feet.getX(),feet.getY(),feet.getZ(),Baritone.settings().mineTravelBetweenDimensions.value));
         remainingChests.removeIf(storage->storage.rule().kind()==StorageRule.Kind.DISABLED);
@@ -218,6 +221,14 @@ public final class DepositProcess extends BaritoneProcessHelper {
     private PathingCommand depositTick(boolean calcFailed, boolean isSafeToCancel) {
         if (ctx.player() == null || ctx.world() == null || !tripRoot.equals(MiningRouteAccess.root(ctx))) {
             return fail("the server or save changed");
+        }
+        if(stage==Stage.PORTABLE){
+            if(baritone.getShulkerProcess().isActive())return new PathingCommand(null,PathingCommandType.DEFER);
+            Map<String,Integer> remaining=Map.copyOf(fetchTargets);
+            boolean complete=remaining.entrySet().stream().allMatch(entry->BotItems.count(ctx,entry.getKey())>=entry.getValue());
+            onLostControl();
+            if(complete)return new PathingCommand(null,PathingCommandType.CANCEL_AND_SET_GOAL);
+            startFetch(remaining);return new PathingCommand(null,PathingCommandType.DEFER);
         }
         if (calcFailed) {
             return stage == Stage.RETURN ? fail("no usable route to the mining site") : tryNextStorage("storage #" + storageId + " is unreachable");

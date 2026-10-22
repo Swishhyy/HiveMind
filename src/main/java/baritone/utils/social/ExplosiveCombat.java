@@ -68,6 +68,7 @@ public final class ExplosiveCombat {
     private Plan plan;
     private int ticks,id=-1,idleTicks,confirmedCycles,stockDelay;
     private final CombatCadence cadence=new CombatCadence();
+    private long evaluatedTick=Long.MIN_VALUE;
     private BlockPos reusableCrystalBase;
     private int supportIndex,selectDelay;
     private BlockPos lurePoint,firingPoint;
@@ -103,7 +104,7 @@ public final class ExplosiveCombat {
     /** Drops the current plan but remembers which styles failed, so a melee fallback does not immediately retry them. */
     public void abandon() { stage=Stage.SELECT;plan=null;ticks=idleTicks=supportIndex=selectDelay=0;id=-1;blockConfirmed=false;firingPoint=lurePoint=null;firingUntil=lureUntil=0; }
     public boolean expectedCrystal(Entity entity) { return stage==Stage.WAIT_BREAK&&entity instanceof EndCrystal&&entity.getId()==id; }
-    public void reset() { abandon();cadence.reset();reusableCrystalBase=null;confirmedCycles=stockDelay=0;warning=null;rejected.clear();reusableAnchors.clear();failedFootings.clear();nextLureCheck=0; }
+    public void reset() { abandon();cadence.reset();evaluatedTick=Long.MIN_VALUE;reusableCrystalBase=null;confirmedCycles=stockDelay=0;warning=null;rejected.clear();reusableAnchors.clear();failedFootings.clear();nextLureCheck=0; }
     public void onBlockChange(BlockChangeEvent event) {
         if(plan!=null) {
             BlockPos expected=stage==Stage.WAIT_COVER?plan.cover():stage==Stage.WAIT_SUPPORT&&supportIndex<plan.supports().size()?plan.supports().get(supportIndex):plan.pos();
@@ -188,7 +189,8 @@ public final class ExplosiveCombat {
     }
     public Step tick(Player target,CombatStyle requested) {
         long tick=ctx.player().tickCount;
-        if(!cadence.ready(tick))return waitStep();ticks++;
+        if(!cadence.ready(tick))return waitStep();
+        if(evaluatedTick!=tick){ticks++;evaluatedTick=tick;}
         // Drain transitions that only inspect already-confirmed state. At most one use/attack
         // is sent per client tick; missing server confirmations still stop the pipeline.
         for(int transitions=0;transitions<8;transitions++){
@@ -196,6 +198,10 @@ public final class ExplosiveCombat {
             if(cadence.acted(tick)||stage==previous||result.goal()!=null||result.fallback()||result.problem()!=null)return result;
         }
         return waitStep();
+    }
+    public void reactiveTick(Player target,CombatStyle requested){
+        // Complete aiming in the same tick, but leave route selection and timeout accounting to the process.
+        if(stage!=Stage.SELECT&&stage!=Stage.WAIT_BREAK&&stage!=Stage.WAIT_DETONATE)tick(target,requested);
     }
     private Step advance(Player target,CombatStyle requested) {
         if(ctx.player().containerMenu!=ctx.player().inventoryMenu||!ctx.player().inventoryMenu.getCarried().isEmpty())
@@ -212,6 +218,11 @@ public final class ExplosiveCombat {
         switch(stage) {
             case SELECT -> {
                 if(target.distanceToSqr(ctx.player())>256)return new Step(blastRange(target.blockPosition()),false,null);
+                if(Baritone.settings().botAutoCrystal.value&&(requested==CombatStyle.AUTO||requested==CombatStyle.CRYSTAL)){
+                    EndCrystal existing=crystals().stream().filter(crystal->nearest(crystal.getBoundingBox(),ctx.playerHead()).distanceToSqr(ctx.playerHead())<=9
+                            &&clearRay(ctx.playerHead(),nearest(crystal.getBoundingBox(),ctx.playerHead()),null)&&worthwhile(target,crystal.position(),6,null)).findFirst().orElse(null);
+                    if(existing!=null){plan=new Plan(existing.blockPosition().below(),CombatStyle.CRYSTAL,false,List.of(),null,0);change(Stage.WAIT_CRYSTAL);return waitStep();}
+                }
                 if(selectDelay-->0) { Step move=relocate(target,requested);return move==null?new Step(blastRange(target.blockPosition()),false,null):move; }
                 plan=reuseCrystalBase(target,requested);if(plan==null)plan=choose(target,requested);
                 if(plan==null) {
@@ -290,9 +301,8 @@ public final class ExplosiveCombat {
                     if(move==null)return problem("No normal-reach crystal hit with acceptable blast exposure",requested);
                     ticks=0;return move;
                 }
-                if(aim(aim)&&cadence.claim(ctx.player().tickCount,Baritone.settings().killExplosiveDelayTicks.value)) {
-                    id=crystal.getId();ctx.minecraft().gameMode.attack(ctx.player(),crystal);
-                    ctx.player().swing(InteractionHand.MAIN_HAND,SwingAnimation.DEFAULT,false);change(Stage.WAIT_BREAK);
+                if(aim(aim)&&bot.getCombat().crystal(crystal)&&cadence.claim(ctx.player().tickCount,Baritone.settings().killExplosiveDelayTicks.value)) {
+                    id=crystal.getId();change(Stage.WAIT_BREAK);
                 }
                 return waitStep();
             }

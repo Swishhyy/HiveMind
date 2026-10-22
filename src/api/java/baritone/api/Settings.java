@@ -425,6 +425,11 @@ public final class Settings {
     public final Setting<Boolean> botElytraPursuit = new Setting<>(true);
     public final Setting<Integer> botFlightEscapeDistance = new Setting<>(2048);
     public final Setting<Boolean> botFightHostileMobs = new Setting<>(true);
+    public final Setting<Boolean> botKillAura = new Setting<>(true);
+    public final Setting<Boolean> botAutoCrystal = new Setting<>(true);
+    public final Setting<Boolean> botAutoTotem = new Setting<>(true);
+    public final Setting<Boolean> botUseShulkers = new Setting<>(true);
+    public final Setting<Boolean> botEmergencyBucketClutch = new Setting<>(true);
     public final Setting<Boolean> botAerialSearch = new Setting<>(true);
     /** Nearby server-loaded entities may be acquired behind cover; visual reports still require line of sight. */
     public final Setting<Boolean> botEntityAwareness = new Setting<>(true);

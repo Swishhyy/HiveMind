@@ -52,8 +52,7 @@ import java.util.Set;
 
 public class MovementFall extends Movement {
 
-    private boolean bucketFall,bucketAttempted;
-    private int previousSlot=-1,pickupTicks;
+    private boolean bucketFall;
     private static final ItemStack STACK_BUCKET_WATER = new ItemStack(Items.WATER_BUCKET);
     private static final ItemStack STACK_BUCKET_EMPTY = new ItemStack(Items.BUCKET);
 
@@ -108,14 +107,8 @@ public class MovementFall extends Movement {
         if(!isWater&&!bucketFall)bucketFall=willPlaceBucket();
         if(!isWater&&bucketFall){
             int waterSlot=ctx.player().getInventory().findSlotMatchingItem(STACK_BUCKET_WATER);
-            if((!Inventory.isHotbarSlot(waterSlot)||ctx.world().dimension()==Level.NETHER)&&!bucketAttempted&&ctx.player().onGround())return state.setStatus(MovementStatus.UNREACHABLE);
-            double above=ctx.player().getY()-dest.getY(),reach=ctx.playerController().getBlockReachDistance();
-            // Aim several ticks before entering reach: a terminal-velocity fall can cross the placement window in one tick.
-            if(!ctx.player().onGround()&&above<TraversalPolicy.armHeight(reach,ctx.player().getDeltaMovement().y)){
-                if(Inventory.isHotbarSlot(waterSlot))selectSlot(waterSlot);
-                targetRotation=RotationUtils.calcRotationFromVec3d(ctx.playerHead(),new Vec3(dest.x+.5,dest.y+.01,dest.z+.5),ctx.playerRotations());
-                if(Inventory.isHotbarSlot(waterSlot)&&(ctx.isLookingAt(dest)||ctx.isLookingAt(dest.below()))){state.setInput(Input.CLICK_RIGHT,true);bucketAttempted=true;}
-            }
+            if((waterSlot<0||ctx.world().dimension()==Level.NETHER)&&ctx.player().onGround())return state.setStatus(MovementStatus.UNREACHABLE);
+            if(baritone instanceof Baritone bot)bot.getClutch().plan(dest);
         }
         if (targetRotation != null) {
             state.setTarget(new MovementTarget(targetRotation, true));
@@ -124,12 +117,8 @@ public class MovementFall extends Movement {
         }
         if (playerFeet.equals(dest) && (ctx.player().position().y - playerFeet.getY() < 0.094 || isWater)) { // 0.094 because lilypads
             if(isWater){
-                // Leave natural water alone. Only reclaim a source after this movement attempted to place its own bucket.
                 if(ctx.player().getDeltaMovement().y<-.01&&!ctx.player().onGround())return state;
-                if(!bucketAttempted)return finish(state);
-                int empty=ctx.player().getInventory().findSlotMatchingItem(STACK_BUCKET_EMPTY);
-                if(!destState.getFluidState().isSource()||!Inventory.isHotbarSlot(empty)||++pickupTicks>40)return finish(state);
-                selectSlot(empty);state.setTarget(new MovementTarget(new Rotation(toDest.getYaw(),90),true));return state.setInput(Input.CLICK_RIGHT,true);
+                return finish(state);
             }else return finish(state);
         }
         Vec3 destCenter = VecUtils.getBlockPosCenter(dest); // we are moving to the 0.5 center not the edge (like if we were falling on a ladder)
@@ -157,15 +146,10 @@ public class MovementFall extends Movement {
         return state;
     }
 
-    private void selectSlot(int slot){
-        if(previousSlot<0)previousSlot=ctx.player().getInventory().getSelectedSlot();
-        ctx.player().getInventory().setSelectedSlot(slot);ctx.playerController().syncHeldItem();
-    }
     private MovementState finish(MovementState state){
-        if(previousSlot>=0){ctx.player().getInventory().setSelectedSlot(previousSlot);ctx.playerController().syncHeldItem();previousSlot=-1;}
         return state.setInput(Input.CLICK_RIGHT,false).setStatus(MovementStatus.SUCCESS);
     }
-    @Override public void reset(){super.reset();bucketFall=bucketAttempted=false;pickupTicks=0;previousSlot=-1;}
+    @Override public void reset(){super.reset();bucketFall=false;}
     private Direction avoid() {
         for (int i = 0; i < 15; i++) {
             BlockState state = ctx.world().getBlockState(ctx.playerFeet().below(i));

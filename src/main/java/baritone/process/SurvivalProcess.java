@@ -124,6 +124,7 @@ public final class SurvivalProcess extends BaritoneProcessHelper implements IBeh
         if (missing != null) {
             if (missing.startsWith("Inventory full")) { waitForHelp(missing); return pause(); }
             if (!Baritone.settings().botAutoResupply.value) { waitForHelp(missing + "; automatic resupply is disabled"); return pause(); }
+            if(baritone.getShulkerProcess().requestSupplies()){reason="Using carried shulker supplies";return new PathingCommand(null,PathingCommandType.DEFER);}
             if (BotInventory.slot(ctx, ItemStack::isEmpty) < 0) {
                 if (Baritone.settings().mineAutoDeposit.value && baritone.getMineProcess().isActive()) {
                     try { baritone.getDepositProcess().start(false);

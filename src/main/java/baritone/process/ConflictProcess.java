@@ -170,6 +170,17 @@ public final class ConflictProcess extends BaritoneProcessHelper implements IBeh
     public boolean playerThreat(){
         return ctx.world().players().stream().anyMatch(player->player.isAlive()&&!player.isSpectator()&&threats.containsKey(player.getUUID()));
     }
+    public LivingEntity auraTarget(){
+        if(!active||baritone.getPathingControlManager().mostRecentInControl().orElse(null)!=this||baritone.getFlight().escaping()
+                ||baritone.getSculkProcess().isActive()||ctx.player()==null||ctx.world()==null)return null;
+        UUID selected=mobTarget!=null?mobTarget:"defend".equalsIgnoreCase(Baritone.settings().botConflictMode.value)&&System.currentTimeMillis()<=defendUntil?attackerId:null;
+        Entity target=selected==null?null:ctx.entitiesStream().filter(entity->selected.equals(entity.getUUID())).findFirst().orElse(null);
+        if(!(target instanceof LivingEntity living)||!target.isAlive())return null;
+        if(target instanceof Mob&&(!Baritone.settings().botFightHostileMobs.value||playerThreat()||ctx.player().getHealth()+ctx.player().getAbsorptionAmount()<=8))return null;
+        if(target instanceof net.minecraft.world.entity.player.Player&&!SurvivalPolicy.mayDefend(ctx.player().getHealth(),ctx.player().getFoodData().getFoodLevel(),
+                (int)threats.values().stream().filter(threat->threat.position().distSqr(ctx.playerFeet())<100).count(),false,false,true))return null;
+        return living;
+    }
 
     @Override public PathingCommand onTick(boolean calcFailed, boolean isSafeToCancel) {
         if (ctx.player() == null || ctx.world() == null || !ctx.player().isAlive()) {
@@ -241,7 +252,7 @@ public final class ConflictProcess extends BaritoneProcessHelper implements IBeh
         ctx.player().getInventory().setSelectedSlot(weapon);ctx.playerController().syncHeldItem();
         if(MeleeCombat.aim(ctx,baritone,target)&&ctx.player().getAttackStrengthScale(0)>=.95f){
             stopShieldUse();
-            if(baritone.getNetwork().team().clearStrike(target)){ctx.minecraft().gameMode.attack(ctx.player(),target);ctx.player().swing(InteractionHand.MAIN_HAND,SwingAnimation.DEFAULT,false);}
+            baritone.getCombat().melee(target);
         }else if(ctx.player().getOffhandItem().is(Items.SHIELD)){
             ownsShield=true;if(!ctx.player().isUsingItem())ctx.playerController().processRightClick(ctx.player(),ctx.world(),InteractionHand.OFF_HAND);
         }
@@ -269,8 +280,7 @@ public final class ConflictProcess extends BaritoneProcessHelper implements IBeh
             stopShieldUse();
             ctx.player().getInventory().setSelectedSlot(weapon); ctx.playerController().syncHeldItem();
             if (!baritone.getNetwork().team().clearStrike(target)) return false;
-            ctx.minecraft().gameMode.attack(ctx.player(), target);
-            ctx.player().swing(InteractionHand.MAIN_HAND, SwingAnimation.DEFAULT, false);
+            baritone.getCombat().melee((LivingEntity)target);
         } else if (ctx.player().getOffhandItem().is(Items.SHIELD)) {
             ownsShield = true;
             if (!ctx.player().isUsingItem()) ctx.playerController().processRightClick(ctx.player(), ctx.world(), InteractionHand.OFF_HAND);
