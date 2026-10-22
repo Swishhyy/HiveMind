@@ -15,6 +15,7 @@ public final class DeathInventory {
     public static Map<String,Integer> missing(Map<String,Integer> before,Map<String,Integer> after){Map<String,Integer> result=new HashMap<>();before.forEach((id,n)->{int missing=Math.max(0,n-after.getOrDefault(id,0));if(missing>0)result.put(id,missing);});return Map.copyOf(result);}
     public static Outcome classify(Map<String,Integer> before,Map<String,Integer> after){if(before.isEmpty())return Outcome.EMPTY;var missing=missing(before,after);if(missing.isEmpty())return Outcome.RETAINED;return missing.equals(before)?Outcome.LOST:Outcome.PARTIAL;}
     public static boolean ready(String mode,boolean synced,long aliveFor,long stableFor){return aliveFor>=3000&&stableFor>=1500&&(mode.equals("keep")||mode.equals("drop")||synced);}
+    public void abandon(){Properties p=new Properties();p.putAll(values);p.setProperty("outcome","UNKNOWN");save(p);}
     public void finish(Outcome outcome){if(outcome==Outcome.PENDING||outcome==Outcome.UNKNOWN)throw new IllegalArgumentException("Not a death outcome");Properties p=new Properties();p.putAll(values);p.setProperty("outcome",outcome.name());save(p);}
     private void save(Properties p){AtomicProperties.write(file,p);values=p;}
 }

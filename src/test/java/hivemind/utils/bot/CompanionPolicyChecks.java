@@ -38,6 +38,7 @@ public final class CompanionPolicyChecks {
             var state=new DeathInventory(deathRoot);state.record(100,before);state=new DeathInventory(deathRoot);check(state.time()==100&&state.before().equals(before)&&state.outcome()==DeathInventory.Outcome.PENDING,"A disconnect must retain a pending pre-death snapshot");
             state.finish(DeathInventory.Outcome.RETAINED);check(new DeathInventory(deathRoot).outcome()==DeathInventory.Outcome.RETAINED,"Observed outcome persists");
             state.record(200,before);check(state.outcome()==DeathInventory.Outcome.PENDING,"A later death must be reassessed even after keep inventory was observed");
+            state.abandon();check(new DeathInventory(deathRoot).outcome()==DeathInventory.Outcome.UNKNOWN,"An interrupted two-file save must not leave a permanent pending hold");
             check(new DeathInventory(deathRoot.resolve("other-server")).outcome()==DeathInventory.Outcome.UNKNOWN,"Server/save outcomes cannot leak");
         }finally{try(var paths=Files.walk(deathRoot)){for(var p:paths.sorted(Comparator.reverseOrder()).toList())Files.delete(p);}}
 

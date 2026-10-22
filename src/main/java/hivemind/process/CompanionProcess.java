@@ -66,7 +66,7 @@ public final class CompanionProcess extends HiveMindProcessHelper implements IBe
     public void onInventoryContents(int id){if(id==0&&ctx.player()!=null){inventorySyncPlayer=ctx.player();inventorySyncAt=System.currentTimeMillis();}}
     private void assessRespawnInventory(long now){
         if(!awaitingDeathInventory())return;
-        var saved=MiningRouteAccess.locations(ctx).death();if(saved==null||saved.time()!=deathInventory.time())return;
+        var saved=MiningRouteAccess.locations(ctx).death();if(saved==null||saved.time()!=deathInventory.time()){deathInventory.abandon();return;}
         if(!ctx.player().isAlive()){respawnAliveAt=inventoryStableAt=0;return;}
         var inventory=captureInventory();if(respawnAliveAt==0){respawnAliveAt=inventoryStableAt=now;settlingInventory=inventory;}
         if(!inventory.equals(settlingInventory)){settlingInventory=inventory;inventoryStableAt=now;}
