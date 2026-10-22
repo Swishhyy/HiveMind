@@ -4,7 +4,7 @@ The controller runs without Minecraft and owns the network relay, coordination, 
 
 ## Start
 
-Windows: download `hivemind-controller-0.1.0.2-windows-x64.zip`, extract the **whole folder**, and run `HiveMindController.exe`. Its Java runtime is included; keep the neighboring folders beside the executable. The console prints a clickable dashboard address containing its access token. Open it, go to **Settings**, and copy the **Bot connection command** into each client's chat once while joined to the intended server.
+Windows: download `hivemind-controller-0.1.0.3-windows-x64.zip`, extract the **whole folder**, and run `HiveMindController.exe`. Its Java runtime is included; keep the neighboring folders beside the executable. The console prints a clickable dashboard address containing its access token. Open it, go to **Settings**, and copy the **Bot connection command** into each client's chat once while joined to the intended server.
 
 Linux, macOS or a server with Java 17+: `java -jar hivemind-controller.jar`. The same dashboard and connection command work there. Minecraft clients still require Java 25 and Fabric 26.3.
 
@@ -54,3 +54,13 @@ Updates verify size, SHA-256, mod identity, Minecraft version and build commit. 
 `./gradlew build` builds the Fabric mod and embeds its updater helper. `python3 scripts/build-distributions.py controller` builds the independent Java 17 controller. `bash scripts/check-controller.sh` exercises two actual network clients, authenticated HTTP commands, durable policies/history, offline control, combat-log decisions, backoff and the updater installer. `bash scripts/check-mining-policies.sh` runs the autonomous behavior policy checks.
 
 GitHub Actions builds the Windows executable with a bundled runtime. A successful main-branch build publishes a new four-part version from `gradle.properties`, together with its public update manifest and checksums. Existing releases are left unchanged. Bump `mod_version` to publish the next version.
+
+### Player sharing and map orders
+
+Install the same Fabric mod on your own client, run `#client player`, then use the connection command from the controller's **Settings** page. Player mode is saved per Minecraft instance. Your position and observations feed the shared map and the bots; HiveMind overlays and automation stay off on your screen. Nearby loaded players can be detected through ESP without displaying it to you. Those contacts expire after six seconds and are search hints, not recorded visual sightings or base evidence. Nothing scans entities that the server has not sent to your client.
+
+The controller labels player clients separately and does not send them bot work, settings, trust policies or automatic session actions. `#client bot` locally restores bot capability; use `#roam on`, `#resume` or a new task to start work again.
+
+Right-click terrain on the atlas, select an online bot in that dimension and choose **Go here** or **Explore here**. Explore accepts a radius of 32–2048 blocks and surveys a finite grid by elytra or on foot. Commands are pinned to the clicked dimension, and will be rejected if the bot changes dimension before executing. Unmapped clicks are labeled approximate. Keyboard: focus the map and press Shift+F10 to command its center; Escape closes the menu.
+
+Manual equivalents: `#scout go minecraft:overworld 100 -200`, `#scout explore minecraft:overworld 100 -200 256`, and `#scout status` / `#scout stop`.

@@ -22,15 +22,15 @@ import hivemind.HiveMind;
 public final class BotWork {
     private BotWork() {}
     public static boolean active(HiveMind bot) {
-        return foreground(bot)||bot.getRoamProcess().isActive();
+        return !bot.isPlayerClient()&&(foreground(bot)||bot.getRoamProcess().isActive());
     }
     public static boolean foreground(HiveMind bot){
-        return bot.getMineProcess().isActive() || bot.getDepositProcess().isActive()
+        return !bot.isPlayerClient() && (bot.getScoutProcess().isActive() || bot.getMineProcess().isActive() || bot.getDepositProcess().isActive()
                 || bot.getStalkProcess().isActive() || bot.getFollowProcess().isActive()
                 || bot.getCustomGoalProcess().isActive() || bot.getBuilderProcess().isActive()
                 || bot.getExploreProcess().isActive() || bot.getFarmProcess().isActive()
                 || bot.getGetToBlockProcess().isActive() || bot.getSurvivalProcess().isActive()
                 || bot.getCompanionProcess().isActive() || bot.getWorkstationProcess().isActive()
-                || bot.getRepairProcess().isActive() || bot.getShulkerProcess().isActive();
+                || bot.getRepairProcess().isActive() || bot.getShulkerProcess().isActive());
     }
 }

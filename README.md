@@ -130,3 +130,13 @@ GitHub Actions builds every push. A successful build on `main` publishes a relea
 ## Credits and license
 
 HiveMind is a fork of [Baritone](https://github.com/cabaletta/baritone) by leijurv, Brady and its contributors. It is distributed under the same [LGPL-3.0](LICENSE) license.
+
+### Player sharing and map orders
+
+Install the same Fabric mod on your own client, run `#client player`, then use the connection command from the controller's **Settings** page. Player mode is saved per Minecraft instance. Your position and observations feed the shared map and the bots; HiveMind overlays and automation stay off on your screen. Nearby loaded players can be detected through ESP without displaying it to you. Those contacts expire after six seconds and are search hints, not recorded visual sightings or base evidence. Nothing scans entities that the server has not sent to your client.
+
+The controller labels player clients separately and does not send them bot work, settings, trust policies or automatic session actions. `#client bot` locally restores bot capability; use `#roam on`, `#resume` or a new task to start work again.
+
+Right-click terrain on the atlas, select an online bot in that dimension and choose **Go here** or **Explore here**. Explore accepts a radius of 32–2048 blocks and surveys a finite grid by elytra or on foot. Commands are pinned to the clicked dimension, and will be rejected if the bot changes dimension before executing. Unmapped clicks are labeled approximate. Keyboard: focus the map and press Shift+F10 to command its center; Escape closes the menu.
+
+Manual equivalents: `#scout go minecraft:overworld 100 -200`, `#scout explore minecraft:overworld 100 -200 256`, and `#scout status` / `#scout stop`.

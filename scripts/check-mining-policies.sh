@@ -22,6 +22,9 @@ fi
     src/main/java/hivemind/utils/bot/PortableBoxStore.java \
     src/main/java/hivemind/utils/social/ClutchPolicy.java \
     src/test/java/hivemind/utils/bot/CombatSupplyChecks.java \
+    src/main/java/hivemind/utils/bot/MapOrder.java \
+    src/main/java/hivemind/utils/network/ClientRole.java \
+    src/test/java/hivemind/utils/bot/MapPlayerChecks.java \
     src/main/java/hivemind/utils/bot/SurveyPolicy.java \
     src/main/java/hivemind/utils/bot/SurveyRoute.java \
     src/test/java/hivemind/utils/bot/SurveyChecks.java \
@@ -74,6 +77,7 @@ fi
     src/test/java/hivemind/utils/mining/WorldRouteChecks.java \
     src/test/java/hivemind/utils/mining/WastePolicyChecks.java \
     src/test/java/hivemind/utils/social/SocialPolicyChecks.java
+java -cp "$task_classes" hivemind.utils.bot.MapPlayerChecks
 java -cp "$task_classes" hivemind.utils.mining.MiningPolicyChecks
 java -cp "$task_classes" hivemind.utils.mining.WorldRouteChecks
 java -cp "$task_classes" hivemind.utils.mining.WastePolicyChecks

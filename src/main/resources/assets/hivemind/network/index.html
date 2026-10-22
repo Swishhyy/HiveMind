@@ -37,6 +37,7 @@ main{max-width:1700px;padding:27px 32px 20px;margin:auto}.intro{display:flex;jus
 @media(max-width:820px){.control-grid{grid-template-columns:1fr}.scopebar p{max-width:none}.setting-row{grid-template-columns:minmax(140px,1fr) 105px 65px;gap:8px;padding:12px}.setting-row button{padding:8px}.tabs button{padding:8px 12px}}
 @media(max-width:1050px){.layout{grid-template-columns:minmax(0,1fr) 285px}.map-wrap{height:490px}main{padding:20px}.toolbar input[type=search]{width:180px}}
 @media(max-width:760px){header{padding:18px}.status{max-width:45%;font-size:10px}main{padding:18px 12px}.intro h2{font-size:23px}.stats{gap:7px}.stat{padding:12px 10px}.stat strong{font-size:23px}.stat .eyebrow{font-size:8px}.layout,.below{grid-template-columns:1fr}.map-wrap{height:430px}.side{display:grid;grid-template-columns:1fr}.toolbar input[type=search]{width:100%;order:1;margin:0}.toolbar select{max-width:48%}.intro>.eyebrow{display:none}.list{max-height:230px}}
+.map-context{position:absolute;z-index:10;width:272px;padding:14px;background:#17272b;border:1px solid #6c9491;border-radius:10px;box-shadow:0 10px 30px #0008}.map-context[hidden]{display:none}.map-context label{display:block;margin:10px 0;font-size:12px}.map-context select,.map-context input{display:block;width:100%;margin-top:5px}.map-context .quick{display:flex;gap:8px}.map-context p{font-size:11px;color:var(--muted);margin:8px 0}
 </style>
 </head>
 <body>
@@ -49,7 +50,7 @@ main{max-width:1700px;padding:27px 32px 20px;margin:auto}.intro{display:flex;jus
 <div id="atlas-view" role="tabpanel" aria-labelledby="tab-atlas">
 <div class="stats">
 <div class="stat"><div class="eyebrow">Visited chunks</div><strong id="chunk-count">0</strong></div>
-<div class="stat"><div class="eyebrow">Recent bots</div><strong id="bot-count">0</strong></div>
+<div class="stat"><div class="eyebrow">Recent clients</div><strong id="bot-count">0</strong></div>
 <div class="stat"><div class="eyebrow">Players seen</div><strong id="player-count">0</strong></div>
 <div class="stat"><div class="eyebrow">Frequent areas</div><strong id="area-count">0</strong></div>
 </div>
@@ -64,10 +65,11 @@ main{max-width:1700px;padding:27px 32px 20px;margin:auto}.intro{display:flex;jus
 <div class="layout">
 <section class="panel"><div class="panel-head"><h2>Terrain map</h2><span id="terrain-label">Mapping loaded terrain…</span></div>
 <div class="map-wrap" id="map-wrap"><canvas id="map" tabindex="0" aria-label="Exploration map. Drag to pan, scroll to zoom, arrow keys to pan, plus or minus to zoom."></canvas>
+<div id="map-context" class="map-context" hidden role="dialog" aria-label="Map commands"><strong id="map-order-coords"></strong><p id="map-order-note"></p><label>Send to<select id="map-order-target"></select></label><label>Explore radius (blocks)<input id="map-order-radius" type="number" min="32" max="2048" step="1" value="256"></label><div class="quick"><button id="map-order-go" class="primary">Go here</button><button id="map-order-explore">Explore here</button></div><p id="map-order-feedback">Existing work will be paused.</p><button id="map-order-close">Close</button></div>
 <div class="map-tools"><button id="zoom-out" aria-label="Zoom out">−</button><button id="zoom-in" aria-label="Zoom in">+</button><button class="fit" id="fit">Fit coverage</button></div>
 <div class="map-empty" id="map-empty"><strong>Terrain not mapped here yet</strong><p>Move a bot through this dimension to reveal terrain. Each dimension builds its own map.</p></div>
-<div class="map-bottom"><span id="pointer">X 0 · Z 0</span><span>Drag to pan · Scroll to zoom · Click a marker</span></div></div>
-<div class="legend"><label><input id="show-range" type="checkbox" checked>Bot view range</label><label><input id="show-terrain" type="checkbox" checked>Terrain</label><label><input id="show-sites" type="checkbox" checked>Base markers</label><label><input id="show-marks" type="checkbox" checked>Waypoints &amp; logouts</label><label><input id="show-chunks" type="checkbox"><i class="swatch"></i>Visited chunks</label><label><input id="show-bots" type="checkbox" checked><i class="swatch bot"></i>Bots</label><label><input id="show-players" type="checkbox" checked><i class="swatch player"></i>Sightings</label><label><input id="show-areas" type="checkbox" checked><i class="swatch area"></i>Frequent areas</label></div>
+<div class="map-bottom"><span id="pointer">X 0 · Z 0</span><span>Drag to pan · Scroll to zoom · Right-click for commands</span></div></div>
+<div class="legend"><label><input id="show-range" type="checkbox" checked>Client view range</label><label><input id="show-terrain" type="checkbox" checked>Terrain</label><label><input id="show-sites" type="checkbox" checked>Base markers</label><label><input id="show-marks" type="checkbox" checked>Waypoints &amp; logouts</label><label><input id="show-chunks" type="checkbox"><i class="swatch"></i>Visited chunks</label><label><input id="show-bots" type="checkbox" checked><i class="swatch bot"></i>Bots &amp; player clients</label><label><input id="show-players" type="checkbox" checked><i class="swatch player"></i>Sightings</label><label><input id="show-areas" type="checkbox" checked><i class="swatch area"></i>Frequent areas</label></div>
 </section>
 <aside class="side">
 <section class="panel"><div class="panel-head"><h2>Waypoints &amp; logouts</h2><span id="mark-count">0 marks</span></div><div class="list" id="map-marks"></div></section>
@@ -78,7 +80,7 @@ main{max-width:1700px;padding:27px 32px 20px;margin:auto}.intro{display:flex;jus
 </div>
 <section class="panel" style="margin-top:16px"><div class="panel-head"><h2>Add a map waypoint</h2><span>Current map dimension</span></div><div class="panel-body"><form id="mark-form" class="form-row"><label>Bot<select id="mark-target" class="bot-target" aria-label="Waypoint bot"><option value="all">Choose one bot</option></select></label><label>Name<input id="mark-name" required maxlength="40" pattern="[A-Za-z0-9_-]{1,40}" placeholder="north-stash"></label><label>Type<select id="mark-kind"><option value="add">Waypoint</option><option value="danger">Danger</option></select></label><label>X<input id="mark-x" class="small-field" type="number" min="-30000000" max="30000000" required></label><label>Y<input id="mark-y" class="small-field" type="number" min="-2048" max="4096" value="64" required></label><label>Z<input id="mark-z" class="small-field" type="number" min="-30000000" max="30000000" required></label><button class="primary" type="submit">Save waypoint</button></form><p class="help">Choose one online bot in this dimension. Names can contain letters, numbers, underscores and hyphens. Select a marker to copy its ID or remove it through its source bot.</p></div></section>
 <div class="below">
-<section class="panel"><div class="panel-head"><h2>Bot positions</h2><span id="peer-label">0 direct peers</span></div><div class="list" id="bots"></div></section>
+<section class="panel"><div class="panel-head"><h2>Client positions</h2><span id="peer-label">0 direct peers</span></div><div class="list" id="bots"></div></section>
 <section class="panel"><div class="panel-head"><h2>Frequent sighting areas</h2><span>64 × 64 block areas</span></div><div class="list" id="areas"></div></section>
 </div>
 </div>
@@ -127,6 +129,11 @@ const colors=new Uint32Array(256),heights=new Int16Array(256);
 for(let i=0;i<256;i++){colors[i]=parseInt(p.rgb.slice(i*6,i*6+6),16);heights[i]=parseInt(p.h.slice(i*4,i*4+4),16);}
 return {...p,colors,heights,levels:new Map()};
 }
+function pick(cells,project,x,y){
+for(let i=cells.length-1;i>=0;i--){const c=cells[i],q=[project(c.wx,c.wz,c.h),project(c.wx+c.step,c.wz,c.h),project(c.wx+c.step,c.wz+c.step,c.h),project(c.wx,c.wz+c.step,c.h)];let sign=0,inside=true;
+for(let j=0;j<4;j++){const a=q[j],b=q[(j+1)%4],cross=(b.x-a.x)*(y-a.y)-(b.y-a.y)*(x-a.x);if(Math.abs(cross)<1e-7)continue;const next=Math.sign(cross);if(sign&&next!==sign){inside=false;break;}sign=next;}if(inside)return c;}
+return null;
+}
 function stride(scale){return scale>=4?1:scale>=2?2:scale>=1?4:scale>=.5?8:16;}
 function level(tile,step){
 if(tile.levels.has(step))return tile.levels.get(step);
@@ -152,7 +159,7 @@ result.push({...cell,wx,wz,step,east:height(cache,tile.d,wx+step,wz,step,cell.h,
 }}
 return result.sort((a,b)=>(a.wx+a.wz)-(b.wx+b.wz)||a.h-b.h);
 }
-return {key,prepare,stride,level,cells};
+return {key,prepare,stride,level,cells,pick};
 })();
 </script>
 <script>
@@ -175,13 +182,13 @@ function element(tag,text,cls){const e=document.createElement(tag);if(text!==und
 function entry(p,kind){const button=element('button',undefined,'entry'),row=element('span',undefined,'row');button.type='button';
 row.append(element('span',p.name,'name'),element('span',ago(p.t),'age'));button.append(row);
 button.append(element('span','X '+p.x+' · Y '+p.y+' · Z '+p.z,'coords'));
-button.append(element('span',kind==='mark'?p.kind.toUpperCase()+' · '+p.detail+' · '+p.source:kind==='site'?(p.confirmed?'Confirmed · ':'Suspected · ')+p.evidence+' · '+p.source:kind==='area'?p.visits+' visit'+(p.visits===1?'':'s')+' · '+p.samples+' reports · '+p.sources.join(', '):kind==='bot'?'Actual bot position · '+friendly(p.d):'Seen by '+p.source,'source'));
+button.append(element('span',kind==='mark'?p.kind.toUpperCase()+' · '+p.detail+' · '+p.source:kind==='site'?(p.confirmed?'Confirmed · ':'Suspected · ')+p.evidence+' · '+p.source:kind==='area'?p.visits+' visit'+(p.visits===1?'':'s')+' · '+p.samples+' reports · '+p.sources.join(', '):kind==='bot'?(control.bots.some(b=>b.id===p.id&&b.session?.role==='player')?'Player client position · ':'Bot position · ')+friendly(p.d):'Seen by '+p.source,'source'));
 button.onclick=()=>{selected={...p,markerKind:p.kind,kind};center={x:p.x,z:p.z};scale=Math.max(.8,scale);details();draw();};return button;}
 function list(id,items,kind,empty){const root=$(id);root.replaceChildren();if(!items.length)root.append(element('p',empty,'empty'));else for(const p of items)root.append(entry(p,kind));}
 function details(){const root=$('details');root.replaceChildren();if(!selected){root.textContent='Choose a marker or a report to inspect its coordinates and source.';return;}
 const p=selected;root.append(element('strong',p.name),element('div','X '+p.x+' · Y '+p.y+' · Z '+p.z,'coords'));
 root.append(element('div',friendly(p.d)+' · '+ago(p.t),'source'));
-root.append(element('div',p.kind==='mark'?p.markerKind.toUpperCase()+' · '+p.detail+' · Source '+p.source+' · last observed '+ago(p.seen):kind==='site'?(p.confirmed?'Manually confirmed. ':'Unverified built site; this may be a generated structure. ')+p.evidence+' · Found by '+p.source:p.kind==='area'?'Area center; '+p.visits+' visits, '+Math.floor(p.dwell/60)+'m observed. Sources: '+p.sources.join(', '):p.kind==='bot'?'Position reported by this bot.':'Visual report from '+p.source+'. A report is not proof the player is still here.','source'));
+root.append(element('div',p.kind==='mark'?p.markerKind.toUpperCase()+' · '+p.detail+' · Source '+p.source+' · last observed '+ago(p.seen):p.kind==='site'?(p.confirmed?'Manually confirmed. ':'Unverified built site; this may be a generated structure. ')+p.evidence+' · Found by '+p.source:p.kind==='area'?'Area center; '+p.visits+' visits, '+Math.floor(p.dwell/60)+'m observed. Sources: '+p.sources.join(', '):p.kind==='bot'?(control.bots.some(b=>b.id===p.id&&b.session?.role==='player')?'Manual player sharing position.':'Position reported by this bot.'):'Visual report from '+p.source+'. A report is not proof the player is still here.','source'));
 if(p.kind==='mark'){const actions=element('div',undefined,'quick'),copy=element('button','Copy marker ID'),remove=element('button','Remove marker','danger');copy.type=remove.type='button';copy.onclick=async()=>{try{await navigator.clipboard.writeText(p.id);setFeedback('Marker ID copied.');}catch(error){setFeedback('Marker ID: '+p.id);}};remove.disabled=!control.bots.some(bot=>bot.id===p.reporter&&Date.now()-bot.t<20000);remove.onclick=()=>sendAction('command','','#mark remove '+p.id,remove,p.reporter);actions.append(copy,remove);root.append(actions);}}
 
 function update(){const view=filtered();if(selected?.kind==='mark'&&!view.marks.some(p=>p.id===selected.id&&p.reporter===selected.reporter))selected=null;$('chunk-count').textContent=fmt(view.chunks.length);$('bot-count').textContent=fmt(view.bots.length);$('player-count').textContent=fmt(new Set(view.players.map(p=>p.id)).size);$('area-count').textContent=fmt(view.areas.length);
@@ -196,7 +203,7 @@ function resize(){const rect=canvas.getBoundingClientRect();width=rect.width;hei
 const isIso=()=>$('projection').value==='iso';
 function screen(x,z,y=64){const dx=x-center.x,dz=z-center.z;return isIso()?{x:width/2+(dx-dz)*scale,y:height/2+((dx+dz)*.5-(y-64)*.45)*scale}:{x:width/2+dx*scale,y:height/2+dz*scale};}
 function world(x,y){const dx=(x-width/2)/scale,dz=(y-height/2)/scale;return isIso()?{x:center.x+dx*.5+dz,z:center.z-dx*.5+dz}:{x:center.x+dx,z:center.z+dz};}
-function fit(){const view=filtered(),points=[...view.chunks.map(p=>({x:p.x*16+8,z:p.z*16+8,y:64})),...view.tiles.map(p=>({x:p.x*16+8,z:p.z*16+8,y:p.y??64})),...view.bots,...view.players,...view.sites,...view.marks];if(!points.length){center={x:0,z:0};scale=1;return draw();}
+function fit(){closeMapMenu();const view=filtered(),points=[...view.chunks.map(p=>({x:p.x*16+8,z:p.z*16+8,y:64})),...view.tiles.map(p=>({x:p.x*16+8,z:p.z*16+8,y:p.y??64})),...view.bots,...view.players,...view.sites,...view.marks];if(!points.length){center={x:0,z:0};scale=1;return draw();}
 const projected=points.map(p=>isIso()?{x:p.x-p.z,y:(p.x+p.z)*.5-((p.y??64)-64)*.45}:{x:p.x,y:p.z}),xs=projected.map(p=>p.x),zs=projected.map(p=>p.y),minX=Math.min(...xs),maxX=Math.max(...xs),minZ=Math.min(...zs),maxZ=Math.max(...zs),cx=(minX+maxX)/2,cz=(minZ+maxZ)/2;center=isIso()?{x:cx*.5+cz,z:-cx*.5+cz}:{x:cx,z:cz};scale=Math.max(.00001,Math.min(3,(width-100)/Math.max(96,maxX-minX+32),(height-100)/Math.max(96,maxZ-minZ+80)));draw();}
 const tileKey=TerrainMesh.key;
 function shade(rgb,f){const r=Math.max(0,Math.min(255,Math.round(((rgb>>16)&255)*f))),g=Math.max(0,Math.min(255,Math.round(((rgb>>8)&255)*f))),b=Math.max(0,Math.min(255,Math.round((rgb&255)*f)));return 'rgb('+r+','+g+','+b+')';}
@@ -228,19 +235,19 @@ if($('show-marks').checked)for(const p of view.marks){const a=screen(p.x,p.z,p.y
 if($('show-sites').checked)for(const p of view.sites){const a=screen(p.x,p.z,p.y);ctx.fillStyle=p.confirmed?'#8de9bb':'#f4d885';ctx.fillRect(a.x-4,a.y-2,8,6);ctx.beginPath();ctx.moveTo(a.x-6,a.y-2);ctx.lineTo(a.x,a.y-8);ctx.lineTo(a.x+6,a.y-2);ctx.fill();label(p.name,a,p.confirmed?'#8de9bb':'#f4d885');markers.push({...p,kind:'site',sx:a.x,sy:a.y});}
 if($('show-areas').checked)for(const p of view.areas){const a=screen(p.x,p.z),r=Math.max(10,32*scale);ctx.strokeStyle='#dca3d7';ctx.fillStyle='#dca3d711';ctx.setLineDash([4,4]);ctx.beginPath();ctx.arc(a.x,a.y,r,0,Math.PI*2);ctx.fill();ctx.stroke();ctx.setLineDash([]);markers.push({...p,kind:'area',sx:a.x,sy:a.y});}
 if($('show-players').checked)for(const p of view.players){const a=screen(p.x,p.z,p.y??64);if(a.x<0||a.y<0||a.x>width||a.y>height)continue;ctx.globalAlpha=Date.now()-p.t<=120000?1:.5;ctx.fillStyle='#f4b66c';ctx.beginPath();ctx.moveTo(a.x,a.y-5);ctx.lineTo(a.x+5,a.y);ctx.lineTo(a.x,a.y+5);ctx.lineTo(a.x-5,a.y);ctx.closePath();ctx.fill();label(p.name,a,'#f4b66c');markers.push({...p,kind:'player',sx:a.x,sy:a.y});}ctx.globalAlpha=1;
-if($('show-bots').checked)for(const p of view.bots){const a=screen(p.x,p.z,p.y??64);ctx.fillStyle='#87caff';ctx.strokeStyle='#101619';ctx.lineWidth=2;ctx.beginPath();ctx.arc(a.x,a.y,5,0,Math.PI*2);ctx.fill();ctx.stroke();label(p.name,a,'#a5d8ff');markers.push({...p,kind:'bot',sx:a.x,sy:a.y});}
+if($('show-bots').checked)for(const p of view.bots){const a=screen(p.x,p.z,p.y??64),manual=control.bots.some(bot=>bot.id===p.id&&bot.session?.role==='player');ctx.fillStyle=manual?'#8de9bb':'#87caff';ctx.strokeStyle='#101619';ctx.lineWidth=2;ctx.beginPath();ctx.arc(a.x,a.y,5,0,Math.PI*2);ctx.fill();ctx.stroke();label(p.name+(manual?' · player':''),a,manual?'#8de9bb':'#a5d8ff');markers.push({...p,kind:'bot',sx:a.x,sy:a.y});}
 if(selected&&selected.d===dimension()){const a=screen(selected.x,selected.z,selected.y??64);ctx.strokeStyle='#e4eeeb';ctx.lineWidth=1;ctx.beginPath();ctx.arc(a.x,a.y,12,0,Math.PI*2);ctx.stroke();}}
 function label(text,p,color){ctx.font='11px ui-monospace, monospace';const w=ctx.measureText(text).width;ctx.fillStyle='#111c1ee8';ctx.fillRect(p.x+9,p.y-10,w+8,17);ctx.fillStyle=color;ctx.fillText(text,p.x+13,p.y+2);}
-function zoom(factor,x=width/2,y=height/2){const anchor=world(x,y);scale=Math.min(20,Math.max(.00001,scale*factor));const after=world(x,y);center={x:center.x+anchor.x-after.x,z:center.z+anchor.z-after.z};draw();}
+function zoom(factor,x=width/2,y=height/2){closeMapMenu();const anchor=world(x,y);scale=Math.min(20,Math.max(.00001,scale*factor));const after=world(x,y);center={x:center.x+anchor.x-after.x,z:center.z+anchor.z-after.z};draw();}
 canvas.addEventListener('wheel',e=>{e.preventDefault();const r=canvas.getBoundingClientRect();zoom(e.deltaY<0?1.18:1/1.18,e.clientX-r.left,e.clientY-r.top);},{passive:false});
-canvas.addEventListener('pointerdown',e=>{canvas.setPointerCapture(e.pointerId);drag={x:e.clientX,y:e.clientY,center:{...center},moved:false};canvas.style.cursor='grabbing';});
+canvas.addEventListener('pointerdown',e=>{if(e.button!==0)return;closeMapMenu();canvas.setPointerCapture(e.pointerId);drag={x:e.clientX,y:e.clientY,center:{...center},moved:false};canvas.style.cursor='grabbing';});
 canvas.addEventListener('pointermove',e=>{const r=canvas.getBoundingClientRect(),p=world(e.clientX-r.left,e.clientY-r.top);$('pointer').textContent='X '+Math.floor(p.x)+' · Z '+Math.floor(p.z);if(drag){const dx=e.clientX-drag.x,dy=e.clientY-drag.y;if(Math.abs(dx)+Math.abs(dy)>4)drag.moved=true;center=isIso()?{x:drag.center.x-(dx*.5+dy)/scale,z:drag.center.z-(-dx*.5+dy)/scale}:{x:drag.center.x-dx/scale,z:drag.center.z-dy/scale};draw();}});
 canvas.addEventListener('pointerup',e=>{if(drag&&!drag.moved){const r=canvas.getBoundingClientRect(),x=e.clientX-r.left,y=e.clientY-r.top;const closest=markers.map(m=>({...m,dist:Math.hypot(m.sx-x,m.sy-y)})).sort((a,b)=>a.dist-b.dist)[0];if(closest&&closest.dist<18){selected=closest;details();}}drag=null;canvas.style.cursor='grab';draw();});
 canvas.addEventListener('pointercancel',()=>{drag=null;canvas.style.cursor='grab';});
 canvas.addEventListener('keydown',e=>{if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','+','=','-'].includes(e.key))e.preventDefault();if(e.key==='ArrowLeft')center.x-=50/scale;if(e.key==='ArrowRight')center.x+=50/scale;if(e.key==='ArrowUp')center.z-=50/scale;if(e.key==='ArrowDown')center.z+=50/scale;if(e.key==='+'||e.key==='=')zoom(1.3);if(e.key==='-')zoom(1/1.3);draw();});
 $('zoom-in').onclick=()=>zoom(1.4);$('zoom-out').onclick=()=>zoom(1/1.4);$('fit').onclick=fit;
-$('projection').onchange=fit;
-$('dimension').onchange=()=>{selected=null;update();fit();};$('age').onchange=update;$('search').oninput=update;$('view-range').onchange=draw;for(const id of ['show-range','show-terrain','show-sites','show-marks','show-chunks','show-bots','show-players','show-areas'])$(id).onchange=draw;
+$('projection').onchange=()=>{closeMapMenu();fit();};
+$('dimension').onchange=()=>{closeMapMenu();selected=null;update();fit();};$('age').onchange=update;$('search').oninput=update;$('view-range').onchange=draw;for(const id of ['show-range','show-terrain','show-sites','show-marks','show-chunks','show-bots','show-players','show-areas'])$(id).onchange=draw;
 $('pause').onclick=()=>{paused=!paused;$('pause').textContent=paused?'Resume updates':'Pause updates';$('pause').setAttribute('aria-pressed',String(paused));if(!paused)poll();};
 let polling=false;
 async function poll(){if(paused||polling)return;polling=true;try{const responses=await Promise.all(['/api/snapshot','/api/control','/api/terrain'].map(path=>fetch(path,{headers:{Authorization:'Bearer '+token},cache:'no-store',signal:AbortSignal.timeout(5000)})));for(const response of responses)if(!response.ok)throw new Error(response.status===401?'Open the full address printed by #network web, including the access token.':'The local client returned '+response.status+'.');const [next,nextControl,nextTerrain]=await Promise.all(responses.map(response=>response.json()));for(const key of ['chunks','bots','sightings','hotspots','peers'])if(!Array.isArray(next[key]))throw new Error('Waiting for a complete atlas snapshot.');
@@ -254,14 +261,15 @@ function switchView(view){activeView=view;for(const name of ['atlas','commands',
 const titles={sessions:['Keep every bot connected.','Log out, wait and rejoin without touching the game window.','Client sessions'],updates:['Keep your fleet up to date.','Install releases now or let each client download new versions automatically.','HiveMind releases'],atlas:['What your bots have seen.','Shared exploration, firsthand player reports, and places worth checking again.','Observation map · X / Z'],commands:['Give your bots their next move.','Send a quick command to one bot or the whole group.','Client controls'],trust:['Choose who your bots listen to.','Manage trusted whisper controllers across your bots.','UUID-based trust'],settings:['Tune one bot. Or all of them.','Shared defaults for the group, with individual choices when you need them.','Bot settings']};
 [$('page-title').textContent,$('page-subtitle').textContent,$('page-context').textContent]=titles[view];if(view==='atlas')requestAnimationFrame(resize);if(view==='settings')renderSettings();if(view==='trust')renderTrust();}
 for(const button of document.querySelectorAll('[data-view]'))button.onclick=()=>switchView(button.dataset.view);
-function selectedBots(){return activeTarget==='all'?control.bots:control.bots.filter(bot=>bot.id===activeTarget);}
+function playerClient(bot){return bot.session?.role==='player';}
+function selectedBots(){return control.bots.filter(bot=>!playerClient(bot)&&(activeTarget==='all'||bot.id===activeTarget));}
 function scopeName(){return activeTarget==='all'?'all bots':control.bots.find(bot=>bot.id===activeTarget)?.name||'selected bot';}
 function setTarget(value){activeTarget=value;for(const select of document.querySelectorAll('.bot-target'))select.value=value;renderTrust();renderSettings();renderRuntime();}
 for(const select of document.querySelectorAll('.bot-target'))select.onchange=()=>setTarget(select.value);
-async function sendAction(action,key,value,button,targetOverride=null){if(!control.ready){setFeedback('Waiting for the client to load its controls.',true);return;}if(!control.connected){setFeedback('The network host is disconnected. The action was not sent.',true);return;}
+async function sendAction(action,key,value,button,targetOverride=null){if(!control.ready){setFeedback('Waiting for the client to load its controls.',true);return false;}if(!control.connected){setFeedback('The network host is disconnected. The action was not sent.',true);return false;}
 const target=targetOverride||activeTarget;if(button)button.disabled=true;
-try{const response=await fetch('/api/control',{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({target,action,key,value}),signal:AbortSignal.timeout(10000)});if(!response.ok)throw new Error((await response.text())||'Action could not be queued.');const result=await response.json();lastSubmitted=result.id;setFeedback('Queued for '+(target==='all'?'all bots':control.bots.find(bot=>bot.id===target)?.name||'the selected bot')+'. Waiting for bot confirmation.');poll();}
-catch(error){setFeedback(error.message||'Could not send the action.',true);}finally{if(button)button.disabled=false;}}
+try{const response=await fetch('/api/control',{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({target,action,key,value}),signal:AbortSignal.timeout(10000)});if(!response.ok)throw new Error((await response.text())||'Action could not be queued.');const result=await response.json();lastSubmitted=result.id;setFeedback('Queued for '+(target==='all'?'all bots':control.bots.find(bot=>bot.id===target)?.name||'the selected bot')+'. Waiting for bot confirmation.');poll();return true;}
+catch(error){setFeedback(error.message||'Could not send the action.',true);return false;}finally{if(button)button.disabled=false;}}
 for(const button of document.querySelectorAll('[data-command]'))button.onclick=()=>sendAction('command','',button.dataset.command,button);
 $('mark-form').onsubmit=event=>{event.preventDefault();const bot=control.bots.find(bot=>bot.id===activeTarget);if(!bot||Date.now()-bot.t>=20000){setFeedback('Choose one online source bot for this waypoint.',true);return;}if(bot.dimension!==dimension()){setFeedback('Choose a bot in '+friendly(dimension())+' to save this waypoint.',true);return;}sendAction('command','','#mark '+$('mark-kind').value+' '+$('mark-name').value.trim()+' '+$('mark-x').value+' '+$('mark-y').value+' '+$('mark-z').value,$('mark-form').querySelector('button'));};
 $('command-form').onsubmit=event=>{event.preventDefault();sendAction('command','',$('command-input').value.trim(),$('command-form').querySelector('button'));};
@@ -269,9 +277,9 @@ $('task-type').onchange=()=>{const mode=$('task-type').value;$('quantity-label')
 $('task-form').onsubmit=event=>{event.preventDefault();const mode=$('task-type').value,input=$('task-input').value.trim();if(!input)return;const command='#'+mode+' '+(mode==='mine'?$('task-quantity').value+' ':'')+input+(mode==='kill'?' '+$('task-style').value:'');sendAction('command','',command,$('task-form').querySelector('button'));};
 $('trust-form').onsubmit=event=>{event.preventDefault();sendAction('trust',$('trust-input').value.trim(),event.submitter?.dataset.trust==='false'?'false':'true',event.submitter);};
 $('copy-network-key').onclick=async()=>{try{await navigator.clipboard.writeText(control.networkKey);setFeedback('Network key copied.');}catch(error){$('connection-key').type='text';$('connection-key').select();setFeedback('Select and copy the network key from this field.');}};
-function renderControls(){const ids=new Set(control.bots.map(bot=>bot.id));if(activeTarget!=='all'&&!ids.has(activeTarget)){for(const select of document.querySelectorAll('.bot-target'))if(![...select.options].some(o=>o.value===activeTarget)){const option=element('option','Selected bot · offline');option.value=activeTarget;select.append(option);}}
-for(const select of document.querySelectorAll('.bot-target')){if(document.activeElement===select)continue;const options=[element('option','All bots')];options[0].value='all';for(const bot of control.bots){const option=element('option',bot.name+(bot.online===false?' · client offline':bot.session?.connected==='false'?' · server offline':bot.id===control.local?' · this client':''));option.value=bot.id;options.push(option);}if(activeTarget!=='all'&&!ids.has(activeTarget)){const option=element('option','Selected bot · offline');option.value=activeTarget;options.push(option);}select.replaceChildren(...options);select.value=activeTarget;}
-const root=$('fleet');root.replaceChildren();for(const bot of control.bots){const card=element('article',undefined,'bot-card'),row=element('div',undefined,'row'),choose=element('button','Select');choose.type='button';choose.onclick=()=>setTarget(bot.id);row.append(element('strong',bot.name),choose);card.append(row,element('p',(bot.online===false?'Client offline · last report: ':'')+bot.status),element('span',friendly(bot.dimension)+' · '+bot.x+' '+bot.y+' '+bot.z,'coords'),element('div','Health '+bot.health.toFixed(1)+' · Food '+bot.food+'/20','vitals'));root.append(card);}
+function renderControls(){if(control.bots.some(bot=>bot.id===activeTarget&&playerClient(bot)))activeTarget='all';const ids=new Set(control.bots.filter(bot=>!playerClient(bot)).map(bot=>bot.id));if(activeTarget!=='all'&&!ids.has(activeTarget)){for(const select of document.querySelectorAll('.bot-target'))if(![...select.options].some(o=>o.value===activeTarget)){const option=element('option','Selected bot · offline');option.value=activeTarget;select.append(option);}}
+for(const select of document.querySelectorAll('.bot-target')){if(document.activeElement===select)continue;const options=[element('option','All bots')];options[0].value='all';for(const bot of control.bots.filter(bot=>!playerClient(bot))){const option=element('option',bot.name+(bot.online===false?' · client offline':bot.session?.connected==='false'?' · server offline':bot.id===control.local?' · this client':''));option.value=bot.id;options.push(option);}if(activeTarget!=='all'&&!ids.has(activeTarget)){const option=element('option','Selected bot · offline');option.value=activeTarget;options.push(option);}select.replaceChildren(...options);select.value=activeTarget;}
+const root=$('fleet');root.replaceChildren();for(const bot of control.bots){const card=element('article',undefined,'bot-card'),row=element('div',undefined,'row'),choose=element('button','Select');choose.type='button';if(playerClient(bot)){choose.textContent='Player · sharing';choose.disabled=true;}choose.onclick=()=>setTarget(bot.id);row.append(element('strong',bot.name),choose);card.append(row,element('p',(bot.online===false?'Client offline · last report: ':'')+bot.status),element('span',friendly(bot.dimension)+' · '+bot.x+' '+bot.y+' '+bot.z,'coords'),element('div','Health '+bot.health.toFixed(1)+' · Food '+bot.food+'/20','vitals'));root.append(card);}
 const names=new Set();for(const bot of control.bots)for(const name of Object.values(bot.players||{}))names.add(name);$('online-players').replaceChildren(...[...names].sort().map(name=>{const option=element('option');option.value=name;return option;}));
 const previous=$('settings-group').value,groups=[...new Set(control.schema.map(spec=>spec.group))];if($('settings-group').options.length!==groups.length+1){const options=[element('option','All groups')];options[0].value='all';for(const group of groups){const option=element('option',group);option.value=group;options.push(option);}$('settings-group').replaceChildren(...options);$('settings-group').value=previous||'all';}
 $('controller-join').hidden=!control.controller?.joinCommand;if(control.controller?.joinCommand)$('controller-command').value=control.controller.joinCommand;
@@ -305,6 +313,39 @@ for(const action of control.actions.slice(0,16)){const item=element('article',un
 for(const result of action.results)item.append(element('p',result.name+': '+result.message,result.ok?'result-ok':'result-error'));
 if(!done&&!failed)item.append(element('p',action.results.length+' / '+action.expected.length+' expected bots responded. '+(old?'Check the host and bot connections.':'')));
 root.append(item);if(action.id===lastSubmitted){if(failed)setFeedback('A bot reported an error. Check Action responses for details.',true);else if(done)setFeedback(action.results.length===1?action.results[0].message:'Confirmed by '+action.results.length+' bots.');}}}
+</script>
+<script>
+let mapOrderPoint=null;
+function closeMapMenu(){document.getElementById('map-context').hidden=true;}
+function mapPick(x,y){
+const marker=markers.filter(m=>Math.hypot(m.sx-x,m.sy-y)<12).sort((a,b)=>Math.hypot(a.sx-x,a.sy-y)-Math.hypot(b.sx-x,b.sy-y))[0];
+if(marker)return {x:Math.floor(marker.x),z:Math.floor(marker.z),mapped:true};
+const cell=TerrainMesh.pick(TerrainMesh.cells(visibleTiles(filtered()),tileCache,scale),screen,x,y),p=world(x,y);
+if(cell&&isIso()){p.x+=(cell.h-64)*.45;p.z+=(cell.h-64)*.45;}
+return {x:Math.floor(cell?Math.max(cell.wx,Math.min(cell.wx+cell.step-0.001,p.x)):p.x),z:Math.floor(cell?Math.max(cell.wz,Math.min(cell.wz+cell.step-0.001,p.z)):p.z),mapped:!!cell};
+}
+function mapEligible(point){return control.bots.filter(bot=>!playerClient(bot)&&bot.online!==false&&bot.session?.connected!=='false'&&Date.now()-bot.t<20000&&bot.dimension===point.dimension);}
+function openMapMenu(x,y){
+const point={...mapPick(x,y),dimension:dimension()};mapOrderPoint=point;const eligible=mapEligible(point).sort((a,b)=>Math.hypot(a.x-point.x,a.z-point.z)-Math.hypot(b.x-point.x,b.z-point.z));
+$('map-order-coords').textContent='X '+point.x+' · Z '+point.z;
+$('map-order-note').textContent=friendly(point.dimension)+(point.mapped?'':' · Unmapped terrain: approximate coordinates');
+const options=eligible.map(bot=>{const option=element('option',bot.name);option.value=bot.id;return option;});
+if(!options.length){const option=element('option','No online bots in this dimension');option.value='';options.push(option);}
+$('map-order-target').replaceChildren(...options);if(eligible.some(bot=>bot.id===activeTarget))$('map-order-target').value=activeTarget;
+$('map-order-go').disabled=$('map-order-explore').disabled=!eligible.length;
+$('map-order-feedback').textContent=eligible.length?'Existing work will be paused.':'Connect a bot in this dimension to give an order.';
+const menu=$('map-context');menu.hidden=false;menu.style.left=Math.max(8,Math.min(x,width-menu.offsetWidth-8))+'px';menu.style.top=Math.max(8,Math.min(y,height-menu.offsetHeight-8))+'px';$('map-order-target').focus();
+}
+async function mapSend(kind){const point=mapOrderPoint,target=$('map-order-target').value;if(!point||!mapEligible(point).some(bot=>bot.id===target)){$('map-order-feedback').textContent='That bot is offline or changed dimension. Reopen the menu.';return;}
+const radius=Number($('map-order-radius').value);if(kind==='explore'&&(!Number.isInteger(radius)||radius<32||radius>2048)){$('map-order-feedback').textContent='Choose a whole radius from 32 to 2048 blocks.';return;}
+const command='#scout '+kind+' '+point.dimension+' '+point.x+' '+point.z+(kind==='explore'?' '+radius:'');
+if(await sendAction('command','',command,$(kind==='go'?'map-order-go':'map-order-explore'),target))closeMapMenu();else $('map-order-feedback').textContent='Could not queue the order. Check the controller connection.';
+}
+canvas.addEventListener('contextmenu',event=>{event.preventDefault();const rect=canvas.getBoundingClientRect();openMapMenu(event.clientX-rect.left,event.clientY-rect.top);});
+canvas.addEventListener('keydown',event=>{if(event.key==='ContextMenu'||event.shiftKey&&event.key==='F10'){event.preventDefault();openMapMenu(width/2,height/2);}else if(event.key.startsWith('Arrow'))closeMapMenu();});
+document.addEventListener('pointerdown',event=>{if(!$('map-context').contains(event.target))closeMapMenu();});
+document.addEventListener('keydown',event=>{if(event.key==='Escape'){closeMapMenu();canvas.focus();}});
+$('map-order-go').onclick=()=>mapSend('go');$('map-order-explore').onclick=()=>mapSend('explore');$('map-order-close').onclick=closeMapMenu;
 </script>
 </body>
 </html>

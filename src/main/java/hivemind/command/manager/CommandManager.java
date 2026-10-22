@@ -16,6 +16,8 @@
  */
 
 package hivemind.command.manager;
+import hivemind.utils.network.ClientRole;
+import hivemind.api.command.exception.CommandInvalidStateException;
 
 import hivemind.HiveMind;
 import hivemind.api.IHiveMind;
@@ -142,6 +144,7 @@ public class CommandManager implements ICommandManager {
 
         private void execute() {
             try {
+                if(hivemind.isPlayerClient()&&!ClientRole.localAllowed(label.toLowerCase(Locale.ROOT)))throw new CommandInvalidStateException("Player mode: use #client bot to enable automation");
                 String first=args.hasAny()?args.peekString().toLowerCase(Locale.ROOT):"";
                 hivemind.getAutonomy().beforeCommand(label,first);
                 this.command.execute(this.label, this.args);

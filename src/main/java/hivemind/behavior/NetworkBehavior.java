@@ -41,6 +41,7 @@ import java.util.concurrent.*;
 
 /** The only network adapter that reads the Minecraft world. It snapshots observations on the client thread. */
 public final class NetworkBehavior extends Behavior {
+    private final Map<UUID,ControlPackets.Contact> contacts=new LinkedHashMap<>();
     private final SharedSightings marks = new SharedSightings();
     private final ClientNetworkKey clientKey;
     private final NetworkTeamwork team;
@@ -162,11 +163,14 @@ public final class NetworkBehavior extends Behavior {
     public List<Sighting> sightings(String name) {
         return marks.all(System.currentTimeMillis(), ttl()).stream().filter(s -> name == null || s.playerName().equalsIgnoreCase(name)).limit(32).toList();
     }
-    public Sighting hint(UUID player, String dimension) { return marks.latest(player, dimension, System.currentTimeMillis(), ttl()); }
-    public UUID resolve(String name) { return marks.resolve(name, System.currentTimeMillis(), ttl()); }
+    public Sighting hint(UUID player, String dimension) {
+        long now=System.currentTimeMillis();Sighting seen=marks.latest(player,dimension,now,ttl());var contact=contacts.get(player);
+        return contact!=null&&contact.valid(now)&&contact.point().dimension().equals(dimension)&&(seen==null||contact.observedAt()>seen.observedAt())?contact.hint():seen;
+    }
+    public UUID resolve(String name) {long now=System.currentTimeMillis();UUID seen=marks.resolve(name,now,ttl());return seen!=null?seen:contacts.values().stream().filter(p->p.valid(now)&&p.playerName().equalsIgnoreCase(name)).map(ControlPackets.Contact::player).findFirst().orElse(null);}
     private long ttl() { return StealthPolicy.bounded(HiveMind.settings().networkSightingTTLMS.value, 10000L, NetworkProtocol.MAX_AGE_MS); }
     public void clearHistory() {
-        marks.clear(); published.clear(); lastExploration = null;
+        marks.clear(); contacts.clear(); published.clear(); lastExploration = null;
         if(terrain!=null)terrain.clear();
         if (atlas != null) { atlas.clear(); save(atlas); }
         stopNetwork(); started = null; // Rebuild the relay's replay cache from the cleared atlas.
@@ -198,7 +202,7 @@ public final class NetworkBehavior extends Behavior {
         if (!history.dirty() || !saving.add(history)) return;
         saves.execute(() -> { try { do { history.save(); } while (history.dirty()); } catch (RuntimeException e) { storageError = e.getMessage(); } finally { saving.remove(history); } });
     }
-    private void stopNetwork() { team.reset(false);if (network != null) network.close(); network = null; marks.clear(); published.clear(); lastExploration = null;if(controls!=null)controls.connectionChanged(); }
+    private void stopNetwork() { team.reset(false);if (network != null) network.close(); network = null; marks.clear(); contacts.clear(); published.clear(); lastExploration = null;if(controls!=null)controls.connectionChanged(); }
     private void closeRuntime() { stopNetwork(); started = null; if (viewer != null) viewer.close(); viewer = null; }
     private void clearWorld() {
         if (atlas != null) save(atlas);saveTerrain();
@@ -216,6 +220,10 @@ public final class NetworkBehavior extends Behavior {
             ensure();
             if(rememberedIdentity!=null&&!java.nio.file.Files.exists(resumeFile))saveLink();
             if (network != null) for (Message message : network.drain(128)) {
+                if(message instanceof ControlPackets.Contact contact){
+                    contacts.values().removeIf(p->!p.valid(now));var old=contacts.get(contact.player());
+                    if(contact.valid(now)&&(old==null||old.observedAt()<contact.observedAt())){contacts.remove(contact.player());contacts.put(contact.player(),contact);while(contacts.size()>512)contacts.remove(contacts.keySet().iterator().next());}continue;
+                }
                 if(message instanceof ControlPackets.Packet packet){team.accept(packet,now);controls.accept(packet,now);continue;}
                 atlas.accept(message, now);
                 terrain.accept(message,now);
@@ -241,6 +249,10 @@ public final class NetworkBehavior extends Behavior {
             if (network != null && HiveMind.settings().networkShareExploration.value) network.publish(lastExploration);
         }
         published.values().removeIf(s -> now - s.observedAt() > NetworkProtocol.MAX_AGE_MS);
+        if(hivemind.isPlayerClient()&&network!=null&&HiveMind.settings().networkShareSightings.value){
+            for(Player player:hivemind.getAwareness().players().stream().filter(p->!isTeammate(p.getUUID())).limit(32).toList())
+                network.publish(new ControlPackets.Contact(who.id(),who.name(),player.getUUID(),player.getGameProfile().name(),MiningRouteAccess.endpoint(ctx,player.blockPosition()),now));
+        }
         List<Player> players = new ArrayList<>(ctx.world().players());
         int sent = 0;
         for (int checked = 0; checked < players.size() && sent < 32; checked++) {

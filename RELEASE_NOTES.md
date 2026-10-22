@@ -1,16 +1,10 @@
-**HiveMind 0.1.0.2** — persistent world maps, stronger ESP, outward exploration and crystal fixes for **Minecraft 26.3 / Fabric**.
+**HiveMind 0.1.0.3** — map orders and a quiet player sharing mode for **Minecraft 26.3 / Fabric**.
 
-- Forward single-block server updates to the action listeners, independently of optional world-cache repacking. Obsidian placements, anchor placements/charges and shulker placements no longer wait for a confirmation that only the batch-update path delivered.
-- Aim at visible parts of a crystal within normal attack reach. A lower edge blocked by obsidian or a shoreline ledge no longer hides the whole crystal. The actual sent aim is checked before attacking.
-- Detect rejected item interactions and re-evaluate instead of waiting through a false confirmation timeout. Remember a confirmed obsidian base for reuse when the attack needs another attempt.
-- Make idle scouts leave the starting area and follow widening outbound sweeps. `botFlightRoamDistance` sets the initial aerial departure distance (768 blocks by default); later sweeps keep advancing. Route progress and headings survive restart, and supplied aerial scouts continue through waypoints without a landing between legs.
-- Sample a wider area of loaded terrain with a bounded tick budget, including biome grass, foliage and water tints.
-- Keep isometric terrain at its observed height across zoom levels. Fill cliff faces across chunk boundaries and retain terrain detail in a shared cache, reducing seams, missing tiles and floating markers during zoom changes.
-- Retain explored terrain in compressed region archives without the old 4,096-chunk eviction or 30-day terrain expiry. Keep a lightweight whole-map overview even when detail is not cached. Existing terrain data migrates on save.
-- Add configurable terrain view range (`botTerrainViewRange`, default 128 blocks) and map range rings. Previously mapped terrain stays visible outside those rings.
-- Prioritize players over mobs in a larger, per-tick awareness scan. Add clear, interpolated player ESP outlines through terrain, with configurable hostile-mob outlines and a 64–2048-block awareness setting. Actual detection remains limited to entities supplied by the server.
-- Includes the elytra takeoff fixes from 0.1.0.1.
+- Right-click the atlas to choose an online bot in that dimension and send **Go here** or **Explore here** with a 32–2048 block radius. Height-aware picking follows the displayed terrain. Existing work is paused, and exploration uses elytra when available or walks a finite survey route.
+- Use **#client player** on your own Minecraft instance. It shares your location, loaded terrain, visual sightings and short-lived ESP player detections with connected bots. Your character stays under manual control with no HiveMind world overlays, automatic combat, movement, inventory actions, respawning or reconnecting.
+- Player clients are labeled on the map and fleet list, excluded from bot command selectors and protected from broadcast commands and network policies. Only a local **#client bot** enables automation again; previous work stays parked until resumed.
+- ESP contacts expire after six seconds and act as search hints. They do not become historical sightings or base evidence, and they never allow bots to attack through walls.
 
-Update clients with `#update install`, then close and relaunch Minecraft. For the atlas changes on a standalone controller, replace its application with the **0.1.0.2** download, keep its existing data/configuration directory, restart it and refresh the webpage. The network protocol remains compatible.
+Use the same Fabric mod JAR for both roles. After **#client player**, copy the connection command from controller **Settings** and run it in that client. Your existing network sharing settings still apply.
 
-Automated regression checks cover crystal visibility/reach, outbound route expansion and persistence, terrain height continuity, chunk-edge cliffs, persistence beyond 4,096 chunks, old-map retention, compressed region reloads, and player-first awareness in crowded areas. Live combat and flight still need checking on your server.
+Update **all clients and the standalone controller** to this version together: live contact sharing requires network protocol 6. Install the mod with **#update install**, then close and relaunch Minecraft. Replace the standalone controller application with this release while keeping its existing data/configuration directory, restart it, and refresh the webpage. The client updater does not replace the standalone controller.

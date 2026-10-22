@@ -38,6 +38,7 @@ public final class LookBehavior extends Behavior implements ILookBehavior {
      * The current look target, may be {@code null}.
      */
     private Target target;
+    public void clearTarget(){this.target=null;}
 
     /**
      * The rotation known to the server. Returned by {@link #getEffectiveRotation()} for use in {@link IPlayerContext}.
