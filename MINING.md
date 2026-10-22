@@ -175,7 +175,7 @@ From that player's account, send `/msg BotAccount #mine 32 netherite`. The bot q
 
 By default only signed, client-validated private chat with the incoming whisper chat type is accepted. Public chat, unsigned display overrides, untrusted senders, and arbitrary administrative commands cannot control the bot. Trust, settings, chest rules, station/boundary edits, and recovery-attempt resets are local operations. Incoming commands and outgoing replies are paced and bounded; revoked/offline controllers do not receive queued replies.
 
-`bot-control.properties` is stored beside `mining-routes.properties` in the server/save's Baritone cache directory. It contains `trusted` (comma-separated UUIDs), `whisperTypes` (default `minecraft:msg_command_incoming`), `allowUnsignedServerWhispers=false`, and `unsignedWhisperFormat=`. Custom authenticated whisper chat types can be added to `whisperTypes`.
+`bot-control.properties` is stored beside `mining-routes.properties` in the server/save's HiveMind cache directory. It contains `trusted` (comma-separated UUIDs), `whisperTypes` (default `minecraft:msg_command_incoming`), `allowUnsignedServerWhispers=false`, and `unsignedWhisperFormat=`. Custom authenticated whisper chat types can be added to `whisperTypes`.
 
 Some server plugins replace whispers with unsigned system text. An explicit fallback is available by setting `allowUnsignedServerWhispers=true` and an exact format such as `unsignedWhisperFormat=[{sender} -> me] {command}`, then running `#trust reload`. Placeholders must appear once each in that order; the sender must resolve to a currently online profile whose UUID is trusted. The parser matches the whole message. This fallback trusts the server/plugin to prevent players from forging that format; it cannot authenticate arbitrary displayed text. Keep it disabled when the server preserves signed whispers. Profileless disguised-chat packets are not used as an authenticated source.
 
@@ -190,7 +190,7 @@ Use `#job mine <quantity> <blocks...>` to queue a finite mining request. For exa
 #job list
 ```
 
-A maximum of 64 jobs is saved per server/save in `bot-jobs.properties`. New jobs wait for existing bot work and run in order. Mining quantity follows Baritone's existing semantics: matching carried items plus credited deposits, rather than a count of newly broken blocks. The same request survives normal storage, portal, survival, and conflict interruptions. A quantity already achieved remains credited if the client stops during its final deposit.
+A maximum of 64 jobs is saved per server/save in `bot-jobs.properties`. New jobs wait for existing bot work and run in order. Mining quantity follows HiveMind's existing semantics: matching carried items plus credited deposits, rather than a count of newly broken blocks. The same request survives normal storage, portal, survival, and conflict interruptions. A quantity already achieved remains credited if the client stops during its final deposit.
 
 `#job pause` holds the active job; `#job resume` retries its survival/sculk checks and continues the queue. `#job remove <id>` removes one request; `#job cancel` clears the queue and stops its active work. `#stop` stops current work and leaves saved requests paused. Starting another direct task also leaves queued work paused rather than allowing it to restart behind that command. If `#pause` was used, `#resume` is still needed to release that separate global pause.
 
@@ -256,7 +256,7 @@ Defend requires a confirmed, living attacker within close melee range, line of s
 
 ## Settings through Mod Menu
 
-Commands remain the task controls. Install **Mod Menu 21.0.0 for Fabric 26.3**, then open **Mods > HiveMind > Configure** for a paged settings form. There is no bot dashboard, gameplay control screen, extra hotkey, or patrol mode. Mod Menu is optional; without it all commands and the existing `#set` interface still work. Values are saved only with **Save**; **Cancel** or Escape discards edits. Existing `#set <setting> <value>` commands and Baritone's settings file use the same settings.
+Commands remain the task controls. Install **Mod Menu 21.0.0 for Fabric 26.3**, then open **Mods > HiveMind > Configure** for a paged settings form. There is no bot dashboard, gameplay control screen, extra hotkey, or patrol mode. Mod Menu is optional; without it all commands and the existing `#set` interface still work. Values are saved only with **Save**; **Cancel** or Escape discards edits. Existing `#set <setting> <value>` commands and HiveMind's settings file use the same settings.
 
 The form includes deposits, waste reserves, dimension travel, construction/sculk avoidance, survival, flee/defend, stalking/escort distance, delivery confirmation, recovery limits, Mending repair, and gathering limits. Trust and world endpoints remain in their server/save-scoped command configuration.
 
@@ -355,7 +355,7 @@ Additional gameplay checks for control, jobs, supplies, and defense:
 
 Additional gameplay checks for companion work and Mod Menu:
 
-- Open Baritone Configure through Mod Menu 21.0.0. Save changed toggles/numbers, cancel another edit, resize across GUI scales, and verify commands still work without Mod Menu installed.
+- Open HiveMind Configure through Mod Menu 21.0.0. Save changed toggles/numbers, cancel another edit, resize across GUI scales, and verify commands still work without Mod Menu installed.
 - Record a death with equipment, respawn, recover through a portal, and confirm matched inventory/return behavior. Check a full inventory, inaccessible/despawned drops, repeated death, restart, and the attempt limit.
 - Deliver one full stack and a partial quantity to a trusted test account. Confirm no release before handoff, exactly requested quantities, server-confirmed recipient pickup, interruption/recollection, another collector, an unknown player position, and an offline target.
 - Escort a moving player. Trigger a confirmed attacker near the player, compare flee/defend, and verify health/threat/distance/time limits. Unload the target, pause/stop, die, and disconnect.

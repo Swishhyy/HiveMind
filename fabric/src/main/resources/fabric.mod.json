@@ -1,34 +1,39 @@
 {
   "schemaVersion": 1,
-  "id": "baritone",
+  "id": "hivemind",
   "version": "${version}",
-
   "name": "HiveMind",
-  "description": "Autonomous companion bots built on Baritone: mining and logistics, stalking and PvP, and a shared map network.",
+  "description": "HiveMind autonomous Minecraft client: mining, logistics, combat, exploration, and a standalone bot controller.",
   "authors": [
     "Swishhyy"
   ],
   "contributors": [
-    "leijurv", "Brady"
+    "leijurv",
+    "Brady"
   ],
   "contact": {
     "homepage": "https://github.com/Swishhyy/HiveMind",
     "sources": "https://github.com/Swishhyy/HiveMind",
     "issues": "https://github.com/Swishhyy/HiveMind/issues"
   },
-
   "license": "LGPL-3.0",
-
-  "environment": "*",
+  "environment": "client",
   "entrypoints": {
-    "modmenu": ["baritone.fabric.BotModMenu"]
+    "modmenu": [
+      "hivemind.fabric.BotModMenu"
+    ],
+    "client": [
+      "hivemind.fabric.HiveMindClient"
+    ]
   },
   "mixins": [
-      "mixins.baritone.json"
+    "mixins.hivemind.json"
   ],
   "depends": {
     "fabricloader": ">=0.19.5",
     "minecraft": "~26.3"
   },
-  "suggests": { "modmenu": ">=21.0.0" }
+  "suggests": {
+    "modmenu": ">=21.0.0"
+  }
 }

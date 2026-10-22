@@ -24,7 +24,11 @@ classes/
 .settings/
 
 # Copyright Files
-!/.idea/copyright/Baritone.xml
+!/.idea/copyright/HiveMind.xml
 !/.idea/copyright/profiles_settings.xml
 
 .vscode/launch.json
+
+# Python build helpers
+__pycache__/
+*.pyc
