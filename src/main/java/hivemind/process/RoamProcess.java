@@ -52,7 +52,7 @@ public final class RoamProcess extends HiveMindProcessHelper implements hivemind
         load();Properties p=new Properties();p.setProperty("held",Boolean.toString(hold));AtomicProperties.write(root.resolve("bot-roam.properties"),p);held=hold;destination=null;retryAt=0;
     }
     @Override public boolean isActive(){
-        if(ctx.player()==null||ctx.world()==null||ctx.minecraft().getConnection()==null)return false;
+        if(hivemind.isPlayerClient()||ctx.player()==null||ctx.world()==null||ctx.minecraft().getConnection()==null)return false;
         load();return RoamPolicy.eligible(HiveMind.settings().botAutoRoam.value,held,ctx.player().isAlive(),BotWork.foreground(hivemind),hivemind.getJobManager().hasQueuedJobs(),ctx.minecraft().gui.screen()!=null);
     }
     public boolean parked(){load();return held;}

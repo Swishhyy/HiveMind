@@ -55,6 +55,8 @@ public final class DefaultCommands {
                 new FollowCommand(hivemind),
                 new StalkCommand(hivemind),
                 new NetworkCommand(hivemind),
+                new ClientCommand(hivemind),
+                new ScoutCommand(hivemind),
                 new UpdateCommand(hivemind),
                 new SessionCommand(hivemind),
                 new MapMarkerCommand(hivemind),

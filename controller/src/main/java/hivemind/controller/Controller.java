@@ -56,7 +56,7 @@ public final class Controller implements AutoCloseable {
     public String url(){return web.url();}public int port(){return wire.boundPort();}public Identity identity(){return identity;}public String key(){return key;}
     private void remember(Receipt receipt){receipts.put(receipt.id()+":"+receipt.reporter(),receipt);while(receipts.size()>256)receipts.remove(receipts.keySet().iterator().next());}
     private void dispatch(Request request,long now){
-        List<UUID> online=wire.states().stream().map(State::reporter).toList();
+        List<UUID> online=wire.states().stream().filter(state->!hivemind.utils.network.ClientRole.player(state.session())).map(State::reporter).toList();
         for(Packet packet:coordinator.handle(request,online,now)){if(packet instanceof Receipt receipt)remember(receipt);wire.publish(packet);}
     }
     private void submit(WebControlAction action,long now){
@@ -67,7 +67,7 @@ public final class Controller implements AutoCloseable {
                 if(matches.size()!=1)throw new IllegalArgumentException("Player is not uniquely online; use an exact UUID");key=matches.iterator().next().toString();
             }
         }
-        List<UUID> expected=wire.states().stream().map(State::reporter).filter(id->action.target()==null||action.target().equals(id)).toList();
+        List<UUID> expected=wire.states().stream().filter(state->!hivemind.utils.network.ClientRole.player(state.session())).map(State::reporter).filter(id->action.target()==null||action.target().equals(id)).toList();
         String description=action.action()==Action.COMMAND?action.value():action.action()+" "+key+" = "+action.value();
         pending.put(action.id(),new ControlView.History(action.id(),description,expected,now,List.of()));while(pending.size()>32)pending.remove(pending.keySet().iterator().next());
         if(now-action.time()>60000)throw new IllegalArgumentException("Action expired");
@@ -91,7 +91,7 @@ public final class Controller implements AutoCloseable {
         }
         if(now-lastDefaults>=2000){
             wire.publish(new Defaults(identity.id(),identity.name(),rules.version(),rules.settings(null),rules.trust(null),now));
-            for(State state:live)if(state.policyVersion()!=rules.version()&&now-synced.getOrDefault(state.reporter(),0L)>=5000){wire.publish(rules.policy(identity,UUID.randomUUID(),identity.id(),state.reporter(),now));synced.put(state.reporter(),now);}
+            for(State state:live)if(!hivemind.utils.network.ClientRole.player(state.session())&&state.policyVersion()!=rules.version()&&now-synced.getOrDefault(state.reporter(),0L)>=5000){wire.publish(rules.policy(identity,UUID.randomUUID(),identity.id(),state.reporter(),now));synced.put(state.reporter(),now);}
             lastDefaults=now;
         }
         if(now-lastPage>=500){

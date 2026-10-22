@@ -65,17 +65,17 @@ public final class GameEventHandler implements IEventBus, Helper {
         } else {
             hivemind.bsi = null;
         }
-        listeners.forEach(l -> l.onTick(event));
+        enabledListeners().forEach(l -> l.onTick(event));
     }
 
     @Override
     public void onPostTick(TickEvent event) {
-        listeners.forEach(l -> l.onPostTick(event));
+        enabledListeners().forEach(l -> l.onPostTick(event));
     }
 
     @Override
     public final void onPlayerUpdate(PlayerUpdateEvent event) {
-        listeners.forEach(l -> l.onPlayerUpdate(event));
+        enabledListeners().forEach(l -> l.onPlayerUpdate(event));
     }
 
     @Override
@@ -110,7 +110,7 @@ public final class GameEventHandler implements IEventBus, Helper {
         }
 
 
-        listeners.forEach(l -> l.onChunkEvent(event));
+        enabledListeners().forEach(l -> l.onChunkEvent(event));
     }
 
     @Override
@@ -129,12 +129,13 @@ public final class GameEventHandler implements IEventBus, Helper {
             }
         }
 
-        listeners.forEach(l -> l.onBlockChange(event));
+        enabledListeners().forEach(l -> l.onBlockChange(event));
     }
 
     @Override
     public final void onRenderPass(RenderEvent event) {
-        listeners.forEach(l -> l.onRenderPass(event));
+        if(hivemind.isPlayerClient())return;
+        enabledListeners().forEach(l -> l.onRenderPass(event));
     }
 
     @Override
@@ -156,42 +157,48 @@ public final class GameEventHandler implements IEventBus, Helper {
             }
         }
 
-        listeners.forEach(l -> l.onWorldEvent(event));
+        enabledListeners().forEach(l -> l.onWorldEvent(event));
     }
 
     @Override
     public final void onSendPacket(PacketEvent event) {
-        listeners.forEach(l -> l.onSendPacket(event));
+        enabledListeners().forEach(l -> l.onSendPacket(event));
     }
 
     @Override
     public final void onReceivePacket(PacketEvent event) {
-        listeners.forEach(l -> l.onReceivePacket(event));
+        enabledListeners().forEach(l -> l.onReceivePacket(event));
     }
 
     @Override
     public void onPlayerRotationMove(RotationMoveEvent event) {
-        listeners.forEach(l -> l.onPlayerRotationMove(event));
+        enabledListeners().forEach(l -> l.onPlayerRotationMove(event));
     }
 
     @Override
     public void onPlayerSprintState(SprintStateEvent event) {
-        listeners.forEach(l -> l.onPlayerSprintState(event));
+        enabledListeners().forEach(l -> l.onPlayerSprintState(event));
     }
 
     @Override
     public void onBlockInteract(BlockInteractEvent event) {
-        listeners.forEach(l -> l.onBlockInteract(event));
+        enabledListeners().forEach(l -> l.onBlockInteract(event));
     }
 
     @Override
     public void onPlayerDeath() {
-        listeners.forEach(IGameEventListener::onPlayerDeath);
+        enabledListeners().forEach(IGameEventListener::onPlayerDeath);
     }
 
     @Override
     public void onPathEvent(PathEvent event) {
-        listeners.forEach(l -> l.onPathEvent(event));
+        enabledListeners().forEach(l -> l.onPathEvent(event));
+    }
+
+    private java.util.stream.Stream<IGameEventListener> enabledListeners() {
+        return listeners.stream().filter(l -> !hivemind.isPlayerClient()
+            || l instanceof hivemind.behavior.NetworkBehavior || l instanceof hivemind.behavior.EntityAwareness
+            || l instanceof hivemind.behavior.LookBehavior || l instanceof hivemind.behavior.UpdateBehavior);
     }
 
     @Override

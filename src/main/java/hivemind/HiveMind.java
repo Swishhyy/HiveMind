@@ -84,6 +84,8 @@ public class HiveMind implements IHiveMind {
     private final WorkstationProcess workstationProcess;
     private final RepairProcess repairProcess;
     private final JobManager jobManager;
+    private final hivemind.utils.network.ClientRole clientRole;
+    private final ScoutProcess scoutProcess;
     private final BotControlBehavior botControl;
     private final NetworkBehavior network;
     private final AutonomyBehavior autonomy;
@@ -120,6 +122,8 @@ public class HiveMind implements IHiveMind {
             } catch (IOException ignored) {}
         }
 
+        this.clientRole = new hivemind.utils.network.ClientRole(this.directory);
+
         // Define this before behaviors try and get it, or else it will be null and the builds will fail!
         this.playerContext = new HiveMindPlayerContext(this, mc);
 
@@ -135,6 +139,7 @@ public class HiveMind implements IHiveMind {
         {
             this.followProcess           = this.registerProcess(FollowProcess::new);
             this.mineProcess             = this.registerProcess(MineProcess::new);
+            this.scoutProcess            = this.registerProcess(ScoutProcess::new);
             this.roamProcess             = this.registerProcess(RoamProcess::new);
             this.depositProcess          = this.registerProcess(DepositProcess::new);
             this.shulkerProcess          = this.registerProcess(ShulkerSupplyProcess::new);
@@ -272,6 +277,9 @@ public class HiveMind implements IHiveMind {
     public CompanionProcess getCompanionProcess() { return this.companionProcess; }
     public WorkstationProcess getWorkstationProcess() { return this.workstationProcess; }
     public RepairProcess getRepairProcess() { return this.repairProcess; }
+    public hivemind.utils.network.ClientRole getClientRole() { return clientRole; }
+    public boolean isPlayerClient() { return clientRole != null && clientRole.player(); }
+    public ScoutProcess getScoutProcess() { return scoutProcess; }
     public JobManager getJobManager() { return this.jobManager; }
     public BotControlBehavior getBotControl() { return this.botControl; }
     public RoamProcess getRoamProcess(){return roamProcess;}

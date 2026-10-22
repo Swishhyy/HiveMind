@@ -69,6 +69,7 @@ public final class BotControlBehavior extends Behavior {
                 .ifPresent(info -> receive(info.getProfile().id(), whisper.getValue()));
     }
     private void receive(UUID player, String text) {
+        if(hivemind.isPlayerClient())return;
         if (ctx.player() == null || player.equals(ctx.player().getUUID()) || !config().trusted(player)) return;
         String command = TrustedControl.command(text);
         if (command == null) return;

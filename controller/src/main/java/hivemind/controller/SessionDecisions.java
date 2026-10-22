@@ -6,6 +6,7 @@ import java.util.*;
 public final class SessionDecisions {
     private final Map<UUID,Long> next=new HashMap<>();
     public String decide(State state,long now){
+        if(hivemind.utils.network.ClientRole.player(state.session()))return null;
         if(now<next.getOrDefault(state.reporter(),0L)||state.session().isEmpty())return null;
         Map<String,String> s=state.session(),settings=state.settings();boolean online=Boolean.parseBoolean(s.getOrDefault("connected","false"));
         if(online){

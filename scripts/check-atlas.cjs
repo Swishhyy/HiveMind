@@ -31,3 +31,16 @@ assert.equal(overviewCliff.find(c=>c.wx===8000).east,90,'Uncached overview tiles
 assert.equal(mesh.level(low,16).cells[0].rgb,0x73944b,'Overview color must retain a uniform tile');
 assert.throws(()=>mesh.prepare({...low,rgb:'broken'}),/Invalid terrain/);
 console.log('Atlas checks passed: stable heights across zoom, chunk-edge cliffs, signed coordinates, bounded detail and script syntax.');
+
+const project=(x,z,h)=>({x:400+(x-z)*4,y:265+((x+z)*.5-(h-64)*.45)*4});
+for(const [x,z,h] of [[12,20,160],[-40,-24,-20]]){
+    const cell={wx:x,wz:z,h,step:4},p=project(x+2,z+2,h);
+    assert.equal(mesh.pick([cell],project,p.x,p.y).h,h,'Picking must use the rendered surface height');
+    const dx=(p.x-400)/4,dz=(p.y-265)/4;
+    assert.ok(Math.abs(dx*.5+dz+(h-64)*.45-(x+2))<1e-7,'Height-aware inverse projection must recover X');
+    assert.ok(Math.abs(-dx*.5+dz+(h-64)*.45-(z+2))<1e-7,'Height-aware inverse projection must recover Z');
+}
+assert.equal(mesh.pick([],project,400,265),null,'Unmapped terrain must use the explicit approximate fallback');
+const back={wx:0,wz:0,h:64,step:16},front={wx:4,wz:4,h:73,step:16},hit=project(8,8,73);
+assert.equal(mesh.pick([back,front],project,hit.x,hit.y).h,73,'Overlapping surfaces must pick the frontmost rendered cell');
+console.log('Map picking checks passed: elevated terrain, negative coordinates, frontmost surfaces and unmapped fallback.');

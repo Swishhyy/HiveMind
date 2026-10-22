@@ -111,7 +111,8 @@ public final class BotNetwork implements AutoCloseable {
                 states.put(state.reporter(),state);
             }
             if(packet instanceof Defaults current)defaults=current;
-            if(!controls.offer(packet))throw new IOException("Control inbox is full; action was not queued");
+            if(packet instanceof Contact){if(!received.offer(packet)){received.poll();received.offer(packet);}}
+            else if(!controls.offer(packet))throw new IOException("Control inbox is full; action was not queued");
             // Requests reach the host's client thread for validation before any bot is told to execute them.
             if(host&&!(packet instanceof Request)&&!(packet instanceof TeamPackets.Intent))for(Peer peer:peers.values())if(peer!=sender)peer.offer(packet);
             return;
@@ -204,6 +205,7 @@ public final class BotNetwork implements AutoCloseable {
             Defaults current=defaults;if(host&&current!=null&&current.valid(System.currentTimeMillis()))history.addFirst(current);
         }
         private boolean offer(Message sighting) {
+            if(sighting instanceof Contact){return !stopped&&outgoing.offer(sighting); }
             if(sighting instanceof Packet packet){
                 if(stopped)return false;
                 if(priority.offer(packet))return true;

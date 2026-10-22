@@ -35,11 +35,16 @@ public final class ControllerChecks {
         check("session logout 60".equals(decisions.decide(state(a,now,Map.of("botCombatLog","true"),dangerous),now)),"Controller did not combat log endangered bot");
         check(decisions.decide(state(a,now,Map.of("botCombatLog","true"),dangerous),now+100)==null,"Combat logout spammed");
         check(decisions.decide(state(b,now,Map.of("botCombatLog","true"),Map.of("connected","true","damageAt",""+now,"hostiles","0")),now)==null,"Environmental damage caused combat log");
+        Map<String,String> playerSession=new HashMap<>(dangerous);playerSession.put("role","player");
+        check(new SessionDecisions().decide(state(a,now,Map.of("botCombatLog","true"),playerSession),now)==null,"Controller combat logged a manual player");
+        check(new SessionDecisions().decide(state(a,now,Map.of("botAutoReconnect","true"),Map.of("role","player","connected","false","server","example.test")),now)==null,"Controller reconnected a manual player");
         Controller controller=new Controller(data.resolve("hub"),"127.0.0.1",0,"127.0.0.1",0,null,"127.0.0.1","test");
         until(()->controller.port()!=0,"Relay failed to bind");URI page=URI.create(controller.url());String key=controller.key();int port=controller.port();
         BotNetwork first=BotNetwork.join(a,key,"127.0.0.1",port),second=BotNetwork.join(b,key,"127.0.0.1",port);
         try{
             until(()->first.connected()&&second.connected(),"Bots did not connect");
+            Contact contact=new Contact(a.id(),a.name(),UUID.randomUUID(),"Nearby",new Endpoint("minecraft:overworld",40,70,50),System.currentTimeMillis());
+            first.publish(contact);List<Message> awareness=new ArrayList<>();until(()->{awareness.addAll(second.drain(128));return awareness.contains(contact);},"Player ESP contact did not reach another client");
             first.publish(state(a,System.currentTimeMillis(),Map.of(),Map.of("connected","true")));second.publish(state(b,System.currentTimeMillis(),Map.of(),Map.of("connected","true")));
             until(()->{try{return request(page,"GET","").body().contains("BotA")&&request(page,"GET","").body().contains("BotB");}catch(Exception e){return false;}},"Dashboard missed client telemetry");
             check(request(page,"POST","target="+a.id()+"&action=command&value=%23session+logout+60").statusCode()==202,"HTTP command not accepted");
