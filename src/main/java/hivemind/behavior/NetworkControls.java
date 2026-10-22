@@ -214,6 +214,7 @@ final class NetworkControls {
     State state(long now){
         var ctx=bot.getPlayerContext();var session=SessionRuntime.get(ctx.minecraft().gameDirectory.toPath());
         Map<String,String> sessionState=new LinkedHashMap<>(session.snapshot());sessionState.put("role",bot.getClientRole().mode());
+        sessionState.put("connected",Boolean.toString(ctx.player()!=null&&ctx.world()!=null&&ctx.minecraft().getConnection()!=null));if(bot.isPlayerClient())sessionState.put("automatic","false");
         Map<String,String> update=UpdateRuntime.ready()?UpdateRuntime.service().snapshot():Map.of();
         Map<String,String> settings=new LinkedHashMap<>();for(var spec:NetworkSettings.all())settings.put(spec.name(),setting(spec.name()).value.toString());
         if(ctx.player()==null||ctx.world()==null||ctx.minecraft().getConnection()==null){
