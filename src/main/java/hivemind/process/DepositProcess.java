@@ -29,6 +29,8 @@ import hivemind.utils.HiveMindProcessHelper;
 import hivemind.utils.bot.StorageRule;
 import hivemind.utils.bot.BotInventory;
 import hivemind.utils.bot.BotItems;
+import hivemind.utils.bot.ExpeditionLoadout;
+import hivemind.utils.network.SupplyReserves;
 import java.util.Map;
 import hivemind.utils.bot.SurvivalPolicy;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -153,7 +155,8 @@ public final class DepositProcess extends HiveMindProcessHelper {
     public String lastDepositError() { return lastDepositError; }
     public void startFetch(Map<String,Integer> targets){startFetch(targets,false);}
     public void startExpeditionFetch(Map<String,Integer> targets){startFetch(targets,true);}
-    private int fetchCount(String id){return BotInventory.count(ctx,s->BotItems.id(s).equals(id)&&(fetchVariants?BotItems.expeditionSupply(s):BotItems.ordinary(s)));}
+    private int fetchGoal(String id,int target){return fetchVariants?SupplyReserves.refillGoal(id,target):target;}
+    private int fetchCount(String id){return fetchVariants?ExpeditionLoadout.count(ctx,id):BotItems.count(ctx,id);}
     private void startFetch(Map<String,Integer> targets,boolean variants) {
         if (isActive()) throw new IllegalStateException("A storage trip is already active");
         if (targets.isEmpty() || targets.size()>128 || targets.values().stream().anyMatch(n->n<1||n>1000000)) throw new IllegalArgumentException("Invalid withdrawal request");
@@ -230,7 +233,7 @@ public final class DepositProcess extends HiveMindProcessHelper {
         if(stage==Stage.PORTABLE){
             if(hivemind.getShulkerProcess().isActive())return new PathingCommand(null,PathingCommandType.DEFER);
             Map<String,Integer> remaining=Map.copyOf(fetchTargets);
-            boolean complete=remaining.entrySet().stream().allMatch(entry->fetchCount(entry.getKey())>=entry.getValue());boolean variants=fetchVariants;
+            boolean complete=remaining.entrySet().stream().allMatch(entry->fetchCount(entry.getKey())>=fetchGoal(entry.getKey(),entry.getValue()));boolean variants=fetchVariants;
             onLostControl();
             if(complete)return new PathingCommand(null,PathingCommandType.CANCEL_AND_SET_GOAL);
             startFetch(remaining,variants);return new PathingCommand(null,PathingCommandType.DEFER);
@@ -394,7 +397,7 @@ public final class DepositProcess extends HiveMindProcessHelper {
 
     private boolean needsSupply(ItemStack stack) {
         if (stack.isEmpty()) return false;
-        if (fetch) return (fetchVariants?BotItems.expeditionSupply(stack):BotItems.ordinary(stack)) && fetchCount(BotItems.id(stack)) < fetchTargets.getOrDefault(BotItems.id(stack),0);
+        if (fetch) return fetchTargets.entrySet().stream().anyMatch(e->(fetchVariants?ExpeditionLoadout.matches(stack,e.getKey()):BotItems.ordinary(stack)&&BotItems.id(stack).equals(e.getKey()))&&fetchCount(e.getKey())<fetchGoal(e.getKey(),e.getValue()));
         if (wantFood && BotInventory.food(stack)) return BotInventory.count(ctx, BotInventory::food)
                 < Math.max(SurvivalPolicy.bounded(HiveMind.settings().botMinimumFood.value, 1, 64),
                         SurvivalPolicy.bounded(HiveMind.settings().botRestockFood.value, 1, 128));
@@ -411,7 +414,7 @@ public final class DepositProcess extends HiveMindProcessHelper {
                 && openedMenu.slots.get(i).mayPickup(ctx.player())) { slot = i; break; }
         if (slot < 0) {
             if (fetch) {
-                if (fetchTargets.entrySet().stream().allMatch(entry->fetchCount(entry.getKey())>=entry.getValue()) || remainingChests.isEmpty()) return finishTransfer();
+                if (fetchTargets.entrySet().stream().allMatch(entry->fetchCount(entry.getKey())>=fetchGoal(entry.getKey(),entry.getValue())) || remainingChests.isEmpty()) return finishTransfer();
                 return tryNextStorage("Checking the next storage for requested items");
             }
             boolean enough = (!wantFood || !BotInventory.needsFood(ctx)) && (!wantBlocks || !BotInventory.needsBlocks(ctx))
@@ -447,7 +450,7 @@ public final class DepositProcess extends HiveMindProcessHelper {
             }
             if (hivemind.getCompanionProcess().reserves(BotItems.id(stack))) continue;
             if (!accepts(rule, stack)) continue;
-            boolean supply = stack.isDamageableItem() || stack.has(DataComponents.FOOD) || stack.has(DataComponents.EQUIPPABLE);
+            boolean supply = stack.isDamageableItem() || stack.has(DataComponents.FOOD) || stack.has(DataComponents.EQUIPPABLE) || ExpeditionLoadout.portable(stack) || stack.is(net.minecraft.world.item.Items.FIREWORK_ROCKET) || stack.is(net.minecraft.world.item.Items.TOTEM_OF_UNDYING);
             if (!depositAll && buildingSlots.contains(i)) continue;
             if (!DepositPolicy.retain(i, depositAll, HiveMind.settings().depositKeepHotbar.value,
                     HiveMind.settings().depositKeepSupplies.value, supply,
@@ -462,6 +465,7 @@ public final class DepositProcess extends HiveMindProcessHelper {
         return rule.accepts(BuiltInRegistries.ITEM.getKey(stack.getItem()).toString(), stack.getItem() instanceof BlockItem,
                 HiveMind.settings().mineWasteItems.value.contains(stack.getItem()),
                 stack.isDamageableItem() || stack.has(DataComponents.FOOD) || stack.has(DataComponents.EQUIPPABLE) || BotInventory.building(stack)
+                        || ExpeditionLoadout.portable(stack) || stack.is(net.minecraft.world.item.Items.FIREWORK_ROCKET) || stack.is(net.minecraft.world.item.Items.TOTEM_OF_UNDYING)
                         || HiveMind.settings().depositKeepItems.value.contains(stack.getItem()));
     }
 

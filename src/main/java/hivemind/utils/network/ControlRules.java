@@ -32,16 +32,17 @@ public final class ControlRules {
         file=root.resolve("bot-network-controls.properties");values=AtomicProperties.read(file);
         version=Long.parseLong(values.getProperty("version","0"));
         if(version<0||version==Long.MAX_VALUE||values.size()>8192)throw new IllegalStateException("Invalid bot-network-controls.properties");
-        Set<UUID> bots=new HashSet<>();
+        Set<UUID> bots=new HashSet<>();boolean migrated=false;
         for(String key:values.stringPropertyNames()){
             if(key.equals("version"))continue;
             String suffix;
             if(key.startsWith("global."))suffix=key.substring(7);
             else if(key.startsWith("bot.")&&key.length()>41&&key.charAt(40)=='.'){bots.add(UUID.fromString(key.substring(4,40)));suffix=key.substring(41);}
             else throw new IllegalStateException("Invalid control rule");
-            validate(suffix,values.getProperty(key));
+            String normalized=validate(suffix,values.getProperty(key));if(!normalized.equals(values.getProperty(key))){values.setProperty(key,normalized);migrated=true;}
         }
         if(bots.size()>64)throw new IllegalStateException("Too many individual bot policies");
+        if(migrated){version=Math.max(System.currentTimeMillis(),version+1);values.setProperty("version",""+version);AtomicProperties.write(file,values);}
     }
     private static String validate(String key,String value) {
         if(key.startsWith("setting."))return NetworkSettings.spec(key.substring(8)).normalize(value);

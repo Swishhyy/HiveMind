@@ -27,7 +27,7 @@ public final class BotItems {
     private BotItems(){}
     public static String id(ItemStack stack){return BuiltInRegistries.ITEM.getKey(stack.getItem()).toString();}
     public static String require(String input){Identifier key=Identifier.parse(input.contains(":")?input:"minecraft:"+input);if(!BuiltInRegistries.ITEM.containsKey(key)||key.toString().equals("minecraft:air"))throw new IllegalArgumentException("Unknown item "+key);return key.toString();}
-    public static boolean expeditionSupply(ItemStack stack){String id=id(stack);return ordinary(stack)||stack.is(net.minecraft.world.item.Items.FIREWORK_ROCKET)||stack.isDamageableItem()&&(id.endsWith("_helmet")||id.endsWith("_chestplate")||id.endsWith("_leggings")||id.endsWith("_boots"))&&stack.getMaxDamage()-stack.getDamageValue()>stack.getMaxDamage()/3;}
+    public static boolean expeditionSupply(ItemStack stack){String id=id(stack);return ordinary(stack)||stack.is(net.minecraft.world.item.Items.FIREWORK_ROCKET)||stack.is(net.minecraft.world.item.Items.ELYTRA)&&stack.getMaxDamage()-stack.getDamageValue()>=Math.max(32,hivemind.HiveMind.settings().elytraMinimumDurability.value+1)||stack.isDamageableItem()&&(id.endsWith("_helmet")||id.endsWith("_chestplate")||id.endsWith("_leggings")||id.endsWith("_boots"))&&stack.getMaxDamage()-stack.getDamageValue()>stack.getMaxDamage()/3;}
     public static boolean ordinary(ItemStack stack){return !stack.isEmpty()&&stack.getComponentsPatch().isEmpty();}
     public static int count(IPlayerContext ctx,String id){return BotInventory.count(ctx,stack->id(stack).equals(id)&&ordinary(stack));}
     public static int slot(IPlayerContext ctx,String id){return BotInventory.slot(ctx,stack->id(stack).equals(id)&&ordinary(stack));}

@@ -141,7 +141,7 @@ Right-click terrain on the atlas, select an online bot in that dimension and cho
 
 Manual equivalents: `#scout go minecraft:overworld 100 -200`, `#scout explore minecraft:overworld 100 -200 256`, and `#scout status` / `#scout stop`.
 
-### Reliable operations and itineraries (0.1.0.4)
+### Reliable operations and itineraries (0.1.0.5)
 
 The controller's Commands page explains each client's **Task**, **Blocker**, **Next** action and flight decision. It also shows round-trip latency, estimated bytes sent/received, queued frames and recovery count. Stale reports are labeled. Traffic totals refer to the current connection, not lifetime usage.
 
@@ -156,3 +156,15 @@ Player-mode clients can request `#meet`, `#backup`, or `#bring rockets 64` (`#br
 Bots searching for the same target partition survey directions among live team members, share firsthand sightings and short-lived ESP hints, and spread support positions toward likely escape paths. ESP hints appear separately on the map and expire after six seconds; they do not create base evidence or historical sighting hotspots. Terrain scanning slows while stationary, unchanged tiles are suppressed, and network congestion defers terrain sampling while control messages keep priority.
 
 Upgrade controller and clients together: this version uses network protocol 7. Keep existing controller data when replacing the standalone application.
+
+### Long-range loadouts and bot bases
+
+The default reserve bands are **2–4 stacks of rockets**, **1–2 stacks of allowed food**, **two usable elytras total**, and **3–4 totems**. Equipped usable wings and the offhand totem count toward those totals. Refills begin below the lower bound, rather than after every item consumed. Whole-stack transfers aim near the upper bound without requiring a cursor-full partial stack operation. Loadout settings expose the rocket/food upper targets, wing count and totem target.
+
+Carry separate shulkers full of totems, food, rockets and wings. When safe and grounded, the bot opens a useful box, restocks, breaks and recovers that same box, then selects another category's box as needed. A five-second quiet window prevents repeated placements around approaching threats. One inventory slot is reserved for box recovery. Existing placement/break/inventory permissions still apply. If supplies are available in carried boxes during flight, the bot can deliberately land away from nearby untrusted players to refill; emergency escape takes priority. Ordinary deposits retain portable boxes and loose reserve items. Explicit `deposit all` retains its existing override behavior.
+
+At your supply area run `#botbase set` (alias `#bot base set`). It saves the anchor and discovers supported loaded containers in a default 16-block radius; use `#botbase set 24` for a wider scan (maximum 32). Newly registered containers become supplies storage with base labels and priority 50. Existing rules remain intact. Copper variants, normal/trapped chests and barrels use the existing deposit adapter.
+
+Use `#botbase resupply` to request a full reserve refill without replacing current work. The bot tries carried boxes and registered stock, or travels to a configured base to discover its containers. It returns to the interrupted location and resumes its task. Registered Nether portals are required for cross-dimension trips; arbitrary unloaded chests are never scanned remotely. Stock shortages and insufficient inventory room are reported rather than assumed successful.
+
+Use `#botbase status`, `#botbase scan`, or `#botbase clear`. Clearing the anchor leaves registered chests intact; use `#deposit remove <id>` for containers you no longer want used. To configure one shared location for several bots, select **All bots** in the controller and send `#botbase set minecraft:overworld 100 64 -200 16`, substituting your coordinates. Bot base commands affect autonomous clients; player-mode clients remain manual.
