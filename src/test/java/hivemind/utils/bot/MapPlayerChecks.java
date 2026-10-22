@@ -23,7 +23,9 @@ public final class MapPlayerChecks {
             ClientRole role=new ClientRole(root);check(!role.player(),"Existing clients must keep bot behavior");role.set("player");check(new ClientRole(root).player(),"Manual role lost on restart");
             for(String label:List.of("mine","scout","kill","session","resume","elytra"))check(!ClientRole.localAllowed(label)&&!ClientRole.remoteAllowed(label),"Player mode allowed automation: "+label);
             check(ClientRole.localAllowed("client")&&ClientRole.localAllowed("network"),"Manual clients must be able to configure sharing or switch modes");
-            rejects(()->role.set("all"));check(new ClientRole(root).player(),"Bad input changed role");role.set("bot");check(!new ClientRole(root).player(),"Local opt-in did not enable bot mode");
+            ClientRole locked=new ClientRole(root,"player");check(locked.locked()&&locked.player(),"Player package must ignore an existing bot mode");rejects(()->locked.set("bot"));rejects(()->locked.requireRole("bot"));check(locked.player(),"Rejected mode switch must leave manual sharing active");locked.set("player");
+            rejects(()->new ClientRole(root,"bad"));
+            rejects(()->role.set("all"));check(new ClientRole(root).player(),"Bad input changed role");role.set("bot");check(!new ClientRole(root).player(),"Local opt-in did not enable bot mode");check(new ClientRole(root,"player").player(),"Player lock must survive a saved bot role");role.set("player");check(new ClientRole(root,"bot").player(),"Standard-jar updates must preserve existing manual roles");
         }finally{try(var paths=Files.walk(root)){for(Path p:paths.sorted(Comparator.reverseOrder()).toList())Files.delete(p);}}
         long now=System.currentTimeMillis();var contact=new Contact(UUID.randomUUID(),"Player",UUID.randomUUID(),"Target",new Endpoint("minecraft:overworld",-17,70,32),now);
         check(!new NetworkAtlas().accept(contact,now),"ESP detections must not become persistent sightings or hotspot evidence");

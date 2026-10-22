@@ -2,6 +2,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 python3 scripts/build-distributions.py all
+python3 scripts/check-client-packaging.py
 task_classes=$(mktemp -d)
 trap 'rm -rf "$task_classes"' EXIT
 task_javac=(javac)
