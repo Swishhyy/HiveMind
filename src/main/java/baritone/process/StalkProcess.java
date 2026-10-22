@@ -834,7 +834,7 @@ public final class StalkProcess extends BaritoneProcessHelper implements IBehavi
             surveyAir=aerial;BlockPos origin=aerial&&searchAnchor!=null?searchAnchor:ctx.playerFeet();
             survey=new SurveyRoute(MiningRouteAccess.root(ctx),"search-"+targetId+(aerial?"-air":"-ground"),MiningRouteAccess.endpoint(ctx,origin),
                     aerial?Baritone.settings().botFlightSurveySpacing.value:Math.max(64,SocialPolicy.searchRadius(Baritone.settings().stalkSearchRadius.value)/4),
-                    baritone.getNetwork().team().heading(Kind.SEARCH,targetId));
+                    baritone.getNetwork().team().heading(hunt?Kind.HUNT:Kind.STALK,targetId));
         }
         if(freshSurveyAnchor&&searchAnchor!=null){
             if(Math.hypot(survey.origin().x()-searchAnchor.getX(),survey.origin().z()-searchAnchor.getZ())>256)survey.reanchor(MiningRouteAccess.endpoint(ctx,searchAnchor));
