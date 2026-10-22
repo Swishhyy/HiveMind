@@ -96,7 +96,7 @@ public final class NetworkSettings {
         number("Combat","integer",1,100,"killMaxAttempts");
         number("Combat","integer",0,20,"killExplosiveDelayTicks");
         number("Combat","integer",0,2,"killMaxSupportBlocks");
-        number("Combat","long",0,180000,"killWatchMinimumMS killWatchMaximumMS");
+        number("Legacy (unused)","long",0,180000,"killWatchMinimumMS killWatchMaximumMS");
         number("Combat","long",5000,600000,"killAttackTimeoutMS");
         number("Combat","long",60000,3600000,"killTimeoutMS");
         number("Combat","long",2000,15000,"killLureTimeoutMS");

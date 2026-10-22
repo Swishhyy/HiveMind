@@ -72,7 +72,7 @@ public final class AutonomyBehavior extends Behavior {
     @Override public void onPlayerDeath(){
         try{
             load();deadAt=System.currentTimeMillis();nextRespawn=deadAt+AutonomyPolicy.respawnDelay(HiveMind.settings().botRespawnDelayMS.value);respawnRequests=0;
-            reason="Died; waiting to respawn";nextTry=deadAt+10000;
+            reason="Died; waiting to respawn";nextTry=nextRespawn;
             hivemind.getNetwork().addMarker("death","Bot death","Death observed; this location may be dangerous",MiningRouteAccess.endpoint(ctx,ctx.playerFeet()),ctx.player().getUUID(),deadAt);
         }catch(RuntimeException e){error(e);}
     }

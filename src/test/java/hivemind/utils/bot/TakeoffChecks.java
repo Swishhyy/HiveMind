@@ -8,6 +8,11 @@ public final class TakeoffChecks {
     private static void check(boolean value,String message){if(!value)throw new AssertionError(message);}
     public static void main(String[] args){runAll();System.out.println("Takeoff checks passed: jump/release/glide handoff, latched launch position, real flight progress, obstructed recovery, path timeout and fresh departure after landing");}
     public static void runAll(){
+        LandingRetry landing=new LandingRetry();check(landing.canSearch(0)&&landing.announce(0),"First landing search must start immediately");landing.exhausted(0);
+        for(int ms=1;ms<2000;ms+=50)check(!landing.canSearch(ms)&&!landing.announce(ms),"Exhausted searches must neither rescan nor spam each tick");
+        check(landing.canSearch(2000)&&!landing.announce(2000)&&landing.announce(5000),"Terrain retry and chat throttles must be independent");landing.reset();check(landing.canSearch(0)&&landing.announce(0),"A new flight must not inherit an old landing delay");
+        check(LandingRetry.finished(true,true,false,false)&&LandingRetry.finished(true,false,true,false)&&LandingRetry.finished(true,false,false,true),"Ground contact must finish landing even if the exact waypoint was missed");
+        check(!LandingRetry.finished(false,true,true,true)&&!LandingRetry.finished(true,false,false,false),"Airborne landing and initial ground takeoff must remain active");
         Point spot=new Point(.5,80,.5);TakeoffState launch=new TakeoffState(spot);
         check(!launch.launching(),"Ground approach must not request a launch boost");
         check(launch.advance(new Point(5.5,80,.5),true,false,false,true,0)==Action.APPROACH,"Walk to the launch spot before jumping");

@@ -16,6 +16,7 @@ fi
     src/main/java/hivemind/utils/bot/AutonomyPolicy.java \
     src/main/java/hivemind/utils/bot/AwarenessPolicy.java \
     src/main/java/hivemind/utils/bot/FlightPolicy.java \
+    src/main/java/hivemind/utils/bot/LandingRetry.java \
     src/main/java/hivemind/utils/bot/TakeoffState.java \
     src/test/java/hivemind/utils/bot/TakeoffChecks.java \
     src/main/java/hivemind/utils/bot/PortableSupplyPolicy.java \

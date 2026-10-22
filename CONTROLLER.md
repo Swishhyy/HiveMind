@@ -4,7 +4,7 @@ The controller runs without Minecraft and owns the network relay, coordination, 
 
 ## Start
 
-Windows: download `hivemind-controller-0.1.0.7-windows-x64.zip`, extract the **whole folder**, and run `HiveMindController.exe`. Its Java runtime is included; keep the neighboring folders beside the executable. The console prints a clickable dashboard address containing its access token. Open it, go to **Settings**, and copy the **Bot connection command** into each client's chat once while joined to the intended server.
+Windows: download `hivemind-controller-0.1.0.8-windows-x64.zip`, extract the **whole folder**, and run `HiveMindController.exe`. Its Java runtime is included; keep the neighboring folders beside the executable. The console prints a clickable dashboard address containing its access token. Open it, go to **Settings**, and copy the **Bot connection command** into each client's chat once while joined to the intended server.
 
 Linux, macOS or a server with Java 17+: `java -jar hivemind-controller.jar`. The same dashboard and connection command work there. Minecraft clients still require Java 25 and Fabric 26.3.
 
@@ -65,7 +65,7 @@ Right-click terrain on the atlas, select an online bot in that dimension and cho
 
 Manual equivalents: `#scout go minecraft:overworld 100 -200`, `#scout explore minecraft:overworld 100 -200 256`, and `#scout status` / `#scout stop`.
 
-### Reliable operations and itineraries (0.1.0.7)
+### Reliable operations and itineraries (0.1.0.8)
 
 The controller's Commands page explains each client's **Task**, **Blocker**, **Next** action and flight decision. It also shows round-trip latency, estimated bytes sent/received, queued frames and recovery count. Stale reports are labeled. Traffic totals refer to the current connection, not lifetime usage.
 

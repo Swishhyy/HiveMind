@@ -58,6 +58,8 @@ public final class TeamChecks {
         check(Teamwork.blastLeader(roles,HOST.id(),"minecraft:the_nether")==null,"Hunt roles never cross dimensions");
         check(!Teamwork.clearStrike(0,0,3,0,1,0,false),"Do not strike through an ally");
         check(!Teamwork.clearStrike(0,0,3,0,3,2,true)&&Teamwork.clearStrike(0,0,3,0,3,2,false),"Sword sweep spacing is wider than an ordinary strike");
+        check(!RoamPolicy.eligible(true,false,true,false,false,false,true),"Saved tracking orders must reserve the bot through respawn/retry delays, even without an active path");
+        check(RoamPolicy.eligible(true,false,true,false,false,false,false),"Clearing the saved tracking order releases background roaming");
         check(RoamPolicy.eligible(true,false,true,false,false,false),"Idle live bots scout by default");
         check(!RoamPolicy.eligible(true,true,true,false,false,false)&&!RoamPolicy.eligible(true,false,true,true,false,false)&&!RoamPolicy.eligible(true,false,true,false,true,false),"Stop, foreground work and pending jobs override roaming");
         check(RoamPolicy.frontierScore(false,64,0,false)<RoamPolicy.frontierScore(true,64,0,false)&&RoamPolicy.frontierScore(false,64,0,false)<RoamPolicy.frontierScore(false,64,0,true),"Scouts prefer unseen terrain away from another scout's destination");

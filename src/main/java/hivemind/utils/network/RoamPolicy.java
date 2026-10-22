@@ -20,7 +20,8 @@ package hivemind.utils.network;
 /** Small, testable autonomy rules keep manual stops and care above background scouting. */
 public final class RoamPolicy {
     private RoamPolicy() {}
-    public static boolean eligible(boolean enabled,boolean held,boolean alive,boolean foreground,boolean queued,boolean screen){return enabled&&!held&&alive&&!foreground&&!queued&&!screen;}
+    public static boolean eligible(boolean enabled,boolean held,boolean alive,boolean foreground,boolean queued,boolean screen){return eligible(enabled,held,alive,foreground,queued,screen,false);}
+    public static boolean eligible(boolean enabled,boolean held,boolean alive,boolean foreground,boolean queued,boolean screen,boolean tracking){return enabled&&!held&&alive&&!foreground&&!queued&&!screen&&!tracking;}
     public static double frontierScore(boolean visited,double distance,double headingDifference,boolean occupied){return (visited?10000:0)+distance*.1+Math.abs(headingDifference)*20+(occupied?20000:0);}
     public static boolean needsCare(float health,int hunger){return health<14||hunger<=12;}
 }

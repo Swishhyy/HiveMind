@@ -108,7 +108,8 @@ public final class StalkProcess extends HiveMindProcessHelper implements IBehavi
     private boolean surveyAir,freshSurveyAnchor;
     private long lastContactReport;
     private long nextSupplyMove;
-    private long searchStarted,taskStarted,ambushAt,approachStarted,attackStarted,lastProgress,lastStrike,lastRecorded,lastReport,nextMemoryError;
+    private double approachDistance=Double.POSITIVE_INFINITY;
+    private long searchStarted,taskStarted,approachStarted,attackStarted,lastProgress,lastStrike,lastRecorded,lastReport,nextMemoryError;
     private float lastTargetHealth;
     private int attackCount;
     private String scatterReason="";
@@ -122,7 +123,7 @@ public final class StalkProcess extends HiveMindProcessHelper implements IBehavi
     public boolean teamExplosives(){return hunting()&&!meleeFallback&&combatStyle!=CombatStyle.MELEE&&phase!=Phase.SCATTER&&equipmentReady(combatStyle)&&ctx.player().getHealth()>HiveMind.settings().killRetreatHealth.value;}
     public double terrainPenalty(){return TraversalPolicy.evidencePenalty(isActive(),hunt,HiveMind.settings().stalkMinimalEvidence.value,HiveMind.settings().stalkTerrainPenalty.value);}
     /** Quiet (no sprint, crouch where allowed) only while another player could hear or possibly see the bot. */
-    public boolean quietMovement() { return isActive()&&perceptible&&quietPhase()&&!hivemind.getConflictProcess().isActive(); }
+    public boolean quietMovement() { return isActive()&&!hunt&&perceptible&&quietPhase()&&!hivemind.getConflictProcess().isActive(); }
     private boolean quietPhase() { return phase==Phase.SEARCH||phase==Phase.WATCH||phase==Phase.DRINK||phase==Phase.APPROACH&&!reachedRear; }
     /** An engaged hunt keeps fighting; only low health or being outnumbered withdraws it. */
     public boolean committedCombat() { return isActive()&&hunt&&(phase==Phase.APPROACH||phase==Phase.ATTACK); }
@@ -187,7 +188,7 @@ public final class StalkProcess extends HiveMindProcessHelper implements IBehavi
     public void surveyContact(Player target){
         if(!isActive()||!target.getUUID().equals(targetId))return;
         contact(target);searchAnchor=target.blockPosition().immutable();freshSurveyAnchor=true;targetMissing=false;
-        phase=Phase.WATCH;searchGoal=null;watchStation.reset();transported();
+        if(hunt){if(!committedCombat())enterApproach(target);}else phase=Phase.WATCH;searchGoal=null;watchStation.reset();transported();
     }
     public void trackContact(Player target){
         if(!isActive()||!target.getUUID().equals(targetId))return;
@@ -263,7 +264,7 @@ public final class StalkProcess extends HiveMindProcessHelper implements IBehavi
         owner=controller;targetId=selected;targetName=name;hunt=kill;combatStyle=style;meleeFallback=style==CombatStyle.AUTO&&!explosives.supplies(CombatStyle.AUTO);checkingMemoryOnly=checkOnly;observedWorld=ctx.world();
         taskStarted=searchStarted=System.currentTimeMillis();searchAnchor=ctx.playerFeet().immutable();
         rememberedPlaces=memory().places(targetId,MiningRouteAccess.dimension(ctx),taskStarted,retention());
-        tell((hunt?"Hunting ":"Stalking ")+targetName+"; observing from about "+distance()+" blocks");
+        tell(hunt?"Hunting "+targetName+"; pursuing as soon as a contact is found":"Stalking "+targetName+"; observing from about "+distance()+" blocks");
         if(loaded(targetId)==null)tell("Checking saved sightings/bases, then an expanding survey; target coordinates are not globally available");
     }
 
@@ -364,11 +365,10 @@ public final class StalkProcess extends HiveMindProcessHelper implements IBehavi
                 return stop("Bot or world changed");
             if(hivemind.getNetwork().isTeammate(targetId)){hivemind.getAutonomy().clear();return stop("Target is a connected teammate");}
             if(hunt&&!committedCombat()&&safe&&prepareSupplies(combatStyle))return pause();
-            if(phase==Phase.SEARCH&&!targetMissing&&waitingToRetry(safe))return pause();
             if(phase!=Phase.DRINK)releaseUse();
             if(ctx.minecraft().getConnection().getPlayerInfo(targetId)==null&&!checkingMemoryOnly)return offlineWait(safe);
             if(offlineWaiting){offlineWaiting=false;phase=Phase.SEARCH;searchGoal=null;taskStarted=searchStarted=System.currentTimeMillis();retryAt=0;targetMissing=true;tell(targetName+" is online again; resuming search");}
-            if(hunt&&!committedCombat()&&System.currentTimeMillis()-taskStarted>StealthPolicy.bounded(HiveMind.settings().killTimeoutMS.value,60000L,3600000L))return stop("Search pass timed out; retrying the saved order");
+            if(hunt&&!committedCombat()&&loaded(targetId)==null&&System.currentTimeMillis()-taskStarted>StealthPolicy.bounded(HiveMind.settings().killTimeoutMS.value,60000L,3600000L))return stop("Search pass timed out; retrying the saved order");
             if(hunt&&phase==Phase.ATTACK) {
                 Player entity=ctx.world().players().stream().filter(player->player.getUUID().equals(targetId)).findFirst().orElse(null);
                 if(entity!=null&&(!entity.isAlive()||entity.getHealth()<=0)){hivemind.getAutonomy().complete();return scatter(entity,"Target death observed; withdrawing",true);}
@@ -376,16 +376,12 @@ public final class StalkProcess extends HiveMindProcessHelper implements IBehavi
             Player target=loaded(targetId);
             if(phase==Phase.SCATTER)return scatterTick(target,failed,safe);
             if(phase==Phase.DRINK)return drink(target,safe);
-            if(hunt&&target!=null&&committedCombat()){
-                if(!hivemind.getNetwork().team().ready())return watch(target,safe);
-                int spacing=hivemind.getNetwork().team().supportDistance(targetId);if(spacing>0)return support(target,safe,spacing);
-            }
             if(target==null) {
                 if(phase==Phase.ATTACK){explosives.abandon();restoreWeapon();tell("Target left client view; searching again without assuming a kill");}
                 targetMissing=true;
                 if(!hunt&&watchStation.hold(false,true,HiveMind.settings().stalkLostSightTicks.value))return watch(null,safe);
                 watchStation.reset();
-                phase=Phase.SEARCH;quietTicks=0;ambushAt=0;return search(failed,safe);
+                phase=Phase.SEARCH;quietTicks=0;return search(failed,safe);
             }
             if(hunt&&(target.isCreative()||target.isSpectator()))return stop("Target is not currently a survival-mode opponent");
             if(hunt&&!HiveMind.settings().killAllowTrustedTargets.value&&hivemind.getBotControl().isTrusted(targetId))
@@ -393,7 +389,12 @@ public final class StalkProcess extends HiveMindProcessHelper implements IBehavi
             contact(target);
             if(hunt){
                 String retreat=retreatReason(target);if(retreat!=null)return scatter(target,retreat,true);
+                if(!committedCombat())enterApproach(target);
                 if(hivemind.getFlight().pursue(this,target))return pause();
+                // Keep blast spacing, but melee hunters close in together instead of waiting for a lead attacker.
+                int spacing=hivemind.getNetwork().team().blastSupport(targetId)?hivemind.getNetwork().team().supportDistance(targetId):0;
+                if(spacing>0)return support(target,safe,spacing);
+                return phase==Phase.ATTACK?attack(target,failed,safe):approach(target,failed,safe);
             }
             searchAnchor=target.blockPosition().immutable();searchStarted=System.currentTimeMillis();searchGoal=null;
             legTicks=siteWait=searchStep=0;checkedLastSeen=false;memoryStep=0;
@@ -415,7 +416,6 @@ public final class StalkProcess extends HiveMindProcessHelper implements IBehavi
     private PathingCommand observe(Player target,boolean failed,boolean safe,boolean viewed) {
         boolean sight=ctx.player().hasLineOfSight(target);
         quietTicks=sight&&!viewed?quietTicks+1:0;
-        if(hunt) { PathingCommand ambush=ambush(target,sight,safe);if(ambush!=null)return ambush; }
         if(hivemind.getNetwork().team().yieldWatch(ctx.playerFeet(),targetId)){watchStation.reset();failedVantages.add(ctx.playerFeet().immutable());}
         // Once settled, small movements, head turns, and brief occlusions do not start another path.
         if(watchStation.hold(sight,watchRange(target,true),HiveMind.settings().stalkLostSightTicks.value)) {
@@ -427,6 +427,8 @@ public final class StalkProcess extends HiveMindProcessHelper implements IBehavi
             vantage=null;
             return retry(Phase.WATCH,"Viewing route blocked; trying another concealed spot",safe);
         }
+        GoalStandoff contactRange=new GoalStandoff(target.blockPosition(),distance());
+        if(!sight&&!contactRange.isInGoal(ctx.playerFeet()))return path(contactRange);
         int tolerance=StealthPolicy.bounded(HiveMind.settings().stalkPositionTolerance.value,4,32);
         if(vantageAnchor!=null&&vantageAnchor.distSqr(target.blockPosition())>tolerance*tolerance) {
             // A moving target need not invalidate a destination that still offers the same useful view.
@@ -478,26 +480,10 @@ public final class StalkProcess extends HiveMindProcessHelper implements IBehavi
         return pause();
     }
 
-    /** A hunt starts from wherever it already sees the target instead of first settling into the viewing band. */
-    private PathingCommand ambush(Player target,boolean sight,boolean safe) {
-        if(!hivemind.getNetwork().team().ready())return null;
-        if(!sight||Math.hypot(target.getX()-ctx.player().getX(),target.getZ()-ctx.player().getZ())>distance()+8)return null;
-        long now=System.currentTimeMillis();
-        if(ambushAt==0) {
-            long minimum=StealthPolicy.bounded(HiveMind.settings().killWatchMinimumMS.value,0L,120000L);
-            long maximum=Math.max(minimum,StealthPolicy.bounded(HiveMind.settings().killWatchMaximumMS.value,0L,180000L));
-            ambushAt=now+ThreadLocalRandom.current().nextLong(minimum,maximum+1);
-        }
-        if(!safe||now<ambushAt||!StealthPolicy.readyToAmbush(quietTicks,20,facing(target,ctx.playerHead()),invisible()?0.45:0,sight,alone(target),
-                equipmentReady(combatStyle),ctx.player().getHealth(),ctx.player().getFoodData().getFoodLevel(),HiveMind.settings().killMinimumHealth.value))return null;
-        watching=false;
-        if(wantsInvisibility())return startDrink(Phase.APPROACH,"Drinking invisibility before the approach");
-        return enterApproach(target);
-    }
     private PathingCommand enterApproach(Player target) {
-        watchStation.reset();retryAt=0;
-        phase=Phase.APPROACH;approachStarted=System.currentTimeMillis();reachedRear=false;failedPaths=0;attempts++;
-        tell("Ambush opportunity: "+targetName+" is looking away; approaching");return pause();
+        watchStation.reset();retryAt=0;searchGoal=null;vantage=null;targetMissing=false;checkedLastSeen=false;legTicks=siteWait=0;approachDistance=Math.sqrt(target.distanceToSqr(ctx.player()));
+        phase=Phase.APPROACH;approachStarted=System.currentTimeMillis();reachedRear=true;failedPaths=0;attempts++;
+        tell("Target contact: pursuing "+targetName);return pause();
     }
 
     private boolean openPoint(BlockPos pos) {
@@ -572,7 +558,7 @@ public final class StalkProcess extends HiveMindProcessHelper implements IBehavi
         watchStation.reset();retryAt=0;retryCount=0;
         scatterWaypoint=null;scatterReplan=0;scatterDistance=Math.min(128,Math.max(64,distance()+24));
         scatterAngle=Math.atan2(ctx.player().getZ()-scatterAnchor.getZ(),ctx.player().getX()-scatterAnchor.getX())+(ThreadLocalRandom.current().nextBoolean()?1:-1)*Math.PI/2;
-        vantage=null;failedVantages.clear();endAfterScatter=finish;scatterReason=reason;ambushAt=0;
+        vantage=null;failedVantages.clear();endAfterScatter=finish;scatterReason=reason;
         hivemind.getInputOverrideHandler().clearAllKeys();hivemind.getPathingBehavior().softCancelIfSafe();tell(reason);return pause();
     }
     private PathingCommand scatterTick(Player target,boolean failed,boolean safe) {
@@ -596,7 +582,7 @@ public final class StalkProcess extends HiveMindProcessHelper implements IBehavi
         scatterQuiet=clear?scatterQuiet+1:0;
         if(clear&&scatterQuiet>=40&&scatterTicks>=StealthPolicy.bounded(HiveMind.settings().stalkScatterTicks.value,40,1200)) {
             if(endAfterScatter)return stop(scatterReason);
-            if(hunt&&attempts>=StealthPolicy.bounded(HiveMind.settings().killMaxAttempts.value,1,10))return stop("Ambush attempt limit reached");
+            if(hunt&&attempts>=StealthPolicy.bounded(HiveMind.settings().killMaxAttempts.value,1,10))return stop("Combat recovery pass finished; retrying the saved hunt");
             if(wantsInvisibility())return startDrink(Phase.SEARCH,"Out of sight; drinking invisibility before re-approaching");
             phase=Phase.SEARCH;searchStarted=System.currentTimeMillis();failedPaths=0;
             tell("Out of sight; resuming observation from a new angle");return pause();
@@ -628,27 +614,15 @@ public final class StalkProcess extends HiveMindProcessHelper implements IBehavi
     }
 
     private PathingCommand approach(Player target,boolean failed,boolean safe) {
-        if(failed&&++failedPaths>=3||System.currentTimeMillis()-approachStarted>45000)return scatter(target,"Ambush approach failed; withdrawing",false);
+        double range=Math.sqrt(target.distanceToSqr(ctx.player()));
+        if(range<approachDistance-2){approachDistance=range;approachStarted=System.currentTimeMillis();failedPaths=0;}
+        if(failed&&++failedPaths>=3||System.currentTimeMillis()-approachStarted>45000)return scatter(target,"Pursuit route blocked; repositioning before retrying",false);
         String retreat=retreatReason(target);if(retreat!=null)return scatter(target,retreat,true);
-        double facing=facing(target,ctx.playerHead());
-        if(!reachedRear&&target.hasLineOfSight(ctx.player())&&facing>0.2) { reachedRear=true;tell("Spotted during the approach; engaging "+targetName); }
-        int hearing=StealthPolicy.bounded(HiveMind.settings().stalkSneakHearingRange.value,4,48);
-        // Crouch-walking cannot gain on a target that is walking away; close the gap openly instead.
-        if(!reachedRear&&Math.hypot(target.getX()-target.xo,target.getZ()-target.zo)>0.08&&target.distanceToSqr(ctx.player())<=hearing*hearing)reachedRear=true;
         double attackRange=combatStyle==CombatStyle.MELEE||meleeFallback?8:25;
         if(target.distanceToSqr(ctx.player())<=attackRange&&ctx.player().hasLineOfSight(target)&&safe) {
             phase=Phase.ATTACK;attackStarted=lastProgress=System.currentTimeMillis();attackCount=failedPaths=explosiveRecheck=0;explosiveBackoff=5;damageConfirmed=false;lastStrike=0;
             lastTargetHealth=target.getHealth()+target.getAbsorptionAmount();
             return attack(target,false,true);
-        }
-        if(!reachedRear) {
-            Vec3 look=target.getLookAngle();double length=Math.hypot(look.x,look.z);
-            // Already close behind the target (or no usable facing): skip the rear waypoint and strike.
-            if(length<0.01||facing<-0.3&&target.distanceToSqr(ctx.player())<=64)reachedRear=true;
-            else {
-                BlockPos rear=BlockPos.containing(target.getX()-look.x/length*6,target.getY(),target.getZ()-look.z/length*6);
-                GoalNear rearGoal=new GoalNear(rear,1);if(!rearGoal.isInGoal(ctx.playerFeet()))return path(rearGoal);reachedRear=true;
-            }
         }
         return path(new GoalNear(target.blockPosition(),1));
     }
@@ -661,12 +635,12 @@ public final class StalkProcess extends HiveMindProcessHelper implements IBehavi
         lastTargetHealth=health;
         if(failed) {
             explosives.routeFailed();
-            if(++failedPaths>=4)return scatter(target,"Cannot reach the target; returning to stalking",false);
+            if(++failedPaths>=4)return scatter(target,"Cannot reach the target; repositioning and retrying pursuit",false);
         }
         if(!damageConfirmed&&(attackCount>=4||explosives.confirmedCycles()>=2)&&now-attackStarted>6000)
             return scatter(target,"No confirmed damage; PvP may be disabled or blocked",true);
         if(now-lastProgress>StealthPolicy.bounded(HiveMind.settings().killAttackTimeoutMS.value,5000L,600000L))
-            return scatter(target,"No hit landed for a while; returning to stalking",false);
+            return scatter(target,"No hit landed for a while; repositioning and retrying pursuit",false);
         if(combatStyle!=CombatStyle.MELEE&&safe&&explosives.stock(combatStyle))return pause();
         if(combatStyle!=CombatStyle.MELEE&&meleeFallback&&weapon()<0&&explosives.supplies(combatStyle))meleeFallback=false;
         if(combatStyle!=CombatStyle.MELEE&&meleeFallback&&++explosiveRecheck>=explosiveBackoff) {
@@ -739,14 +713,14 @@ public final class StalkProcess extends HiveMindProcessHelper implements IBehavi
         releaseUse();restoreWeapon();drinkStarted=false;drinkTicks=drinkWait=0;
         if(!invisible()) { invisibilityFailed=true;tell("Invisibility was not confirmed; continuing without potions"); }
         if(afterDrink==Phase.APPROACH&&target!=null&&ctx.player().hasLineOfSight(target))return enterApproach(target);
-        phase=Phase.SEARCH;searchStarted=System.currentTimeMillis();failedPaths=0;ambushAt=0;return pause();
+        phase=Phase.SEARCH;searchStarted=System.currentTimeMillis();failedPaths=0;return pause();
     }
     private void releaseUse() {
         boolean release=ownsUse;ownsUse=false;
         if(release&&ctx.player()!=null&&ctx.player().isUsingItem()&&ctx.minecraft().gameMode!=null)ctx.minecraft().gameMode.releaseUsingItem(ctx.player());
     }
     private boolean wantsInvisibility() {
-        return HiveMind.settings().stalkUseInvisibility.value&&!invisibilityFailed&&!invisible()&&invisibilityPotion()>=0;
+        return !hunt&&HiveMind.settings().stalkUseInvisibility.value&&!invisibilityFailed&&!invisible()&&invisibilityPotion()>=0;
     }
     /** Re-drinking is allowed once less than 30 seconds of invisibility remain. */
     private boolean invisible() {
@@ -794,20 +768,21 @@ public final class StalkProcess extends HiveMindProcessHelper implements IBehavi
             offlineWaiting=true;phase=Phase.SEARCH;explosives.abandon();releaseUse();restoreWeapon();watchStation.reset();searchGoal=null;vantage=null;retryAt=0;
             var logout=hivemind.getNetwork().logout(targetId);
             BlockPos point=logout!=null?MiningRouteAccess.position(logout.point()):seen.containsKey(targetId)?seen.get(targetId).position():rememberedPlaces.isEmpty()?null:MiningRouteAccess.position(rememberedPlaces.get(0).point());
-            if(point!=null)searchGoal=new GoalStandoff(point,distance());
+            if(point!=null)searchGoal=trackingGoal(point);
             tell(targetName+" is offline; order remains active"+(point==null?"; waiting for sightings":"; watching the last known area"));
         }
         taskStarted=searchStarted=System.currentTimeMillis();
         if(searchGoal!=null&&!searchGoal.isInGoal(ctx.playerFeet()))return path(searchGoal);
         if(safe)hivemind.getInputOverrideHandler().clearAllKeys();return pause();
     }
+    private Goal trackingGoal(BlockPos point){return hunt?new GoalNear(point,2):new GoalStandoff(point,distance());}
     private PathingCommand search(boolean failed,boolean safe) {
         long now=System.currentTimeMillis();Seen local=lastLocal();
         Sighting shared=hivemind.getNetwork().hint(targetId,MiningRouteAccess.dimension(ctx));
         if(SharedSightings.shouldRedirect(shared,peerSearch,local==null?0:local.time(),peerSearchAt,now)) {
             peerSearch=shared;peerSearchAt=now;checkedLastSeen=true;searchAnchor=MiningRouteAccess.position(shared.point());
             freshSurveyAnchor=true;
-            searchGoal=new GoalStandoff(searchAnchor,distance());searchStarted=now;legTicks=siteWait=0;retryAt=0;
+            searchGoal=trackingGoal(searchAnchor);searchStarted=now;legTicks=siteWait=0;retryAt=0;
             tell(shared.reporterName()+" saw "+targetName+" at "+coordinates(shared.point().dimension(),searchAnchor)
                     +" "+Math.max(0,(now-shared.observedAt())/1000)+"s ago; checking that report");
             return path(searchGoal);
@@ -827,9 +802,9 @@ public final class StalkProcess extends HiveMindProcessHelper implements IBehavi
         }
         if(searchGoal==null) {
             Seen last=lastLocal();
-            if(!checkingMemoryOnly&&!checkedLastSeen&&last!=null) { checkedLastSeen=true;searchAnchor=last.position();freshSurveyAnchor=true;searchGoal=new GoalStandoff(last.position(),distance()); }
+            if(!checkingMemoryOnly&&!checkedLastSeen&&last!=null) { checkedLastSeen=true;searchAnchor=last.position();freshSurveyAnchor=true;searchGoal=trackingGoal(last.position()); }
             else if(memoryStep<rememberedPlaces.size()) {
-                var place=rememberedPlaces.get(memoryStep++);searchGoal=new GoalStandoff(MiningRouteAccess.position(place.point()),distance());
+                var place=rememberedPlaces.get(memoryStep++);searchGoal=trackingGoal(MiningRouteAccess.position(place.point()));
                 searchAnchor=MiningRouteAccess.position(place.point());freshSurveyAnchor=true;
                 tell("Checking "+place.label()+" for "+targetName+" at "+coordinates(place.point().dimension(),MiningRouteAccess.position(place.point())));
             } else {
@@ -964,7 +939,7 @@ public final class StalkProcess extends HiveMindProcessHelper implements IBehavi
         phase=Phase.SEARCH;watchedPlayer=null;searchAnchor=vantageAnchor=vantage=lastReported=scatterAnchor=scatterWaypoint=null;searchGoal=null;scatterDistance=scatterReplan=0;
         watchStation.reset();retryAt=lastRetryReport=0;retryCount=0;retryReason="";recycleVantages=targetMissing=false;
         searchStep=memoryStep=legTicks=siteWait=gazeTicks=quietTicks=scatterTicks=scatterQuiet=failedPaths=attempts=attackCount=0;
-        ambushAt=approachStarted=attackStarted=lastRecorded=lastReport=lastContactReport=0;rememberedPlaces=List.of();failedVantages.clear();
+        approachStarted=attackStarted=lastRecorded=lastReport=lastContactReport=0;rememberedPlaces=List.of();failedVantages.clear();
         peerSearch=null;peerSearchAt=0;
         hivemind.getInputOverrideHandler().setInputForceState(Input.SNEAK,false);hivemind.getInputOverrideHandler().setInputForceState(Input.SPRINT,false);
     }
