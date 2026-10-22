@@ -8,83 +8,83 @@ if ! command -v javac >/dev/null 2>&1; then
     task_javac=(java -m jdk.compiler/com.sun.tools.javac.Main)
 fi
 "${task_javac[@]}" -d "$task_classes" \
-    src/main/java/baritone/utils/mining/ConstructionPolicy.java \
-    src/main/java/baritone/utils/mining/DepositPolicy.java \
-    src/main/java/baritone/utils/bot/StorageRule.java \
-    src/main/java/baritone/utils/bot/AtomicProperties.java \
-    src/main/java/baritone/utils/bot/TrustedControl.java \
-    src/main/java/baritone/utils/bot/AutonomyPolicy.java \
-    src/main/java/baritone/utils/bot/FlightPolicy.java \
-    src/main/java/baritone/utils/bot/PortableSupplyPolicy.java \
-    src/main/java/baritone/utils/bot/PortableBoxStore.java \
-    src/main/java/baritone/utils/social/ClutchPolicy.java \
-    src/test/java/baritone/utils/bot/CombatSupplyChecks.java \
-    src/main/java/baritone/utils/bot/SurveyPolicy.java \
-    src/main/java/baritone/utils/bot/SurveyRoute.java \
-    src/test/java/baritone/utils/bot/SurveyChecks.java \
-    src/main/java/baritone/utils/social/CombatPolicy.java \
-    src/main/java/baritone/utils/social/CombatCadence.java \
-    src/test/java/baritone/utils/bot/FlightCombatChecks.java \
-    src/main/java/baritone/utils/bot/TrackingOrderStore.java \
-    src/main/java/baritone/utils/bot/JobStore.java \
-    src/main/java/baritone/utils/bot/SurvivalPolicy.java \
-    src/main/java/baritone/utils/bot/SculkPolicy.java \
-    src/main/java/baritone/utils/bot/BotLocations.java \
-    src/main/java/baritone/utils/bot/MiningZone.java \
-    src/main/java/baritone/utils/bot/GatherPlanner.java \
-    src/main/java/baritone/utils/bot/CompanionPolicy.java \
-    src/test/java/baritone/utils/bot/CompanionPolicyChecks.java \
-    src/test/java/baritone/utils/bot/BotPolicyChecks.java \
-    src/test/java/baritone/utils/bot/AutonomyChecks.java \
-    src/main/java/baritone/utils/mining/WorldRoutes.java \
-    src/main/java/baritone/utils/mining/WastePolicy.java \
-    src/main/java/baritone/utils/social/SocialPolicy.java \
-    src/main/java/baritone/utils/social/StealthPolicy.java \
-    src/main/java/baritone/utils/social/WatchPolicy.java \
-    src/main/java/baritone/utils/social/CombatStyle.java \
-    src/main/java/baritone/utils/social/BlastPolicy.java \
-    src/main/java/baritone/utils/social/TraversalPolicy.java \
-    src/main/java/baritone/utils/social/CombatTerrainPolicy.java \
-    src/main/java/baritone/utils/social/PlayerMemory.java \
-    src/main/java/baritone/utils/network/NetworkProtocol.java \
-    src/main/java/baritone/utils/network/ClientNetworkKey.java \
-    src/main/java/baritone/utils/network/ControlPackets.java \
-    src/main/java/baritone/utils/network/TeamPackets.java \
-    src/main/java/baritone/utils/network/Teamwork.java \
-    src/main/java/baritone/utils/network/RoamPolicy.java \
-    src/main/java/baritone/utils/network/TerrainPackets.java \
-    src/main/java/baritone/utils/network/TerrainStore.java \
-    src/main/java/baritone/utils/network/ControlRules.java \
-    src/main/java/baritone/utils/network/NetworkSettings.java \
-    src/main/java/baritone/utils/network/WebControlAction.java \
-    src/main/java/baritone/utils/network/SharedSightings.java \
-    src/main/java/baritone/utils/network/NetworkConfig.java \
-    src/main/java/baritone/utils/network/NetworkAtlas.java \
-    src/main/java/baritone/utils/network/BotNetwork.java \
-    src/main/java/baritone/utils/network/LocalNetworkViewer.java \
-    src/test/java/baritone/utils/network/NetworkChecks.java \
-    src/test/java/baritone/utils/network/TeamChecks.java \
-    src/test/java/baritone/utils/network/ControlChecks.java \
-    src/test/java/baritone/utils/social/StealthChecks.java \
-    src/test/java/baritone/utils/mining/MiningPolicyChecks.java \
-    src/test/java/baritone/utils/mining/WorldRouteChecks.java \
-    src/test/java/baritone/utils/mining/WastePolicyChecks.java \
-    src/test/java/baritone/utils/social/SocialPolicyChecks.java
-java -cp "$task_classes" baritone.utils.mining.MiningPolicyChecks
-java -cp "$task_classes" baritone.utils.mining.WorldRouteChecks
-java -cp "$task_classes" baritone.utils.mining.WastePolicyChecks
-java -cp "$task_classes" baritone.utils.social.SocialPolicyChecks
+    src/main/java/hivemind/utils/mining/ConstructionPolicy.java \
+    src/main/java/hivemind/utils/mining/DepositPolicy.java \
+    src/main/java/hivemind/utils/bot/StorageRule.java \
+    src/main/java/hivemind/utils/bot/AtomicProperties.java \
+    src/main/java/hivemind/utils/bot/TrustedControl.java \
+    src/main/java/hivemind/utils/bot/AutonomyPolicy.java \
+    src/main/java/hivemind/utils/bot/FlightPolicy.java \
+    src/main/java/hivemind/utils/bot/PortableSupplyPolicy.java \
+    src/main/java/hivemind/utils/bot/PortableBoxStore.java \
+    src/main/java/hivemind/utils/social/ClutchPolicy.java \
+    src/test/java/hivemind/utils/bot/CombatSupplyChecks.java \
+    src/main/java/hivemind/utils/bot/SurveyPolicy.java \
+    src/main/java/hivemind/utils/bot/SurveyRoute.java \
+    src/test/java/hivemind/utils/bot/SurveyChecks.java \
+    src/main/java/hivemind/utils/social/CombatPolicy.java \
+    src/main/java/hivemind/utils/social/CombatCadence.java \
+    src/test/java/hivemind/utils/bot/FlightCombatChecks.java \
+    src/main/java/hivemind/utils/bot/TrackingOrderStore.java \
+    src/main/java/hivemind/utils/bot/JobStore.java \
+    src/main/java/hivemind/utils/bot/SurvivalPolicy.java \
+    src/main/java/hivemind/utils/bot/SculkPolicy.java \
+    src/main/java/hivemind/utils/bot/BotLocations.java \
+    src/main/java/hivemind/utils/bot/MiningZone.java \
+    src/main/java/hivemind/utils/bot/GatherPlanner.java \
+    src/main/java/hivemind/utils/bot/CompanionPolicy.java \
+    src/test/java/hivemind/utils/bot/CompanionPolicyChecks.java \
+    src/test/java/hivemind/utils/bot/BotPolicyChecks.java \
+    src/test/java/hivemind/utils/bot/AutonomyChecks.java \
+    src/main/java/hivemind/utils/mining/WorldRoutes.java \
+    src/main/java/hivemind/utils/mining/WastePolicy.java \
+    src/main/java/hivemind/utils/social/SocialPolicy.java \
+    src/main/java/hivemind/utils/social/StealthPolicy.java \
+    src/main/java/hivemind/utils/social/WatchPolicy.java \
+    src/main/java/hivemind/utils/social/CombatStyle.java \
+    src/main/java/hivemind/utils/social/BlastPolicy.java \
+    src/main/java/hivemind/utils/social/TraversalPolicy.java \
+    src/main/java/hivemind/utils/social/CombatTerrainPolicy.java \
+    src/main/java/hivemind/utils/social/PlayerMemory.java \
+    src/main/java/hivemind/utils/network/NetworkProtocol.java \
+    src/main/java/hivemind/utils/network/ClientNetworkKey.java \
+    src/main/java/hivemind/utils/network/ControlPackets.java \
+    src/main/java/hivemind/utils/network/TeamPackets.java \
+    src/main/java/hivemind/utils/network/Teamwork.java \
+    src/main/java/hivemind/utils/network/RoamPolicy.java \
+    src/main/java/hivemind/utils/network/TerrainPackets.java \
+    src/main/java/hivemind/utils/network/TerrainStore.java \
+    src/main/java/hivemind/utils/network/ControlRules.java \
+    src/main/java/hivemind/utils/network/NetworkSettings.java \
+    src/main/java/hivemind/utils/network/WebControlAction.java \
+    src/main/java/hivemind/utils/network/SharedSightings.java \
+    src/main/java/hivemind/utils/network/NetworkConfig.java \
+    src/main/java/hivemind/utils/network/NetworkAtlas.java \
+    src/main/java/hivemind/utils/network/BotNetwork.java \
+    src/main/java/hivemind/utils/network/LocalNetworkViewer.java \
+    src/test/java/hivemind/utils/network/NetworkChecks.java \
+    src/test/java/hivemind/utils/network/TeamChecks.java \
+    src/test/java/hivemind/utils/network/ControlChecks.java \
+    src/test/java/hivemind/utils/social/StealthChecks.java \
+    src/test/java/hivemind/utils/mining/MiningPolicyChecks.java \
+    src/test/java/hivemind/utils/mining/WorldRouteChecks.java \
+    src/test/java/hivemind/utils/mining/WastePolicyChecks.java \
+    src/test/java/hivemind/utils/social/SocialPolicyChecks.java
+java -cp "$task_classes" hivemind.utils.mining.MiningPolicyChecks
+java -cp "$task_classes" hivemind.utils.mining.WorldRouteChecks
+java -cp "$task_classes" hivemind.utils.mining.WastePolicyChecks
+java -cp "$task_classes" hivemind.utils.social.SocialPolicyChecks
 
-java -cp "$task_classes" baritone.utils.bot.BotPolicyChecks
-java -cp "$task_classes" baritone.utils.bot.CompanionPolicyChecks
+java -cp "$task_classes" hivemind.utils.bot.BotPolicyChecks
+java -cp "$task_classes" hivemind.utils.bot.CompanionPolicyChecks
 
-java -cp "$task_classes" baritone.utils.social.StealthChecks
-java -cp "$task_classes:src/main/resources" baritone.utils.network.NetworkChecks
-java -cp "$task_classes:src/main/resources" baritone.utils.network.ControlChecks
+java -cp "$task_classes" hivemind.utils.social.StealthChecks
+java -cp "$task_classes:src/main/resources" hivemind.utils.network.NetworkChecks
+java -cp "$task_classes:src/main/resources" hivemind.utils.network.ControlChecks
 
-java -cp "$task_classes:src/main/resources" baritone.utils.network.TeamChecks
+java -cp "$task_classes:src/main/resources" hivemind.utils.network.TeamChecks
 
-java -cp "$task_classes:src/main/resources" baritone.utils.bot.AutonomyChecks
-java -cp "$task_classes:src/main/resources" baritone.utils.bot.FlightCombatChecks
-java -cp "$task_classes:src/main/resources" baritone.utils.bot.SurveyChecks
-java -cp "$task_classes:src/main/resources" baritone.utils.bot.CombatSupplyChecks
+java -cp "$task_classes:src/main/resources" hivemind.utils.bot.AutonomyChecks
+java -cp "$task_classes:src/main/resources" hivemind.utils.bot.FlightCombatChecks
+java -cp "$task_classes:src/main/resources" hivemind.utils.bot.SurveyChecks
+java -cp "$task_classes:src/main/resources" hivemind.utils.bot.CombatSupplyChecks

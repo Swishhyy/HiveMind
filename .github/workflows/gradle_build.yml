@@ -1,41 +1,78 @@
-# This workflow will build a Java project with Gradle
-# For more information see: https://help.github.com/actions/language-and-framework-guides/building-and-testing-java-with-gradle
-
-name: Java CI with Gradle
-
+name: HiveMind build and release
 on:
   push:
   pull_request:
-
+permissions:
+  contents: read
 jobs:
   build:
-
     runs-on: ubuntu-latest
-
     steps:
-    - uses: actions/checkout@v6
-      with:
-        fetch-depth: 0
-
-    - name: Set up JDK 25
-      uses: actions/setup-java@v5
-      with:
-        java-version: '25'
-        distribution: 'zulu'
-        cache: gradle
-
-    - name: Grant execute permission for gradlew
-      run: chmod +x gradlew
-
-    # The version comes from a v* tag when one exists, otherwise from mod_version in gradle.properties
-    - name: Build with Gradle
-      run: ./gradlew build
-
-    - name: Archive Artifacts
-      uses: actions/upload-artifact@v7
-      with:
-        name: HiveMind
-        if-no-files-found: error
-        path: |
-          fabric/build/libs/*.jar
-          !fabric/build/libs/*-dev*.jar
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-java@v5
+        with:
+          java-version: '25'
+          distribution: zulu
+          cache: gradle
+      - name: Check controller and updater
+        run: bash scripts/check-controller.sh
+      - name: Check autonomous policies
+        run: bash scripts/check-mining-policies.sh
+      - name: Build Fabric 26.3 client
+        run: chmod +x gradlew && ./gradlew build
+      - name: Verify and stage release
+        run: python3 scripts/stage-release.py
+      - uses: actions/upload-artifact@v7
+        with:
+          name: release-linux
+          if-no-files-found: error
+          path: build/release/*
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-java@v5
+        with:
+          java-version: '25'
+          distribution: zulu
+      - name: Build standalone controller
+        run: python scripts/build-distributions.py controller
+      - name: Package portable Windows executable with Java runtime
+        shell: pwsh
+        run: |
+          $version = (Select-String '^mod_version=(.+)$' gradle.properties).Matches.Groups[1].Value
+          jpackage --type app-image --input build/distributions --main-jar hivemind-controller.jar --main-class hivemind.controller.Main --name HiveMindController --dest build/windows --app-version $version --win-console --add-modules java.base,java.desktop,java.net.http,jdk.httpserver,jdk.crypto.ec,java.logging,java.naming
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Copy-Item CONTROLLER.md build/windows/HiveMindController/README.md
+          Copy-Item LICENSE build/windows/HiveMindController/LICENSE
+          & build/windows/HiveMindController/HiveMindController.exe --help
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          New-Item -ItemType Directory -Force build/release | Out-Null
+          Compress-Archive -Path build/windows/HiveMindController -DestinationPath "build/release/hivemind-controller-$version-windows-x64.zip"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: release-windows
+          if-no-files-found: error
+          path: build/release/*.zip
+  release:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && github.repository == 'Swishhyy/HiveMind'
+    needs: [build, windows]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: release-*
+          path: release-assets
+          merge-multiple: true
+      - name: Publish versioned release and public update manifest
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/publish-release.py

@@ -1,0 +1,110 @@
+/*
+ * This file is part of HiveMind.
+ *
+ * HiveMind is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Lesser General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * HiveMind is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with HiveMind.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
+package hivemind.command.defaults;
+
+import hivemind.HiveMind;
+import hivemind.api.IHiveMind;
+import hivemind.api.command.Command;
+import hivemind.api.command.argument.IArgConsumer;
+import hivemind.api.command.datatypes.RelativeBlockPos;
+import hivemind.api.command.exception.CommandException;
+import hivemind.api.command.exception.CommandInvalidStateException;
+import hivemind.api.command.helpers.TabCompleteHelper;
+import hivemind.process.StalkProcess;
+import hivemind.utils.social.CombatStyle;
+import net.minecraft.core.BlockPos;
+import java.util.*;
+import java.util.stream.Stream;
+
+public final class StalkCommand extends Command {
+    public StalkCommand(IHiveMind bot) { super(bot,"stalk","kill"); }
+    private HiveMind bot() { return (HiveMind)hivemind; }
+    private void local() {
+        if(bot().getJobManager().requestOwner()!=null)throw new IllegalStateException("Sighting, base, and reporting configuration edits must be made locally");
+    }
+    private void report(String message) {
+        logDirect(message);UUID owner=bot().getJobManager().requestOwner();if(owner!=null)bot().getBotControl().reply(owner,message);
+    }
+    @Override public void execute(String label,IArgConsumer args) throws CommandException {
+        StalkProcess process=bot().getStalkProcess();boolean kill=label.equalsIgnoreCase("kill");
+        try {
+            if(kill&&!args.hasAny())throw new IllegalStateException("Use kill <player>, status, or stop");
+            String first=args.hasAny()?args.getString():"random";String action=first.toLowerCase(Locale.ROOT);
+            if(action.equals("status")) { args.requireMax(0);report(process.status());return; }
+            if(action.equals("stop")) { args.requireMax(0);bot().getAutonomy().clear();bot().getFlight().cancel();process.onLostControl();bot().getPathingBehavior().softCancelIfSafe();report("Tracking and ambush order removed");return; }
+            if(kill) { CombatStyle style=CombatStyle.parse(args.hasAny()?args.getString():HiveMind.settings().killCombatStyle.value);args.requireMax(0);process.startHunt(first,style);return; }
+            switch(action) {
+                case "sightings","history" -> {
+                    String name=args.hasAny()?args.getString():null;args.requireMax(0);
+                    var saved=process.history(name);report(saved.isEmpty()?"No saved sightings":"Saved sightings (up to 12 places):");
+                    for(var place:saved)report(place.name()+" - "+place.label()+" at "+place.point().x()+" "+place.point().y()+" "+place.point().z()
+                            +" ("+place.point().dimension()+"); visits "+place.visits()+", observed "+place.observedSeconds()+"s");
+                }
+                case "check" -> { String name=args.getString();args.requireMax(0);process.checkPlaces(name); }
+                case "base" -> {
+                    local();String name=args.getString();BlockPos point=args.hasAny()?args.getDatatypePost(RelativeBlockPos.INSTANCE,ctx.playerFeet()):null;args.requireMax(0);
+                    process.confirmBase(name,point);report("Confirmed base saved for "+name);
+                }
+                case "forget" -> {
+                    local();String name=args.getString();args.requireMax(0);
+                    if(process.isActive())throw new IllegalStateException("Stop tracking before forgetting sightings");
+                    process.memory().forget(name.equalsIgnoreCase("all")?null:process.identity(name));report("Removed saved sightings for "+name);
+                }
+                case "report" -> {
+                    String recipient=args.hasAny()?args.getString():"status";args.requireMax(0);
+                    if(recipient.equalsIgnoreCase("status"))report("Private sighting recipient: "+process.memory().reportTo()+"; whisper-started tasks reply to their controller");
+                    else {
+                        local();UUID id=recipient.equalsIgnoreCase("off")?null:process.identity(recipient);
+                        if(id!=null&&!bot().getBotControl().isTrusted(id))throw new IllegalStateException("Sighting recipient must be a trusted controller");
+                        process.memory().reportTo(id);report(id==null?"Local sighting messages only for locally started tasks":"Private sighting reports configured for "+recipient);
+                    }
+                }
+                default -> { args.requireMax(0);process.start(first); }
+            }
+        } catch(IllegalArgumentException|IllegalStateException error) { throw new CommandInvalidStateException(error.getMessage()); }
+    }
+    @Override public Stream<String> tabComplete(String label,IArgConsumer args) throws CommandException {
+        if(ctx.minecraft().getConnection()==null)return Stream.empty();
+        if(label.equalsIgnoreCase("kill")&&args.hasExactly(2)) { args.getString();return new TabCompleteHelper().append("auto","melee","crystal","anchor").filterPrefix(args.getString()).stream(); }
+        if(!args.hasAtMostOne())return Stream.empty();
+        var choices=new TabCompleteHelper().append("status","stop");
+        if(!label.equalsIgnoreCase("kill"))choices.append("random","sightings","history","check","base","forget","report");
+        return choices.append(ctx.minecraft().getConnection().getOnlinePlayers().stream().map(info->info.getProfile().name()))
+                .filterPrefix(args.getString()).stream();
+    }
+    @Override public String getShortDesc() { return "Stealth stalking, private sighting memory, and an explicit named-player ambush"; }
+    @Override public List<String> getLongDesc() {
+        return List.of("stalk <player|random> - Choose a concealed line-of-sight viewing point about 40 blocks away and hold it.",
+                "Small target movements, head turns, and brief obstructions do not cause constant repositioning.",
+                "Blocked paths, exhausted searches, and an offline target wait and retry until stopped; there is no stalking attempt limit.",
+                "It crouches only where another player could hear or possibly see it, and can drink hotbar invisibility potions.",
+                "Sustained player gaze causes a scatter and a new approach. Minimal-evidence mode avoids terrain edits and closed doors.",
+                "stalk sightings [player] - List saved observations and possible/confirmed bases for this server.",
+                "stalk check <player> - Check saved places, including when that player is offline; no global coordinates are revealed.",
+                "stalk base <player> [x y z] - Locally confirm a base at supplied or previously observed coordinates.",
+                "stalk forget <player|all>; stalk report <trusted-player|off|status> - Local memory/report configuration.",
+                "kill <player> [auto|melee|crystal|anchor] - Save a named order, wait if offline, and engage when found and supplied.",
+                "An engaged fight only retreats on low health or a second nearby player; a totem is kept in the offhand.",
+                "Crystal uses obsidian/bedrock bases and real end crystals; anchor places, charges, and detonates outside respawn dimensions.",
+                "Orders survive death/disconnect/restart by default; stop or replacement work removes them. Elytra can carry long search legs.",
+                "kill status/stop; stalk status/stop - Inspect or cancel. Global pause/stop still apply.",
+                "Live combat attempts have health, weapon and time limits; saved orders retry until a death is observed or the order is stopped.",
+                "A configured client network supplies recent search hints; peer reports stay separate from firsthand base evidence.",
+                "Possible bases are inferences; they do not establish ownership. Use network web for the local shared atlas.");
+    }
+}

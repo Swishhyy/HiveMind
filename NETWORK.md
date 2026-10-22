@@ -1,3 +1,5 @@
+> **0.1.0.0:** For the independent controller, remote hosting, session/combat-log controls and updates, see [CONTROLLER.md](CONTROLLER.md). Embedded client hosting still works.
+
 # Client network and local atlas — Fabric 26.3
 
 One Minecraft client hosts a small relay. Up to 16 other clients connect to it, share visual player reports and visited chunks, and keep a local history. The local webpage also controls commands, trust and settings for one bot or the group. The Minecraft server does not need a plugin. This is part of the Fabric 26.3 mod.
@@ -81,7 +83,7 @@ Live bot states, control requests and acknowledgements travel separately from ex
 
 Recent peer sightings expire after `networkSightingTTLMS=120000` by default. If a stalking target disappears, a bot can check a newer peer report in its current dimension before its saved places/local search. Fresh reports of the same stationary position do not keep restarting the route. Reports do not interrupt an established watch position. A bot still has to travel there and visually reacquire the player. Peer observations do not add visits, dwell time or confirmed bases to the separate local player-memory file.
 
-The atlas saves asynchronously approximately every 30 seconds and when leaving a server. It retains up to 30 days, **8,192 visited chunks**, **4,096 visual observations**, and **256 recent bot identities**; older entries are removed when those bounds are reached. Replay is idempotent across restarts. History is saved under the server/save's Baritone directory in `bot-network-atlas.properties`, alongside `bot-network.properties` connection settings. The host's group rules use `bot-network-controls.properties`; each client's managed settings use `bot-web-settings.properties` and its existing `bot-control.properties` trust list. The automatically generated client key is stored once in the instance's `baritone/bot-client.properties`. No network is enabled until configured.
+The atlas saves asynchronously approximately every 30 seconds and when leaving a server. It retains up to 30 days, **8,192 visited chunks**, **4,096 visual observations**, and **256 recent bot identities**; older entries are removed when those bounds are reached. Replay is idempotent across restarts. History is saved under the server/save's HiveMind directory in `bot-network-atlas.properties`, alongside `bot-network.properties` connection settings. The host's group rules use `bot-network-controls.properties`; each client's managed settings use `bot-web-settings.properties` and its existing `bot-control.properties` trust list. The automatically generated client key is stored once in the instance's `hivemind/bot-client.properties`. No network is enabled until configured.
 
 ## Commands and config
 
