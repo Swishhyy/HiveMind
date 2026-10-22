@@ -69,6 +69,6 @@ public final class TrustedControl {
         if (!command.startsWith("#")) return null;
         command = command.substring(1).strip();
         String root = command.split("\\s+", 2)[0].toLowerCase(Locale.ROOT);
-        return Set.of("assist","scout", "mine", "job", "status", "pause", "resume", "stop", "cancel", "deposit", "stalk", "kill", "recover", "deliver", "escort", "gather", "repair", "station", "minezone", "roam", "mark", "mapmark", "update", "session").contains(root) ? command : null;
+        return Set.of("botbase","bot","assist","scout", "mine", "job", "status", "pause", "resume", "stop", "cancel", "deposit", "stalk", "kill", "recover", "deliver", "escort", "gather", "repair", "station", "minezone", "roam", "mark", "mapmark", "update", "session").contains(root) ? command : null;
     }
 }

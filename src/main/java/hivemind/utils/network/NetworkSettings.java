@@ -31,6 +31,9 @@ public final class NetworkSettings {
             } else {
                 long number;
                 try { number = Long.parseLong(value); } catch (NumberFormatException e) { throw new IllegalArgumentException(name + " requires a whole number"); }
+                // Canonicalize the previous release's smaller reserves when old saved policies arrive.
+                if(name.equals("botExpeditionRockets")&&number>=16&&number<128)number=256;
+                if(name.equals("botExpeditionTotems")&&number>=0&&number<=8&&(number<3||number>4))number=4;
                 if (number < min || number > max) throw new IllegalArgumentException(name + " requires " + min + "–" + max);
                 value = "" + number;
             }
@@ -45,8 +48,10 @@ public final class NetworkSettings {
         number("Sessions","long",5000,300000,"botReconnectDelayMS");
         bool("Combat","botKillAura botAutoCrystal botAutoTotem");
         bool("Survival","botStuckRecovery botExpeditionSupplies");
-        number("Survival","integer",16,256,"botExpeditionRockets");
-        number("Survival","integer",0,8,"botExpeditionTotems");
+        number("Loadout","integer",128,256,"botExpeditionRockets");
+        number("Loadout","integer",3,4,"botExpeditionTotems");
+        number("Loadout","integer",64,128,"botExpeditionFood");
+        number("Loadout","integer",2,4,"botExpeditionElytras");
         bool("Survival","botUseShulkers botEmergencyBucketClutch");
         bool("Autonomy","botAutoRespawn botPersistentTracking botPeriodicReports botReportAllTrusted botUseElytra botElytraCombatEscape botElytraPursuit botAerialSearch botEntityAwareness botRenderEntityESP botRenderMobESP");
         number("Autonomy","long",1000,30000,"botRespawnDelayMS");

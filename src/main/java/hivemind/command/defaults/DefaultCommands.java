@@ -72,6 +72,7 @@ public final class DefaultCommands {
                 new MineCommand(hivemind),
                 new DepositCommand(hivemind),
                 new StorageCommand(hivemind),
+                new BotBaseCommand(hivemind),
                 new TrustCommand(hivemind),
                 new JobCommand(hivemind),
                 new SurvivalCommand(hivemind),

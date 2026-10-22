@@ -236,6 +236,10 @@ public final class FlightBehavior extends Behavior {
             else cancel();return;
         }
         if(hivemind.getElytraProcess() instanceof ElytraProcess flight){
+            if(mode!=Mode.ESCAPE&&ctx.player().isFallFlying()&&hivemind.getShulkerProcess().hasPortableReserves()
+                &&ctx.world().players().stream().noneMatch(p->p!=ctx.player()&&!p.isSpectator()&&!hivemind.getNetwork().isTeammate(p.getUUID())&&!hivemind.getBotControl().isTrusted(p.getUUID())&&p.distanceToSqr(ctx.player())<96*96)){
+                reason="Landing in a safe spot to refill carried shulker reserves";flight.requestLanding();return;
+            }
             if(!ctx.player().isFallFlying()&&!HiveMind.settings().botUseElytra.value){cancel();return;}
             if(!HiveMind.settings().botUseElytra.value){flight.requestLanding();return;}
             if(mode==Mode.ESCAPE){
