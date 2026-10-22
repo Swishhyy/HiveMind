@@ -85,7 +85,7 @@ public final class NetworkBehavior extends Behavior {
         Path current = MiningRouteAccess.root(ctx); NetworkConfig next = new NetworkConfig(current,clientKey.key());
         config = next; nextSetup = nextWebAttempt = 0; ensure();
     }
-    Identity localIdentity() {
+    public Identity localIdentity() {
         if(ctx.player()==null||ctx.world()==null){if(rememberedIdentity==null)throw new IllegalStateException("No client identity");return rememberedIdentity;}
         String server;
         if (!config.options().scope().isEmpty()) server = "server-label:" + config.options().scope();

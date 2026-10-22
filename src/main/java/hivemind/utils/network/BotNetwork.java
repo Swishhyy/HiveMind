@@ -225,7 +225,7 @@ public final class BotNetwork implements AutoCloseable {
         private void write() {
             try {
                 while (!closed && !stopped) {
-                    long now=System.currentTimeMillis();if(now>=nextPing){nextPing=now+5000;pingAt=System.nanoTime();channel.write(new OperationsPackets.Ping(identity.id(),identity.name(),pingAt,false,now));}
+                    long now=System.currentTimeMillis();if(now>=nextPing){nextPing=now+5000;pingAt=now;channel.write(new OperationsPackets.Ping(identity.id(),identity.name(),pingAt,false,now));}
                     Message report = priority.poll();
                     if(report==null)report=outgoing.poll();
                     if (report == null) report = history.pollFirst();
@@ -243,9 +243,9 @@ public final class BotNetwork implements AutoCloseable {
                 while (!closed && !stopped) {
                     Message report = channel.read();
                     long now = System.currentTimeMillis();lastReceived=now;receivedBytes+=report==null?21:NetworkProtocol.encode(report).length+20;
-                    if(report instanceof OperationsPackets.Ping ping){if(!ping.reporter().equals(channel.remote().id()))throw new IOException("Invalid ping identity");if(ping.reply()){if(ping.nonce()==pingAt)rtt=Math.max(0,(System.nanoTime()-pingAt)/1000000);}else offer(new OperationsPackets.Ping(identity.id(),identity.name(),ping.nonce(),true,now));continue;}
                     if (now - window >= 1000) { count = 0; window = now; }
                     if (++count > 256) throw new IOException("Peer exceeded network message limit");
+                    if(report instanceof OperationsPackets.Ping ping){if(!ping.reporter().equals(channel.remote().id()))throw new IOException("Invalid ping identity");if(ping.reply()){if(ping.nonce()==pingAt)rtt=Math.max(0,System.currentTimeMillis()-pingAt);}else offer(new OperationsPackets.Ping(identity.id(),identity.name(),ping.nonce(),true,now));continue;}
                     if (report != null) route(this, report);
                 }
             } catch (IOException | RuntimeException e) { if (!stopped) failed(e); }

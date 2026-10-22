@@ -25,7 +25,8 @@ public final class ScoutProcess extends HiveMindProcessHelper implements AerialS
     public TaskQueue queue(){load();return queue;}
     public void start(MapOrder next){load();queue.add(next.kind(),new hivemind.utils.mining.WorldRoutes.Endpoint(next.dimension(),next.x(),64,next.z()),next.radius(),true);reset();}
     public void add(String kind,hivemind.utils.mining.WorldRoutes.Endpoint point,int radius){load();queue.add(kind,point,radius,false);}
-    public void hold(boolean held){load();queue.pause(held);reset();}
+    public void hold(boolean held){load();queue.pause(held);stopCurrent();}
+    public void stopCurrent(){if(depositing&&hivemind.getDepositProcess().isActive())hivemind.getDepositProcess().onLostControl();reset();}
     public void reset(){current=null;points=List.of();index=failures=skipped=0;retryAt=waitUntil=0;depositing=false;}
     @Override public boolean isActive(){if(hivemind.isPlayerClient()||ctx.player()==null||ctx.world()==null)return false;load();return !queue.paused()&&queue.first()!=null;}
     @Override public double priority(){return -1;}
@@ -51,6 +52,6 @@ public final class ScoutProcess extends HiveMindProcessHelper implements AerialS
     }
     private PathingCommand pause(){return new PathingCommand(null,PathingCommandType.REQUEST_PAUSE);}
     @Override public BlockPos nextSurveyWaypoint(){if(!isActive()||current==null||!MiningRouteAccess.dimension(ctx).equals(current.point().dimension())||!advance())return null;return point();}
-    @Override public void onLostControl(){if(queue!=null&&queue.first()!=null)queue.pause(true);reset();}
+    @Override public void onLostControl(){if(queue!=null&&queue.first()!=null)queue.pause(true);stopCurrent();}
     @Override public String displayName0(){return status();}
 }

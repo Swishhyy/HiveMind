@@ -43,6 +43,10 @@ public final class ControllerChecks {
         BotNetwork first=BotNetwork.join(a,key,"127.0.0.1",port),second=BotNetwork.join(b,key,"127.0.0.1",port);
         try{
             until(()->first.connected()&&second.connected(),"Bots did not connect");
+            var operation=new hivemind.utils.network.OperationsPackets.Snapshot(a.id(),a.name(),Map.of("task","Exploring","available","true"),List.of(new hivemind.utils.network.TaskQueue.Task(1,"go",new Endpoint("minecraft:overworld",100,64,200),0)),false,System.currentTimeMillis());
+            first.publish(operation);until(()->second.operations().stream().anyMatch(op->op.equals(operation)),"Operation telemetry/itinerary did not reach another client");
+            until(()->Long.parseLong(first.health().get("latencyMS"))>=0,"Authenticated transport RTT was not measured");
+            check(Long.parseLong(first.health().get("receivedBytes"))>0&&Long.parseLong(first.health().get("sentBytes"))>0,"Transport byte estimates were empty");
             Contact contact=new Contact(a.id(),a.name(),UUID.randomUUID(),"Nearby",new Endpoint("minecraft:overworld",40,70,50),System.currentTimeMillis());
             first.publish(contact);List<Message> awareness=new ArrayList<>();until(()->{awareness.addAll(second.drain(128));return awareness.contains(contact);},"Player ESP contact did not reach another client");
             first.publish(state(a,System.currentTimeMillis(),Map.of(),Map.of("connected","true")));second.publish(state(b,System.currentTimeMillis(),Map.of(),Map.of("connected","true")));

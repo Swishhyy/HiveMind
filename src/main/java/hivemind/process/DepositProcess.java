@@ -72,6 +72,7 @@ public final class DepositProcess extends HiveMindProcessHelper {
     private boolean depositAll;
     private boolean resupply;
     private boolean fetch;
+    private boolean fetchVariants;
     private Map<String,Integer> fetchTargets = Map.of();
     private String lastFetchError;
     private String lastDepositError;
@@ -150,11 +151,15 @@ public final class DepositProcess extends HiveMindProcessHelper {
     public boolean isResupplying() { return resupply && !fetch && isActive(); }
     public String lastFetchError() { return lastFetchError; }
     public String lastDepositError() { return lastDepositError; }
-    public void startFetch(Map<String,Integer> targets) {
+    public void startFetch(Map<String,Integer> targets){startFetch(targets,false);}
+    public void startExpeditionFetch(Map<String,Integer> targets){startFetch(targets,true);}
+    private int fetchCount(String id){return BotInventory.count(ctx,s->BotItems.id(s).equals(id)&&(fetchVariants?BotItems.expeditionSupply(s):BotItems.ordinary(s)));}
+    private void startFetch(Map<String,Integer> targets,boolean variants) {
         if (isActive()) throw new IllegalStateException("A storage trip is already active");
         if (targets.isEmpty() || targets.size()>128 || targets.values().stream().anyMatch(n->n<1||n>1000000)) throw new IllegalArgumentException("Invalid withdrawal request");
         if (ctx.player().containerMenu != ctx.player().inventoryMenu || !ctx.player().containerMenu.getCarried().isEmpty()) throw new IllegalStateException("Close containers and clear the cursor before fetching items");
-        if(hivemind.getShulkerProcess().requestItems(targets)){
+        fetchVariants=variants;
+        if(hivemind.getShulkerProcess().requestItems(targets,variants)){
             tripRoot=MiningRouteAccess.root(ctx);fetchTargets=Map.copyOf(targets);fetch=resupply=true;lastFetchError=null;transition(Stage.PORTABLE);return;
         }
         MiningRouteAccess.deposits(ctx); BlockPos feet=ctx.playerFeet();
@@ -225,10 +230,10 @@ public final class DepositProcess extends HiveMindProcessHelper {
         if(stage==Stage.PORTABLE){
             if(hivemind.getShulkerProcess().isActive())return new PathingCommand(null,PathingCommandType.DEFER);
             Map<String,Integer> remaining=Map.copyOf(fetchTargets);
-            boolean complete=remaining.entrySet().stream().allMatch(entry->BotItems.count(ctx,entry.getKey())>=entry.getValue());
+            boolean complete=remaining.entrySet().stream().allMatch(entry->fetchCount(entry.getKey())>=entry.getValue());boolean variants=fetchVariants;
             onLostControl();
             if(complete)return new PathingCommand(null,PathingCommandType.CANCEL_AND_SET_GOAL);
-            startFetch(remaining);return new PathingCommand(null,PathingCommandType.DEFER);
+            startFetch(remaining,variants);return new PathingCommand(null,PathingCommandType.DEFER);
         }
         if (calcFailed) {
             return stage == Stage.RETURN ? fail("no usable route to the mining site") : tryNextStorage("storage #" + storageId + " is unreachable");
@@ -389,7 +394,7 @@ public final class DepositProcess extends HiveMindProcessHelper {
 
     private boolean needsSupply(ItemStack stack) {
         if (stack.isEmpty()) return false;
-        if (fetch) return BotItems.ordinary(stack) && BotItems.count(ctx,BotItems.id(stack)) < fetchTargets.getOrDefault(BotItems.id(stack),0);
+        if (fetch) return (fetchVariants?BotItems.expeditionSupply(stack):BotItems.ordinary(stack)) && fetchCount(BotItems.id(stack)) < fetchTargets.getOrDefault(BotItems.id(stack),0);
         if (wantFood && BotInventory.food(stack)) return BotInventory.count(ctx, BotInventory::food)
                 < Math.max(SurvivalPolicy.bounded(HiveMind.settings().botMinimumFood.value, 1, 64),
                         SurvivalPolicy.bounded(HiveMind.settings().botRestockFood.value, 1, 128));
@@ -406,7 +411,7 @@ public final class DepositProcess extends HiveMindProcessHelper {
                 && openedMenu.slots.get(i).mayPickup(ctx.player())) { slot = i; break; }
         if (slot < 0) {
             if (fetch) {
-                if (fetchTargets.entrySet().stream().allMatch(entry->BotItems.count(ctx,entry.getKey())>=entry.getValue()) || remainingChests.isEmpty()) return finishTransfer();
+                if (fetchTargets.entrySet().stream().allMatch(entry->fetchCount(entry.getKey())>=entry.getValue()) || remainingChests.isEmpty()) return finishTransfer();
                 return tryNextStorage("Checking the next storage for requested items");
             }
             boolean enough = (!wantFood || !BotInventory.needsFood(ctx)) && (!wantBlocks || !BotInventory.needsBlocks(ctx))
@@ -552,7 +557,7 @@ public final class DepositProcess extends HiveMindProcessHelper {
         openRequested = false;
         depositAll = false;
         resupply = fetch = wantFood = wantBlocks = wantPickaxe = pendingWithdrawal = false;
-        fetchTargets = Map.of(); product = null;
+        fetchTargets = Map.of(); fetchVariants=false; product = null;
         miningOutputs = null;
         tripRoot = null;
         depositDimension = returnDimension = null;

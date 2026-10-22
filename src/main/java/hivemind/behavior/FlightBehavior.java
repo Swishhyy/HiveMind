@@ -182,6 +182,7 @@ public final class FlightBehavior extends Behavior {
         return false;
     }
     private void blockTakeoff(BlockPos site,long now){
+        hivemind.getOperations().warn(site,"Failed elytra launch",60000);
         blockedTakeoffs.put(site,now+60000);while(blockedTakeoffs.size()>64)blockedTakeoffs.remove(blockedTakeoffs.entrySet().stream().min(Map.Entry.comparingByValue()).orElseThrow().getKey());
     }
     /** Three normal SWAP clicks exchange two inventory slots without leaving an item on the cursor. */
@@ -220,7 +221,7 @@ public final class FlightBehavior extends Behavior {
         if(event.getType()==TickEvent.Type.OUT||ctx.player()==null||ctx.world()==null||!ctx.player().isAlive()||world!=null&&world!=ctx.world()){
             cancel();world=ctx.world();armorSlot=-1;armor=ItemStack.EMPTY;blockedTakeoffs.clear();return;
         }
-        if(owner==null){restoreArmor();return;}
+        if(owner==null){restoreArmor();if(hivemind.getOperations().walking())reason="Walking away from a failed launch area before retrying flight";else if(!supplied(Mode.TRAVEL))reason=!HiveMind.settings().botUseElytra.value?"Walking: elytra use is disabled":rockets()<Math.max(HiveMind.settings().botFlightRocketReserve.value,HiveMind.settings().elytraMinFireworksBeforeLanding.value)?"Walking: rockets are below the flight reserve":"Walking: no usable elytra with enough durability";return;}
         long now=System.currentTimeMillis();
         if(hivemind.getElytraProcess() instanceof ElytraProcess flight)airborne|=flight.takeoffCompleted();
         if(!hivemind.getElytraProcess().isActive()){
