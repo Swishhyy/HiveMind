@@ -16,6 +16,7 @@ import baritone.utils.bot.*;
 import baritone.utils.mining.ConstructionPolicy;
 import baritone.utils.mining.MiningRouteAccess;
 import baritone.utils.social.BlastPolicy;
+import baritone.process.elytra.ElytraBehavior;
 import baritone.pathing.movement.CalculationContext;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -79,8 +80,10 @@ public final class ShulkerSupplyProcess extends BaritoneProcessHelper implements
         List<Need> wanted=new ArrayList<>();
         if(Baritone.settings().botAutoTotem.value)wanted.add(new Need(s->s.is(Items.TOTEM_OF_UNDYING),2,"totems"));
         wanted.add(new Need(BotInventory::food,Math.max(4,Baritone.settings().botMinimumFood.value),"food"));
-        if(Baritone.settings().botUseElytra.value){wanted.add(new Need(s->s.is(Items.FIREWORK_ROCKET),Math.max(16,Baritone.settings().botFlightRocketReserve.value+4),"rockets"));
-            if(!ctx.player().getItemBySlot(net.minecraft.world.entity.EquipmentSlot.CHEST).is(Items.ELYTRA))wanted.add(new Need(s->s.is(Items.ELYTRA)&&s.getMaxDamage()-s.getDamageValue()>32,1,"elytra"));}
+        if(Baritone.settings().botUseElytra.value){wanted.add(new Need(ElytraBehavior::isFireworks,Math.max(16,Math.max(Baritone.settings().botFlightRocketReserve.value,Baritone.settings().elytraMinFireworksBeforeLanding.value)+4),"rockets"));
+            ItemStack worn=ctx.player().getItemBySlot(net.minecraft.world.entity.EquipmentSlot.CHEST);
+            int minimum=Math.max(32,Baritone.settings().elytraMinimumDurability.value+1);
+            if(!worn.is(Items.ELYTRA)||worn.getMaxDamage()-worn.getDamageValue()<minimum)wanted.add(new Need(s->s.is(Items.ELYTRA)&&s.getMaxDamage()-s.getDamageValue()>=minimum,1,"elytra"));}
         if(Baritone.settings().allowWaterBucketFall.value&&ctx.world().dimension()!=net.minecraft.world.level.Level.NETHER)wanted.add(new Need(s->s.is(Items.WATER_BUCKET),1,"water bucket"));
         if(baritone.getMineProcess().isActive()){
             wanted.add(new Need(s->BotInventory.pickaxe(s,baritone.getMineProcess().targetsAncientDebris()),1,"pickaxe"));
@@ -119,7 +122,8 @@ public final class ShulkerSupplyProcess extends BaritoneProcessHelper implements
         for(int slot=0;slot<36;slot++){
             ItemStack stack=ctx.player().getInventory().getItem(slot);if(!shulker(stack))continue;
             var contents=stack.get(DataComponents.CONTAINER);if(contents==null)continue;
-            boolean useful=contents.stream().anyMatch(item->needs.stream().anyMatch(need->need.matches().test(item)&&count(need.matches())<need.count()));
+            var stacks=net.minecraft.core.NonNullList.<ItemStack>withSize(27,ItemStack.EMPTY);contents.copyInto(stacks);
+            boolean useful=stacks.stream().anyMatch(item->needs.stream().anyMatch(need->need.matches().test(item)&&count(need.matches())<need.count()));
             if(!useful)continue;
             BlockPos point=placement();if(point==null)return false;
             source=slot;boxItem=stack.copy();box=point;previous=ctx.player().getInventory().getSelectedSlot();beforeBoxes=count(s->s.is(boxItem.getItem()));moved=0;confirmed=recoveryOnly=false;
@@ -145,6 +149,9 @@ public final class ShulkerSupplyProcess extends BaritoneProcessHelper implements
     private void save(boolean owned){store.save(new PortableBoxStore.Box(MiningRouteAccess.endpoint(ctx,box),BuiltInRegistries.ITEM.getKey(boxItem.getItem()).toString(),owned));}
     @Override public PathingCommand onTick(boolean failed,boolean safe){
         if(!allowed()||!root.equals(MiningRouteAccess.root(ctx))||world!=ctx.world()){onLostControl();return null;}
+        if(ctx.minecraft().gui.screen()!=null&&ctx.player().containerMenu==ctx.player().inventoryMenu){
+            baritone.getInputOverrideHandler().setInputForceState(Input.CLICK_LEFT,false);ctx.playerController().resetBlockRemoving();return pause();
+        }
         if(!safe)return pause();
         if(failed||++ticks>600)return fail("Could not complete portable resupply; recovery point retained");
         if(baritone.getConflictProcess().isActive()||baritone.getStalkProcess().committedCombat()){closeMenu();return new PathingCommand(null,PathingCommandType.DEFER);}

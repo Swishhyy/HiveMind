@@ -107,7 +107,7 @@ public class MovementFall extends Movement {
         if(!isWater&&!bucketFall)bucketFall=willPlaceBucket();
         if(!isWater&&bucketFall){
             int waterSlot=ctx.player().getInventory().findSlotMatchingItem(STACK_BUCKET_WATER);
-            if((waterSlot<0||ctx.world().dimension()==Level.NETHER)&&ctx.player().onGround())return state.setStatus(MovementStatus.UNREACHABLE);
+            if((waterSlot<0||!Inventory.isHotbarSlot(waterSlot)&&!Baritone.settings().allowInventory.value||ctx.world().dimension()==Level.NETHER)&&ctx.player().onGround())return state.setStatus(MovementStatus.UNREACHABLE);
             if(baritone instanceof Baritone bot)bot.getClutch().plan(dest);
         }
         if (targetRotation != null) {

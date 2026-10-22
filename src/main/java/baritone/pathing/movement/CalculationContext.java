@@ -141,7 +141,9 @@ public class CalculationContext {
         this.stalkTarget = ((Baritone) baritone).getStalkProcess().avoidanceCenter();
         this.stalkClearance = Math.min(24,Math.max(8,Baritone.settings().stalkDistance.value-8));
         this.hasThrowaway = !stealth && Baritone.settings().allowPlace.value && ((Baritone) baritone).getInventoryBehavior().hasGenericThrowaway();
-        this.hasWaterBucket = Baritone.settings().allowWaterBucketFall.value && Inventory.isHotbarSlot(player.getInventory().findSlotMatchingItem(STACK_BUCKET_WATER)) && world.dimension() != Level.NETHER;
+        int waterSlot=player.getInventory().findSlotMatchingItem(STACK_BUCKET_WATER);
+        this.hasWaterBucket = Baritone.settings().allowWaterBucketFall.value && waterSlot>=0
+                &&(Inventory.isHotbarSlot(waterSlot)||Baritone.settings().allowInventory.value)&&world.dimension()!=Level.NETHER;
         this.canSprint = !((Baritone) baritone).getStalkProcess().quietMovement() && !((Baritone) baritone).getSculkProcess().quiet() && Baritone.settings().allowSprint.value && player.getFoodData().getFoodLevel() > 6;
         this.placeBlockCost = Baritone.settings().blockPlacementPenalty.value+trackingPenalty;
         this.allowBreak = !stealth && Baritone.settings().allowBreak.value;
