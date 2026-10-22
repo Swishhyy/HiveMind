@@ -56,7 +56,7 @@ public final class CompanionCommand extends Command {
             }
             if(action.equals("status")){
                 if(args.hasAny())args.getString();args.requireMax(0);
-                if(label.equals("recover"))report("Recorded death: "+locations.death()+"; "+process.status());else report(process.status());return;
+                if(label.equals("recover"))report("Death inventory: "+process.deathInventoryStatus()+"; recorded missing items: "+locations.death()+"; "+process.status());else report(process.status());return;
             }
             if(action.equals("stop")){
                 args.getString();args.requireMax(0);

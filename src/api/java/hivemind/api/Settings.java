@@ -363,6 +363,8 @@ public final class Settings {
     public final Setting<String> botConflictMode = new Setting<>("flee");
 
     /** Companion commands use normal movement and only positions received by this client. */
+    /** auto compares confirmed respawn inventories; keep/drop override unusual server plugins. */
+    public final Setting<String> botDeathInventoryMode = new Setting<>("auto");
     public final Setting<Integer> recoveryMaxAttempts = new Setting<>(3);
     public final Setting<Integer> recoverySearchRadius = new Setting<>(16);
     public final Setting<Long> companionTaskTimeoutMS = new Setting<>(1800000L);

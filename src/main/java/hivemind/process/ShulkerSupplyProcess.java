@@ -70,7 +70,7 @@ public final class ShulkerSupplyProcess extends HiveMindProcessHelper implements
     private static boolean shulker(ItemStack stack){return stack.getItem() instanceof BlockItem item&&item.getBlock() instanceof ShulkerBoxBlock;}
     private int count(Predicate<ItemStack> filter){return BotInventory.count(ctx,filter);}
     private int count(Need need){return need.category()==null?count(need.matches()):ExpeditionLoadout.count(ctx,need.category());}
-    private boolean allowed(){return HiveMind.settings().botUseShulkers.value&&HiveMind.settings().allowInventory.value&&HiveMind.settings().allowPlace.value&&HiveMind.settings().allowBreak.value
+    private boolean allowed(){return !hivemind.getCompanionProcess().awaitingDeathInventory()&&HiveMind.settings().botUseShulkers.value&&HiveMind.settings().allowInventory.value&&HiveMind.settings().allowPlace.value&&HiveMind.settings().allowBreak.value
             &&ctx.player()!=null&&ctx.world()!=null&&ctx.player().isAlive()&&!hivemind.getAutonomy().paused()&&ctx.minecraft().gameMode!=null;}
     public boolean safeForResupply(){return safeSite();}
     public boolean safeGrounded(){return rawSafeSite();}
