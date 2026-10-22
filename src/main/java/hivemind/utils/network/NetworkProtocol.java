@@ -30,7 +30,7 @@ import java.util.*;
 
 /** Bounded, mutually authenticated, encrypted observations and explicitly routed client control. */
 public final class NetworkProtocol {
-    private static final int MAGIC = 0x484d4e44, VERSION = 6, MAX_FRAME = 65536;
+    private static final int MAGIC = 0x484d4e44, VERSION = 7, MAX_FRAME = 65536;
     private static final SecureRandom RANDOM = new SecureRandom();
     public static final long MAX_AGE_MS = 600000, HISTORY_MS = 30L * 86400000, CLOCK_SKEW_MS = 10000;
     public sealed interface Message permits Sighting, Exploration, ControlPackets.Packet, TerrainPackets.Tile, TerrainPackets.Site, TerrainPackets.Marker {
@@ -124,7 +124,7 @@ public final class NetworkProtocol {
                 Endpoint point = new Endpoint(text(body, 128), body.readInt(), body.readInt(), body.readInt()); long time = body.readLong();
                 result = type == 1 ? new Sighting(reporter, reporterName, player, playerName, point, time) : new Exploration(reporter, reporterName, point, time);
             } else if(type>=11&&type<=13){UUID reporter=uuid(body);String name=text(body,16);result=TerrainPackets.decode(body,type,reporter,name,body.readLong());
-            } else if(type==14||type>=3&&type<=10)result=ControlPackets.decode(body,type,uuid(body),text(body,16));
+            } else if(type>=14&&type<=17||type>=3&&type<=10)result=ControlPackets.decode(body,type,uuid(body),text(body,16));
             else if (type != 0) throw new IOException("Unknown network message");
             if (body.available() != 0) throw new IOException("Trailing network data");
             return result;

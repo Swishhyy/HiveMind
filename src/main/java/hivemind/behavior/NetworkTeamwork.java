@@ -91,6 +91,7 @@ public final class NetworkTeamwork {
         if(plan==null||!ready())return false;var ctx=bot.getPlayerContext();
         return plan.intents().stream().anyMatch(p->p.kind()==Kind.ROAM&&!p.reporter().equals(ctx.player().getUUID())&&p.work()!=null&&Teamwork.near(p.work(),MiningRouteAccess.endpoint(ctx,point),64));
     }
+    public boolean searchSector(BlockPos candidate,BlockPos anchor,UUID target,boolean hunt){return plan==null||!ready()||Teamwork.searchSector(plan,hunt?Kind.HUNT:Kind.STALK,target,MiningRouteAccess.dimension(bot.getPlayerContext()),bot.getPlayerContext().player().getUUID(),candidate.getX()-anchor.getX(),candidate.getZ()-anchor.getZ());}
     public double heading(Kind kind,UUID target){
         var ctx=bot.getPlayerContext();if(!ready()||plan==null)return Math.floorMod(ctx.player().getUUID().hashCode(),360)*Math.PI/180;
         List<Intent> group=Teamwork.group(plan,kind,target,MiningRouteAccess.dimension(ctx));

@@ -8,6 +8,7 @@ import static hivemind.utils.network.NetworkAtlas.quote;
 public final class ControlView {
     public record History(UUID id,String description,List<UUID> expected,long time,List<Receipt> results){}
     private ControlView(){}
+    public static String withOperations(String json,Collection<OperationsPackets.Snapshot> operations){return json.substring(0,json.length()-1)+",\"operations\":"+OperationsPackets.json(operations)+"}";}
     public static String strings(Map<String,String> map){StringJoiner join=new StringJoiner(",","{","}");map.forEach((key,value)->join.add(quote(key)+":"+quote(value)));return join.toString();}
     public static String people(Map<UUID,String> map){Map<String,String> values=new LinkedHashMap<>();map.forEach((id,name)->values.put(id.toString(),name));return strings(values);}
     public static String json(Identity local,boolean host,boolean connected,String key,List<State> states,Set<UUID> live,

@@ -58,6 +58,11 @@ public final class Teamwork {
         return plan.intents().stream().filter(p->p.kind()==kind&&Objects.equals(p.target(),target)&&p.point().dimension().equals(dimension))
                 .sorted(Comparator.comparing(p->p.reporter().toString())).toList();
     }
+    /** Half-open angular sectors assign each survey point to exactly one live searching member. */
+    public static boolean searchSector(Plan plan,Kind kind,UUID target,String dimension,UUID self,double dx,double dz){
+        List<Intent> group=group(plan,kind,target,dimension);if(group.size()<2)return true;int index=-1;for(int i=0;i<group.size();i++)if(group.get(i).reporter().equals(self))index=i;if(index<0)return true;
+        double angle=(Math.atan2(dz,dx)+2*Math.PI)%(2*Math.PI);return Math.min(group.size()-1,(int)(angle/(2*Math.PI)*group.size()))==index;
+    }
     public static UUID blastLeader(Plan plan,UUID target,String dimension){
         return group(plan,Kind.HUNT,target,dimension).stream().filter(Intent::explosive).map(Intent::reporter).findFirst().orElse(null);
     }

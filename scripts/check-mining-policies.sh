@@ -24,6 +24,12 @@ fi
     src/test/java/hivemind/utils/bot/CombatSupplyChecks.java \
     src/main/java/hivemind/utils/bot/MapOrder.java \
     src/main/java/hivemind/utils/network/ClientRole.java \
+    src/main/java/hivemind/utils/network/AssistancePolicy.java \
+    src/main/java/hivemind/utils/network/TaskQueue.java \
+    src/main/java/hivemind/utils/network/RecoveryPolicy.java \
+    src/main/java/hivemind/utils/network/OperationsPackets.java \
+    src/main/java/hivemind/utils/network/ObservationView.java \
+    src/main/java/hivemind/utils/network/ControlView.java \
     src/test/java/hivemind/utils/bot/MapPlayerChecks.java \
     src/main/java/hivemind/utils/bot/SurveyPolicy.java \
     src/main/java/hivemind/utils/bot/SurveyRoute.java \

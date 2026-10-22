@@ -23,6 +23,7 @@ public final class Controller implements AutoCloseable {
     private final Teamwork teamwork;
     private final SessionDecisions sessions=new SessionDecisions();
     private final ArrayBlockingQueue<WebControlAction> actions=new ArrayBlockingQueue<>(64);
+    private final Map<UUID,Contact> contacts=new LinkedHashMap<>();
     private final Map<UUID,State> known=new LinkedHashMap<>();
     private final Map<UUID,ControlView.History> pending=new LinkedHashMap<>();
     private final Map<String,Receipt> receipts=new LinkedHashMap<>();
@@ -76,7 +77,8 @@ public final class Controller implements AutoCloseable {
     private void tick(long now){
         if(closed)return;
         for(Message message:wire.drain(256)){
-            if(message instanceof State state){known.put(state.reporter(),state);while(known.size()>64)known.remove(known.keySet().iterator().next());}
+            if(message instanceof Contact c){contacts.values().removeIf(p->!p.valid(now));if(contacts.size()<512||contacts.containsKey(c.player()))contacts.put(c.player(),c);}
+            else if(message instanceof State state){known.put(state.reporter(),state);while(known.size()>64)known.remove(known.keySet().iterator().next());}
             else if(message instanceof Request request)dispatch(request,now);
             else if(message instanceof Receipt receipt)remember(receipt);
             else if(message instanceof TeamPackets.Intent intent)teamwork.accept(intent,now);
@@ -95,11 +97,11 @@ public final class Controller implements AutoCloseable {
             lastDefaults=now;
         }
         if(now-lastPage>=500){
-            web.snapshot(atlas.json(now,wire.status()+(error.isEmpty()?"":"; "+error),"minecraft:overworld",wire.peers()));
+            web.snapshot(ObservationView.json(atlas.json(now,wire.status()+(error.isEmpty()?"":"; "+error),"minecraft:overworld",wire.peers()),contacts.values(),now));
             List<ControlView.History> history=new ArrayList<>();for(var request:pending.values())history.add(new ControlView.History(request.id(),request.description(),request.expected(),request.time(),receipts.values().stream().filter(receipt->receipt.id().equals(request.id())).toList()));Collections.reverse(history);
             String join="#network controller "+advertise+" "+wire.boundPort()+" "+key+" "+scope;
-            web.controls(ControlView.json(identity,true,true,key,known.values().stream().sorted(Comparator.comparing(State::reporterName)).toList(),live.stream().map(State::reporter).collect(Collectors.toSet()),rules.settings(null),rules.trust(null),history,
-                Map.of("standalone","true","scope",scope,"joinCommand",join,"version",Main.VERSION)));
+            web.controls(ControlView.withOperations(ControlView.json(identity,true,true,key,known.values().stream().sorted(Comparator.comparing(State::reporterName)).toList(),live.stream().map(State::reporter).collect(Collectors.toSet()),rules.settings(null),rules.trust(null),history,
+                Map.of("standalone","true","scope",scope,"joinCommand",join,"version",Main.VERSION)),wire.operations()));
             lastPage=now;
         }
         if(now-lastSave>=30000){save();lastSave=now;}

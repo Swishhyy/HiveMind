@@ -84,6 +84,7 @@ public abstract class Movement implements IMovement, MovementHelper {
     public double getCost(CalculationContext context) {
         if (cost == null) {
             cost = calculateCost(context);
+            cost+=context.recoveryPenalty(dest.getX(),dest.getY(),dest.getZ());
         }
         return cost;
     }

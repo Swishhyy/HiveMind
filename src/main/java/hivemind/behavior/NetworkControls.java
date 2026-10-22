@@ -49,6 +49,7 @@ final class NetworkControls {
     private final Map<UUID,Long> lastSync=new HashMap<>();
     private Defaults group;
     private State lastSnapshot;
+    private long lastOperations;
     private long appliedVersion,lastState,lastReplayEpoch=-1;
     private final Deque<Receipt> replayReceipts=new ArrayDeque<>();
     private volatile boolean closed;
@@ -139,7 +140,7 @@ final class NetworkControls {
         }
         receipts.values().removeIf(receipt->!receipt.valid(now));
         if(now-lastState<500)return;
-        lastState=now;State local=state(now);publish(local);
+        lastState=now;State local=state(now);publish(local);if(now-lastOperations>=1000){lastOperations=now;publish(activity(now));}
         if(authority()){
             group=new Defaults(who().id(),who().name(),rules.version(),rules.settings(null),rules.trust(null),now);
             publish(group);
@@ -189,6 +190,20 @@ final class NetworkControls {
         String first=expanded.second().isEmpty()?"":expanded.second().get(0).getValue().toLowerCase(Locale.ROOT);bot.getAutonomy().beforeCommand(label,first);
         target.execute(label,args);bot.getAutonomy().afterCommand(label,first);return "Accepted #"+command+"; "+status();
     }
+    OperationsPackets.Snapshot activity(long now){
+        Map<String,String> details=new LinkedHashMap<>();var ctx=bot.getPlayerContext();boolean online=ctx.player()!=null&&ctx.world()!=null;
+        var controlled=bot.getPathingControlManager().mostRecentInControl().orElse(null);
+        details.put("task",bot.isPlayerClient()?"Manual player sharing":controlled==null?"Idle":controlled.displayName());
+        details.put("blocker",bot.isPlayerClient()?"":bot.getOperations().blocker());details.put("next",bot.isPlayerClient()?"Share observations without controlling this character":bot.getOperations().nextAction());
+        if(online&&!bot.isPlayerClient()&&bot.getSurvivalProcess().isActive())details.put("blocker",bot.getSurvivalProcess().status());
+        details.put("flight",bot.isPlayerClient()?"Manual":bot.getFlight().status());details.put("recoveries",""+bot.getOperations().recoveries());
+        details.put("available",""+(online&&!bot.isPlayerClient()&&!hivemind.utils.bot.BotWork.foreground(bot)&&!bot.getJobManager().hasQueuedJobs()&&!bot.getAutonomy().paused()));
+        if(parent.transport()!=null)details.putAll(parent.transport().health());
+        var queue=online&&!bot.isPlayerClient()?bot.getScoutProcess().queue():null;
+        if(online&&!bot.isPlayerClient()&&bot.getPathingBehavior().getGoal()!=null)details.put("goal",bot.getPathingBehavior().getGoal().toString());
+        if(queue!=null&&queue.first()!=null&&!bot.getOperations().isActive()&&details.get("blocker").isEmpty())details.put("next",queue.paused()?"Waiting for map queue resume":queue.tasks().size()>1?"Finish this task, then "+queue.tasks().get(1).kind()+" at "+queue.tasks().get(1).point().x()+" "+queue.tasks().get(1).point().z():"Finish the current map task");
+        details.replaceAll((key,value)->shorten(value,256));return new OperationsPackets.Snapshot(who().id(),who().name(),details,queue==null?List.of():queue.tasks(),queue!=null&&queue.paused(),now);
+    }
     private String status(){
         if(bot.isPlayerClient())return "Player client · sharing terrain and sightings";
         return shorten(bot.getScoutProcess().status()+" · "+bot.getAutonomy().status()+" · "+bot.getStalkProcess().status()+" · "+bot.getFlight().status()+" · "+bot.getJobManager().status()+" · "+bot.getCompanionProcess().status()+" · "+bot.getNetwork().team().status()+" · "+bot.getRoamProcess().status(),500);
@@ -236,8 +251,9 @@ final class NetworkControls {
         List<ControlView.History> history=new ArrayList<>();
         for(var entry:pending.entrySet())history.add(new ControlView.History(entry.getKey(),entry.getValue().description(),entry.getValue().expected(),entry.getValue().time(),receipts.values().stream().filter(receipt->receipt.id().equals(entry.getKey())).toList()));
         Collections.reverse(history);List<State> nodes=states(now);
-        return ControlView.json(who(),authority(),authority()||parent.transport()!=null&&parent.transport().connected(),parent.config().options().key(),nodes,
-            nodes.stream().map(State::reporter).collect(java.util.stream.Collectors.toSet()),group==null?Map.of():group.settings(),group==null?Map.of():group.trust(),history,Map.of());
+        Map<UUID,OperationsPackets.Snapshot> ops=new LinkedHashMap<>();if(parent.transport()!=null)parent.transport().operations().forEach(p->ops.put(p.reporter(),p));ops.put(who().id(),activity(now));
+        return ControlView.withOperations(ControlView.json(who(),authority(),authority()||parent.transport()!=null&&parent.transport().connected(),parent.config().options().key(),nodes,
+            nodes.stream().map(State::reporter).collect(java.util.stream.Collectors.toSet()),group==null?Map.of():group.settings(),group==null?Map.of():group.trust(),history,Map.of()),ops.values());
     }
     @SuppressWarnings({"rawtypes","unchecked"}) void close(){
         closed=true;actions.clear();

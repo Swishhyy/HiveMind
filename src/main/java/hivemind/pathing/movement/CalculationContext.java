@@ -60,6 +60,8 @@ public class CalculationContext {
 
     private static final ItemStack STACK_BUCKET_WATER = new ItemStack(Items.WATER_BUCKET);
 
+    public final java.util.Map<Long,Double> recoveryCosts;
+    public double recoveryPenalty(int x,int y,int z){return recoveryCosts.getOrDefault(BlockPos.asLong(x,y,z),0D);}
     public final boolean safeForThreadedUse;
     public final IHiveMind hivemind;
     public final Level world;
@@ -121,6 +123,7 @@ public class CalculationContext {
         this.world = hivemind.getPlayerContext().world();
         this.worldData = (WorldData) hivemind.getPlayerContext().worldData();
         this.miningWorld = MiningRouteAccess.dimension(hivemind.getPlayerContext());
+        this.recoveryCosts=((HiveMind)hivemind).getOperations().penalties(this.miningWorld);
         var locations = MiningRouteAccess.locations(hivemind.getPlayerContext());
         this.miningBoundary = hivemind.getMineProcess().isActive() && locations.zonesEnabled();
         this.miningZone = miningBoundary ? locations.zone(miningWorld) : null;

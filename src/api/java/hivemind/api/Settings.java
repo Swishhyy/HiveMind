@@ -340,6 +340,10 @@ public final class Settings {
 
     /** Pause mining for food, health, tool durability, inventory space, and building supplies. */
     public final Setting<Boolean> botSurvival = new Setting<>(true);
+    public final Setting<Boolean> botStuckRecovery = new Setting<>(true);
+    public final Setting<Boolean> botExpeditionSupplies = new Setting<>(true);
+    public final Setting<Integer> botExpeditionRockets = new Setting<>(32);
+    public final Setting<Integer> botExpeditionTotems = new Setting<>(1);
     public final Setting<Boolean> botAutoResupply = new Setting<>(true);
     public final Setting<Integer> botMinimumHealth = new Setting<>(12);
     public final Setting<Integer> botEatAtHunger = new Setting<>(16);

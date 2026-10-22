@@ -71,9 +71,10 @@ public final class FlightBehavior extends Behavior {
         if(HiveMind.settings().allowInventory.value)for(int i=0;i<36;i++)durability=Math.max(durability,wingDurability(ctx.player().getInventory().getItem(i)));
         return FlightPolicy.supplied(requested,durability,rockets(),HiveMind.settings().botFlightRocketReserve.value,HiveMind.settings().elytraMinFireworksBeforeLanding.value,HiveMind.settings().elytraMinimumDurability.value);
     }
-    public boolean capable(){return supplied(Mode.TRAVEL);}
-    public boolean survey(IHiveMindProcess task,BlockPos point){return start(task,point,Mode.SURVEY);}
+    public boolean capable(){return !hivemind.getOperations().walking()&&supplied(Mode.TRAVEL);}
+    public boolean survey(IHiveMindProcess task,BlockPos point){if(hivemind.getOperations().walking())return false;return start(task,point,Mode.SURVEY);}
     public boolean travel(IHiveMindProcess task,BlockPos point){
+        if(hivemind.getOperations().walking())return false;
         if(flying())return owner==task;
         if(ctx.player()==null||Math.hypot(point.getX()-ctx.player().getX(),point.getZ()-ctx.player().getZ())<Math.max(96,HiveMind.settings().botFlightMinimumDistance.value))return false;
         return start(task,point,Mode.TRAVEL);
@@ -110,6 +111,7 @@ public final class FlightBehavior extends Behavior {
             if(!flight.retargetFor(task,destination,requested==Mode.ESCAPE))return false;
             owner=task;mode=requested;nextSurveyPoint=null;started=now;lastDestination=point(destination);lastReplan=now;reason=label(requested,destination);return true;
         }
+        if(requested!=Mode.ESCAPE&&!hivemind.getOperations().prepareTrip(destination))return false;
         if(!supplied(requested)||ctx.minecraft().gui.screen()!=null||ctx.player().isInWater()||ctx.player().isInLava()
                 ||ctx.player().containerMenu!=ctx.player().inventoryMenu||!ctx.player().inventoryMenu.getCarried().isEmpty())return false;
         if(requested!=Mode.ESCAPE&&(hivemind.getConflictProcess().isActive()||hivemind.getSurvivalProcess().isActive()||hivemind.getSculkProcess().isActive()||ctx.player().isUsingItem()))return false;

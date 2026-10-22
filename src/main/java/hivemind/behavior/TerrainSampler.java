@@ -35,10 +35,14 @@ final class TerrainSampler {
     private final HiveMind bot;
     private final Map<String,Long> sampled=new HashMap<>();
     private long next;
+    private BlockPos lastPosition;
+    private boolean stationary;
+    private final Map<String,String> fingerprints=new LinkedHashMap<>();
     TerrainSampler(NetworkBehavior parent,HiveMind bot){this.parent=parent;this.bot=bot;}
     void tick(long now){
-        if(now<next)return;next=now+50;
-        sampled.values().removeIf(time->now-time>120000);
+        if(now<next)return;var feet=bot.getPlayerContext().playerFeet();stationary=lastPosition!=null&&lastPosition.distSqr(feet)<4;lastPosition=feet.immutable();next=now+(stationary?250:50);
+        if(parent.transport()!=null&&parent.transport().congested()){next=now+1000;return;}
+        sampled.values().removeIf(time->now-time>300000);
         long deadline=System.nanoTime()+3_000_000;
         for(int tiles=0;tiles<8;tiles++){
             if(tiles>0&&System.nanoTime()>=deadline)return;
@@ -52,7 +56,7 @@ final class TerrainSampler {
         int radius=Math.min(requested,Math.max(2,ctx.minecraft().options.renderDistance().get()));
         for(int x=cx-radius;x<=cx+radius;x++)for(int z=cz-radius;z<=cz+radius;z++){
             BlockPos point=new BlockPos(x*16,ctx.playerFeet().getY(),z*16);if(!world.hasChunkAt(point))continue;
-            String key=dimension+":"+x+":"+z;long previous=sampled.getOrDefault(key,0L);if(now-previous<30000)continue;
+            String key=dimension+":"+x+":"+z;long previous=sampled.getOrDefault(key,0L);if(now-previous<(stationary?120000:30000))continue;
             double score=(previous==0?0:1000)+(x-cx)*(x-cx)+(z-cz)*(z-cz);if(score<best){best=score;bestX=x;bestZ=z;found=true;}
         }
         if(!found)return false;sampled.put(dimension+":"+bestX+":"+bestZ,now);
@@ -75,7 +79,8 @@ final class TerrainSampler {
         StringBuilder rgb=new StringBuilder(1536),h=new StringBuilder(1024);
         HexFormat hex=HexFormat.of();
         for(int i=0;i<256;i++){rgb.append(hex.toHexDigits(colors[i]),2,8);h.append(hex.toHexDigits((short)heights[i]));}
-        var who=parent.localIdentity();parent.record(new Tile(who.id(),who.name(),dimension,bestX,bestZ,rgb.toString(),h.toString(),now));
+        var who=parent.localIdentity();String tileKey=dimension+":"+bestX+":"+bestZ,fingerprint=rgb.toString()+h;
+        if(!fingerprint.equals(fingerprints.get(tileKey))){fingerprints.put(tileKey,fingerprint);while(fingerprints.size()>4096)fingerprints.remove(fingerprints.keySet().iterator().next());parent.record(new Tile(who.id(),who.name(),dimension,bestX,bestZ,rgb.toString(),h.toString(),now));}
         int checked=0;for(BlockPos pos:world.getChunk(bestX,bestZ).getBlockEntities().keySet()){
             int range=ctx.player().isFallFlying()?96:48;
             if(++checked>64)break;if(pos.distSqr(ctx.playerFeet())>range*range)continue;

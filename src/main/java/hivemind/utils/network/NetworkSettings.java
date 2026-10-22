@@ -44,6 +44,9 @@ public final class NetworkSettings {
         number("Sessions","long",5000,86400000,"botCombatLogWaitMS");
         number("Sessions","long",5000,300000,"botReconnectDelayMS");
         bool("Combat","botKillAura botAutoCrystal botAutoTotem");
+        bool("Survival","botStuckRecovery botExpeditionSupplies");
+        number("Survival","integer",16,256,"botExpeditionRockets");
+        number("Survival","integer",0,8,"botExpeditionTotems");
         bool("Survival","botUseShulkers botEmergencyBucketClutch");
         bool("Autonomy","botAutoRespawn botPersistentTracking botPeriodicReports botReportAllTrusted botUseElytra botElytraCombatEscape botElytraPursuit botAerialSearch botEntityAwareness botRenderEntityESP botRenderMobESP");
         number("Autonomy","long",1000,30000,"botRespawnDelayMS");

@@ -24,9 +24,9 @@ import java.util.*;
 
 /** Live control data is deliberately excluded from the exploration journal and from history replay. */
 public final class ControlPackets {
-    public sealed interface Packet extends Message permits Contact, State, Request, Execute, Policy, Receipt, Defaults, TeamPackets.Intent, TeamPackets.Plan {
+    public sealed interface Packet extends Message permits OperationsPackets.Snapshot, OperationsPackets.Obstacle, OperationsPackets.Ping, Contact, State, Request, Execute, Policy, Receipt, Defaults, TeamPackets.Intent, TeamPackets.Plan {
         @Override default boolean valid(long now) {
-            long ttl=this instanceof Contact?6000:this instanceof TeamPackets.Plan?4000:this instanceof TeamPackets.Intent?6000:this instanceof State?20000:this instanceof Receipt?120000:60000;
+            long ttl=this instanceof OperationsPackets.Snapshot?10000:this instanceof OperationsPackets.Obstacle?600000:this instanceof OperationsPackets.Ping?10000:this instanceof Contact?6000:this instanceof TeamPackets.Plan?4000:this instanceof TeamPackets.Intent?6000:this instanceof State?20000:this instanceof Receipt?120000:60000;
             return observedAt()>=0&&observedAt()<=now+NetworkProtocol.CLOCK_SKEW_MS&&now-observedAt()<=ttl;
         }
     }
@@ -85,7 +85,7 @@ public final class ControlPackets {
         values.forEach((key,value)->{Objects.requireNonNull(key);check(value,length);});
         return Map.copyOf(values);
     }
-    public static int type(Packet p) { return p instanceof Contact?14:p instanceof State?3:p instanceof Request?4:p instanceof Execute?5:p instanceof Policy?6:p instanceof Receipt?7:p instanceof Defaults?8:p instanceof TeamPackets.Intent?9:10; }
+    public static int type(Packet p) { return p instanceof OperationsPackets.Snapshot?15:p instanceof OperationsPackets.Obstacle?16:p instanceof OperationsPackets.Ping?17:p instanceof Contact?14:p instanceof State?3:p instanceof Request?4:p instanceof Execute?5:p instanceof Policy?6:p instanceof Receipt?7:p instanceof Defaults?8:p instanceof TeamPackets.Intent?9:10; }
     static void uuid(DataOutputStream out,UUID id)throws IOException { out.writeBoolean(id!=null);if(id!=null){out.writeLong(id.getMostSignificantBits());out.writeLong(id.getLeastSignificantBits());} }
     static UUID uuid(DataInputStream in)throws IOException { return in.readBoolean()?new UUID(in.readLong(),in.readLong()):null; }
     static void text(DataOutputStream out,String value)throws IOException { byte[] bytes=value.getBytes(StandardCharsets.UTF_8);out.writeShort(bytes.length);out.write(bytes); }
@@ -105,7 +105,8 @@ public final class ControlPackets {
     }
     public static void encode(DataOutputStream out,Packet packet)throws IOException {
         out.writeLong(packet.observedAt());
-        if(packet instanceof TeamPackets.Intent||packet instanceof TeamPackets.Plan){TeamPackets.encode(out,packet);}
+        if(packet instanceof OperationsPackets.Snapshot||packet instanceof OperationsPackets.Obstacle||packet instanceof OperationsPackets.Ping)OperationsPackets.encode(out,packet);
+        else if(packet instanceof TeamPackets.Intent||packet instanceof TeamPackets.Plan){TeamPackets.encode(out,packet);}
         else if(packet instanceof Contact p){uuid(out,p.player());text(out,p.playerName());text(out,p.point().dimension());out.writeInt(p.point().x());out.writeInt(p.point().y());out.writeInt(p.point().z());}
         else if(packet instanceof State p){
             text(out,p.status());out.writeFloat(p.health());out.writeByte(p.food());
@@ -125,6 +126,7 @@ public final class ControlPackets {
     public static Packet decode(DataInputStream in,int type,UUID reporter,String name)throws IOException {
         long time=in.readLong();
         return switch(type){
+            case 15,16,17 -> OperationsPackets.decode(in,type,reporter,name,time);
             case 14 -> new Contact(reporter,name,uuid(in),text(in,16),new Endpoint(text(in,128),in.readInt(),in.readInt(),in.readInt()),time);
             case 9,10 -> TeamPackets.decode(in,type,reporter,name,time);
             case 3 -> new State(reporter,name,text(in,512),in.readFloat(),in.readUnsignedByte(),new Endpoint(text(in,128),in.readInt(),in.readInt(),in.readInt()),people(in,128,64),strings(in),people(in,256,16),in.readLong(),time,strings(in),strings(in));
