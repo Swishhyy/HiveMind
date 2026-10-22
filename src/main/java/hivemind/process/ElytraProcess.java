@@ -44,6 +44,7 @@ import hivemind.utils.HiveMindProcessHelper;
 import hivemind.utils.PathingCommandContext;
 import hivemind.utils.bot.FlightPolicy;
 import hivemind.utils.bot.TakeoffState;
+import hivemind.utils.bot.LandingRetry;
 import hivemind.utils.bot.FlightPolicy.Point;
 import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
 import net.minecraft.ChatFormatting;
@@ -102,7 +103,7 @@ public class ElytraProcess extends HiveMindProcessHelper implements IHiveMindPro
         behavior.pathManager.pathToDestination(takeoff==null?ctx.playerFeet():takeoff);
     }
     public boolean retargetFor(IHiveMindProcess owner,BlockPos destination,boolean emergency){
-        if(!isActive()||!isSupportedPos(destination))return false;
+        if(!isActive()||!isSupportedPos(destination)||requestedLanding||goingToLandingSpot||state==State.LANDING)return false;
         boolean previous=emergencyTravel;emergencyTravel=emergency;
         if(shouldLandForSafety()||!behavior.retarget(destination)){emergencyTravel=previous;return false;}
         travelOwner=owner;autonomousTravel=true;requestedLanding=false;goingToLandingSpot=false;landingSpot=null;landingSearchState=null;
@@ -117,10 +118,11 @@ public class ElytraProcess extends HiveMindProcessHelper implements IHiveMindPro
 
     private static final int SHORT_LANDING_COLUMN_HEIGHT = 15;
     private static final int LONG_LANDING_COLUMN_HEIGHT = 39;
-    private static final long LANDING_SEARCH_BUDGET_NANOS = TimeUnit.MILLISECONDS.toNanos(25); // half a tick
+    private static final long LANDING_SEARCH_BUDGET_NANOS = TimeUnit.MILLISECONDS.toNanos(4); // keep terrain scanning below a small fraction of a tick
     private int landingColumnHeight = SHORT_LANDING_COLUMN_HEIGHT;
     private Set<BetterBlockPos> badLandingSpots = new HashSet<>();
     private LandingSearchState landingSearchState;
+    private final LandingRetry landingRetry=new LandingRetry();
 
     @Override
     public void onLostControl() {
@@ -134,6 +136,7 @@ public class ElytraProcess extends HiveMindProcessHelper implements IHiveMindPro
         this.goingToLandingSpot = false;
         this.landingSpot = null;
         this.landingSearchState = null;
+        this.landingRetry.reset();
         this.reachedGoal = false;
         this.goal = null;
         destroyBehaviorAsync();
@@ -174,6 +177,9 @@ public class ElytraProcess extends HiveMindProcessHelper implements IHiveMindPro
 
     @Override
     public PathingCommand onTick(boolean calcFailed, boolean isSafeToCancel) {
+        if(ctx.player()!=null&&LandingRetry.finished(ctx.player().onGround(),requestedLanding,goingToLandingSpot,state==State.LANDING)){
+            onLostControl();return new PathingCommand(null,PathingCommandType.CANCEL_AND_SET_GOAL);
+        }
         if(travelOwner!=null&&!travelOwner.isActive()){
             if(ctx.player()!=null&&ctx.player().isFallFlying())requestedLanding=true;
             else{onLostControl();return null;}
@@ -256,20 +262,20 @@ public class ElytraProcess extends HiveMindProcessHelper implements IHiveMindPro
         boolean safetyLanding = requestedLanding;
         if (ctx.player().isFallFlying() && shouldLandForSafety()) {
             if (HiveMind.settings().elytraAllowEmergencyLand.value) {
-                logDirect("Emergency landing - almost out of elytra durability or fireworks");
+                if(landingRetry.announce(System.currentTimeMillis()))logDirect("Emergency landing - almost out of elytra durability or fireworks");
                 safetyLanding = true;
             } else {
-                logDirect("almost out of elytra durability or fireworks, but I'm going to continue since elytraAllowEmergencyLand is false");
+                if(landingRetry.announce(System.currentTimeMillis()))logDirect("almost out of elytra durability or fireworks, but I'm going to continue since elytraAllowEmergencyLand is false");
             }
         }
         if (ctx.player().isFallFlying() && this.state != State.LANDING && (this.behavior.pathManager.isComplete() || safetyLanding)) {
             final BetterBlockPos last = this.behavior.pathManager.path.getLast();
             if (last != null && (last.distToCenterSqr(ctx.player().position()) < (48 * 48) || safetyLanding) && (!goingToLandingSpot || (safetyLanding && this.landingSpot == null))) {
-                if (this.landingSearchState == null) {
+                if (this.landingRetry.announce(System.currentTimeMillis())) {
                     logDirect("Path complete, searching for safe landing spot...");
                 }
                 BetterBlockPos landingSpot = findSafeLandingSpot(ctx.playerFeet());
-                // if this fails we will just keep orbiting the last node until we run out of rockets or the user intervenes
+                // Incremental searches retain their frontier; exhausted passes retry after a short cooldown.
                 if (landingSpot != null) {
                     logDirect("Found potential landing spot.");
                     this.pathTo0(landingSpot, true);
@@ -302,6 +308,10 @@ public class ElytraProcess extends HiveMindProcessHelper implements IHiveMindPro
             }
         }
 
+        if(goingToLandingSpot&&landingSpot!=null&&ctx.player().isFallFlying()&&state!=State.LANDING){
+            double dx=ctx.player().getX()-(landingSpot.x+.5),dz=ctx.player().getZ()-(landingSpot.z+.5);
+            if(dx*dx+dz*dz<=36&&ctx.player().getY()<=landingSpot.y+6&&ctx.player().getY()>=landingSpot.y-landingColumnHeight+1)state=State.LANDING;
+        }
         if (this.state == State.LANDING) {
             final BetterBlockPos endPos = this.landingSpot != null ? this.landingSpot : behavior.pathManager.path.getLast();
             if (ctx.player().isFallFlying() && endPos != null) {
@@ -435,6 +445,7 @@ public class ElytraProcess extends HiveMindProcessHelper implements IHiveMindPro
         goingToLandingSpot = false;
         this.landingSpot = null;
         this.landingSearchState = null;
+        this.landingRetry.reset();
         this.state = State.FLYING;
     }
 
@@ -683,7 +694,11 @@ public class ElytraProcess extends HiveMindProcessHelper implements IHiveMindPro
     }
 
     private boolean isSafeBlock(Block block) {
-        return block == Blocks.NETHERRACK || block == Blocks.GRAVEL || block == Blocks.SOUL_SAND || block == Blocks.SOUL_SOIL || (block == Blocks.NETHER_BRICKS && HiveMind.settings().elytraAllowLandOnNetherFortress.value)
+        return block instanceof net.minecraft.world.level.block.LeavesBlock
+                || block == Blocks.SNOW_BLOCK || block == Blocks.PACKED_ICE || block == Blocks.BLUE_ICE
+                || block == Blocks.DIRT || block == Blocks.COARSE_DIRT || block == Blocks.ROOTED_DIRT
+                || block == Blocks.ANDESITE || block == Blocks.DIORITE || block == Blocks.GRANITE || block == Blocks.CALCITE || block == Blocks.TUFF
+                || block == Blocks.NETHERRACK || block == Blocks.GRAVEL || block == Blocks.SOUL_SAND || block == Blocks.SOUL_SOIL || (block == Blocks.NETHER_BRICKS && HiveMind.settings().elytraAllowLandOnNetherFortress.value)
                 || block == Blocks.STONE || block == Blocks.DEEPSLATE || block == Blocks.GRASS_BLOCK || block == Blocks.SAND || block == Blocks.RED_SAND || block == Blocks.TERRACOTTA
                 || block == Blocks.SNOW || block == Blocks.ICE || block == Blocks.MYCELIUM || block == Blocks.PODZOL
                 || block == Blocks.DARK_OAK_LEAVES || block == Blocks.JUNGLE_LEAVES
@@ -750,7 +765,7 @@ public class ElytraProcess extends HiveMindProcessHelper implements IHiveMindPro
                     return new BetterBlockPos(mut);
                 }
                 return null;
-            } else if (block != Blocks.AIR) {
+            } else if (!ctx.world().getBlockState(mut).isAir()) {
                 return null;
             }
             mut.set(mut.getX(), mut.getY() - 1, mut.getZ());
@@ -759,17 +774,17 @@ public class ElytraProcess extends HiveMindProcessHelper implements IHiveMindPro
     }
 
     private BetterBlockPos findSafeLandingSpot(BetterBlockPos start) {
+        long now=System.currentTimeMillis();if(!landingRetry.canSearch(now))return null;
         final boolean useHeightmap = ctx.player().getY() > ctx.world().getHeight(Heightmap.Types.MOTION_BLOCKING, start.getX(), start.getZ());
-        if (this.landingSearchState == null || !this.landingSearchState.isCompatible(start, useHeightmap)) {
+        if (this.landingSearchState == null || this.landingSearchState.exhausted || !this.landingSearchState.isCompatible(start, useHeightmap)) {
             this.landingSearchState = new LandingSearchState(start, this.behavior.destination, useHeightmap);
         } else {
             this.landingSearchState.updateStartPosition(start);
         }
 
         BetterBlockPos landingSpot = this.landingSearchState.advance();
-        if (landingSpot != null || this.landingSearchState.exhausted) {
-            this.landingSearchState = null;
-        }
+        if(landingSpot!=null)this.landingSearchState=null;
+        else if(this.landingSearchState.exhausted)this.landingRetry.exhausted(now);
         return landingSpot;
     }
 
@@ -791,7 +806,10 @@ public class ElytraProcess extends HiveMindProcessHelper implements IHiveMindPro
 
             final BetterBlockPos target = isChunkLoaded(dest) ? dest : origin;
             this.queue = new PriorityQueue<>(Comparator.<BetterBlockPos>comparingInt(pos -> (pos.x - target.x) * (pos.x - target.x) + (pos.z - target.z) * (pos.z - target.z)).thenComparingInt(pos -> -pos.y));
-            this.queue.add(target);
+            // A destination can be inside terrain. Always seed the actual player air space too.
+            if(this.visited.add(origin))this.queue.add(origin);
+            if(this.visited.add(origin.above()))this.queue.add(origin.above());
+            if(this.visited.add(target))this.queue.add(target);
         }
 
         private boolean isCompatible(BetterBlockPos start, boolean useHeightmap) {
@@ -808,11 +826,12 @@ public class ElytraProcess extends HiveMindProcessHelper implements IHiveMindPro
         private BetterBlockPos advance() {
             final long deadline = System.nanoTime() + LANDING_SEARCH_BUDGET_NANOS;
             while (!this.queue.isEmpty()) {
+                if(this.visited.size()>32768){this.exhausted=true;return null;}
                 if (System.nanoTime() >= deadline) {
                     return null;
                 }
                 BetterBlockPos qPos = this.queue.poll();
-                if (!isChunkLoaded(qPos)) {
+                if (this.origin.distanceSq(qPos)>128*128||!isChunkLoaded(qPos)) {
                     continue;
                 }
                 BetterBlockPos landing = this.useHeightmap ? this.advanceHeightmap(qPos) : this.advanceUnderground(qPos);
@@ -825,7 +844,7 @@ public class ElytraProcess extends HiveMindProcessHelper implements IHiveMindPro
         }
 
         private BetterBlockPos advanceUnderground(BetterBlockPos pos) {
-            if (isInBounds(ctx.world(), pos) && ctx.world().getBlockState(pos).getBlock() == Blocks.AIR) {
+            if (isInBounds(ctx.world(), pos) && ctx.world().getBlockState(pos).isAir()) {
                 BetterBlockPos actualLandingSpot = checkLandingSpot(pos, this.checkedPositions);
                 if (actualLandingSpot != null) {
                     landingColumnHeight = SHORT_LANDING_COLUMN_HEIGHT;
@@ -846,11 +865,11 @@ public class ElytraProcess extends HiveMindProcessHelper implements IHiveMindPro
         private BetterBlockPos advanceHeightmap(BetterBlockPos qPos) {
             int height = ctx.world().getHeight(Heightmap.Types.MOTION_BLOCKING, qPos.getX(), qPos.getZ());
             BetterBlockPos pos = new BetterBlockPos(qPos.getX(), height + 1, qPos.getZ());
-            if (isInBounds(ctx.world(), pos) && ctx.world().getBlockState(pos).getBlock() == Blocks.AIR) {
+            if (isInBounds(ctx.world(), pos) && ctx.world().getBlockState(pos).isAir()) {
                 BetterBlockPos actualLandingSpot = checkLandingSpot(pos, this.checkedPositions);
                 if (actualLandingSpot != null) {
                     landingColumnHeight = ctx.playerFeet().y - actualLandingSpot.y < LONG_LANDING_COLUMN_HEIGHT ? SHORT_LANDING_COLUMN_HEIGHT : LONG_LANDING_COLUMN_HEIGHT;
-                    if (hasAirBubble(actualLandingSpot.above(landingColumnHeight)) && !badLandingSpots.contains(actualLandingSpot.above(landingColumnHeight))) {
+                    if (isColumnAir(actualLandingSpot,landingColumnHeight) && hasAirBubble(actualLandingSpot.above(landingColumnHeight)) && !badLandingSpots.contains(actualLandingSpot.above(landingColumnHeight))) {
                         return actualLandingSpot.above(landingColumnHeight);
                     }
                 }

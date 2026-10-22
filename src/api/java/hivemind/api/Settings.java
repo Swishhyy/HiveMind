@@ -405,7 +405,7 @@ public final class Settings {
     /** Half-angle of another player's possible field of view used for that crouch decision; bounded to 30-90 degrees. */
     public final Setting<Integer> stalkSneakViewAngle = new Setting<>(80);
 
-    /** Drink a hotbar invisibility potion before an ambush approach and before re-approaching after being spotted. */
+    /** Drink a hotbar invisibility potion during stealth stalking; direct hunts do not wait for invisibility. */
     public final Setting<Boolean> stalkUseInvisibility = new Setting<>(true);
     public final Setting<Integer> stalkVerticalRange = new Setting<>(5);
     public final Setting<Integer> stalkViewConeDegrees = new Setting<>(18);
@@ -463,7 +463,7 @@ public final class Settings {
     public final Setting<Long> networkSightingTTLMS = new Setting<>(120000L);
     public final Setting<Boolean> networkRenderSightings = new Setting<>(false);
 
-    /** Explicit named-player ambush uses normal client attacks; all timers and attempts are bounded. */
+    /** Explicit named-player pursuit uses normal client attacks; recovery and attack timers remain bounded. */
     public final Setting<Boolean> killAllowTrustedTargets = new Setting<>(false);
     public final Setting<Integer> killMinimumHealth = new Setting<>(16);
     public final Setting<Integer> killMaxAttempts = new Setting<>(3);

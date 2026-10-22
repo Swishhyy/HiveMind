@@ -46,7 +46,7 @@ public final class StalkCommand extends Command {
             if(kill&&!args.hasAny())throw new IllegalStateException("Use kill <player>, status, or stop");
             String first=args.hasAny()?args.getString():"random";String action=first.toLowerCase(Locale.ROOT);
             if(action.equals("status")) { args.requireMax(0);report(process.status());return; }
-            if(action.equals("stop")) { args.requireMax(0);bot().getAutonomy().clear();bot().getFlight().cancel();process.onLostControl();bot().getPathingBehavior().softCancelIfSafe();report("Tracking and ambush order removed");return; }
+            if(action.equals("stop")) { args.requireMax(0);bot().getAutonomy().clear();bot().getFlight().cancel();process.onLostControl();bot().getPathingBehavior().softCancelIfSafe();report("Tracking and hunt order removed");return; }
             if(kill) { CombatStyle style=CombatStyle.parse(args.hasAny()?args.getString():HiveMind.settings().killCombatStyle.value);args.requireMax(0);process.startHunt(first,style);return; }
             switch(action) {
                 case "sightings","history" -> {
@@ -87,7 +87,7 @@ public final class StalkCommand extends Command {
         return choices.append(ctx.minecraft().getConnection().getOnlinePlayers().stream().map(info->info.getProfile().name()))
                 .filterPrefix(args.getString()).stream();
     }
-    @Override public String getShortDesc() { return "Stealth stalking, private sighting memory, and an explicit named-player ambush"; }
+    @Override public String getShortDesc() { return "Stealth stalking, private sighting memory, and direct named-player pursuit"; }
     @Override public List<String> getLongDesc() {
         return List.of("stalk <player|random> - Choose a concealed line-of-sight viewing point about 40 blocks away and hold it.",
                 "Small target movements, head turns, and brief obstructions do not cause constant repositioning.",
@@ -98,7 +98,7 @@ public final class StalkCommand extends Command {
                 "stalk check <player> - Check saved places, including when that player is offline; no global coordinates are revealed.",
                 "stalk base <player> [x y z] - Locally confirm a base at supplied or previously observed coordinates.",
                 "stalk forget <player|all>; stalk report <trusted-player|off|status> - Local memory/report configuration.",
-                "kill <player> [auto|melee|crystal|anchor] - Save a named order, wait if offline, and engage when found and supplied.",
+                "kill <player> [auto|melee|crystal|anchor] - Save a named order, wait if offline, then pursue immediately when a contact is found; no ambush, facing or invisibility wait.",
                 "An engaged fight only retreats on low health or a second nearby player; a totem is kept in the offhand.",
                 "Crystal uses obsidian/bedrock bases and real end crystals; anchor places, charges, and detonates outside respawn dimensions.",
                 "Orders survive death/disconnect/restart by default; stop or replacement work removes them. Elytra can carry long search legs.",
