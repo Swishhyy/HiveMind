@@ -36,7 +36,10 @@ configurations {
     runtimeClasspath.extendsFrom common
 }
 
-repositories { maven { url = "https://maven.terraformersmc.com/releases/" } }
+repositories { maven {
+    url = "https://maven.terraformersmc.com/releases/"
+    content { includeGroup "com.terraformersmc" }
+} }
 
 dependencies {
     compileOnly("com.terraformersmc:modmenu:21.0.0") { transitive = false }
