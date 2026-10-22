@@ -9,7 +9,18 @@ public final class MapPlayerChecks {
     private static void check(boolean yes,String why){if(!yes)throw new AssertionError(why);}
     private static void rejects(Runnable r){try{r.run();throw new AssertionError("Invalid order accepted");}catch(IllegalArgumentException expected){}}
     public static void main(String[] args)throws Exception{runAll();System.out.println("Map/player checks passed: finite dimension-pinned surveys, coordinate bounds, persistent manual role, command guards and transient contact codec/expiry");}
+    private static ControlPackets.State node(UUID id,String name,String role,boolean online,long now){return new ControlPackets.State(id,name,"Ready",20,20,new Endpoint("minecraft:overworld",0,64,0),Map.of(),Map.of(),Map.of(),0,now,Map.of(),Map.of("role",role,"connected",""+online));}
     public static void runAll()throws Exception{
+        long sample=100000;UUID mike=UUID.randomUUID();ControlPackets.State bot=node(mike,"SeizureMike","bot",true,sample),manual=node(UUID.randomUUID(),"Dylan","player",true,sample),offline=node(UUID.randomUUID(),"Offline","bot",false,sample),stale=node(UUID.randomUUID(),"Old","bot",true,sample-11000);
+        var nodes=List.of(bot,manual,offline,stale);check(PlayerBotOrders.targets(nodes,"all",sample).equals(List.of(bot)),"Player commands must skip manual clients, offline clients and stale telemetry");
+        check(PlayerBotOrders.targets(nodes,"seizuremike",sample).equals(List.of(bot))&&PlayerBotOrders.targets(nodes,mike.toString(),sample).equals(List.of(bot)),"Select an exact live bot by name or UUID");rejects(()->PlayerBotOrders.targets(nodes,"Dylan",sample));rejects(()->PlayerBotOrders.targets(nodes,"Missing",sample));
+        rejects(()->PlayerBotOrders.targets(List.of(bot,node(UUID.randomUUID(),"SeizureMike","bot",true,sample)),"SeizureMike",sample));
+        var assigned=new Endpoint("minecraft:the_nether",-101,70,202);check(PlayerBotOrders.base(assigned,16).equals("botbase set minecraft:the_nether -101 70 202 16"),"A base command must pin the issuing player's coordinates and dimension, not each receiving bot's feet");
+        check(PlayerBotOrders.chest("remove",assigned,null).equals("deposit point remove minecraft:the_nether -101 70 202"),"Removing shared storage must use its endpoint, not potentially different per-bot storage IDs");
+        check(PlayerBotOrders.chest("add",assigned,"supplies").endsWith("202 supplies"),"Supply rules must travel with the selected endpoint");rejects(()->PlayerBotOrders.base(assigned,33));rejects(()->PlayerBotOrders.chest("clear",assigned,null));rejects(()->PlayerBotOrders.chest("remove",assigned,"supplies"));rejects(()->PlayerBotOrders.chest("add",assigned,"items"));
+        check(TrustedControl.command("#"+PlayerBotOrders.base(assigned,16))!=null&&TrustedControl.command("#"+PlayerBotOrders.chest("add",assigned,"supplies"))!=null,"Generated endpoint commands must pass host validation");
+        check(ClientRole.localAllowed("bots")&&!ClientRole.localAllowed("storagepoint")&&!ClientRole.remoteAllowed("bots")&&TrustedControl.command("#bots all base set")==null,"Player configuration may route outward, never enable self automation or recursively fan out remote commands");
+
         for(int radius:new int[]{32,64,256,2048}){
             var order=new MapOrder("explore","minecraft:overworld",-100,150,radius);var points=order.waypoints(128);
             check(points.get(0).equals(new SurveyPolicy.Offset(-100,150)),"Survey must start at requested center");

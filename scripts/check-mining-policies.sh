@@ -25,6 +25,7 @@ fi
     src/test/java/hivemind/utils/bot/CombatSupplyChecks.java \
     src/main/java/hivemind/utils/bot/MapOrder.java \
     src/main/java/hivemind/utils/network/ClientRole.java \
+    src/main/java/hivemind/utils/network/PlayerBotOrders.java \
     src/test/java/hivemind/utils/network/OperationsChecks.java \
     src/main/java/hivemind/utils/network/AssistancePolicy.java \
     src/main/java/hivemind/utils/network/SupplyReserves.java \

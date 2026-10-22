@@ -141,7 +141,7 @@ Right-click terrain on the atlas, select an online bot in that dimension and cho
 
 Manual equivalents: `#scout go minecraft:overworld 100 -200`, `#scout explore minecraft:overworld 100 -200 256`, and `#scout status` / `#scout stop`.
 
-### Reliable operations and itineraries (0.1.0.8)
+### Reliable operations and itineraries (0.1.0.9)
 
 The controller's Commands page explains each client's **Task**, **Blocker**, **Next** action and flight decision. It also shows round-trip latency, estimated bytes sent/received, queued frames and recovery count. Stale reports are labeled. Traffic totals refer to the current connection, not lifetime usage.
 
@@ -172,3 +172,21 @@ Use `#botbase status`, `#botbase scan`, or `#botbase clear`. Clearing the anchor
 Death recovery compares inventory after respawn rather than assuming all items dropped. `#recover status` shows pending, retained, lost, partial or empty observations; `#recover now` targets missing items only. Auto requires the server's full player inventory sync and a settling period. Set `botDeathInventoryMode` to `auto` (default), `keep`, or `drop` under controller **Companions**, or through `#set`, for unusual server plugins. Observations are per server/save and reassessed after each death; they do not claim access to a remote gamerule.
 
 Separate client editions: the standard bot filename remains `hivemind-<version>.jar`, with the existing `hivemind-26.3-update.properties` update URL. The locked manual player edition is `hivemind-player-<version>.jar`, using `hivemind-player-26.3-update.properties`. Both support the same first-join automatic-update consent and `#update` controls. Downloads and install plans verify the edition as well as the checksum; updates replace the installed JAR in place and preserve its filename. Old standard JARs continue updating through the existing channel, including saved manual-role configurations. To adopt the locked player package, manually replace the old mod once, then its own updater handles later releases. Install only one edition per instance. The controller is still a separate application.
+
+### Configure bots from the player client
+
+Connect to the same controller/network, then use these on your manual player account. Replace `all` with a bot name or its UUID from `#bots list` to target one bot.
+
+```text
+#bots list
+#bots all base set
+#bots SeizureMike base status
+#bots all chest add supplies
+#bots all chest list
+#bots all chest remove
+#bots SeizureMike base resupply
+```
+
+`base set [radius]` uses **your** feet, with a default radius of 16 (4–32). `chest add [rule]` and `chest remove` use **your** selected supported chest or barrel; copper variants are supported. Rules: any, ores, building, junk, supplies, disabled. Omitting the rule preserves an existing container's rule. Removals match location instead of each bot's storage ID. Both accept explicit `<dimension> <x> <y> <z>` coordinates; `base set` optionally takes a radius afterward. `base status/scan/clear/resupply` and `chest list [page]` also work. Clearing a base keeps its registered chests; remove those individually.
+
+Bot responses appear in your chat. Only fresh online autonomous bots are selected, and offline commands are not queued for later. Bots reject edits during an active supply trip. Loaded containers are checked immediately; unloaded locations are verified when a bot arrives. These commands configure the bots without enabling automation on your character. Update **both** the issuing player client and receiving bots to 0.1.0.9 or newer.

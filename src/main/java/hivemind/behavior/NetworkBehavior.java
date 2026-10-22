@@ -134,6 +134,8 @@ public final class NetworkBehavior extends Behavior {
         String command="#assist "+mode+" "+ctx.player().getGameProfile().name()+" "+point.dimension()+" "+point.x()+" "+point.y()+" "+point.z()+(mode.equals("bring")?" "+item+" "+quantity:"");
         if(!controls.enqueue(new WebControlAction(UUID.randomUUID(),target,ControlPackets.Action.COMMAND,"",command,now)))throw new IllegalStateException("Command queue is busy; retry shortly");
     }
+    public String botCommandList(){ensure();if(network==null||!network.connected())throw new IllegalStateException("Connect this client to the bot network first");return controls.botCommandList();}
+    public String requestBotCommand(String selector,String command){ensure();if(network==null||!network.connected())throw new IllegalStateException("Connect this client to the bot network first");return controls.requestBotCommand(selector,command);}
     public boolean controllerConnected(){return network!=null&&!network.isHost()&&network.connected();}
     private void saveLink(){
         if(config==null||root==null||rememberedIdentity==null||config.options().mode()!=NetworkConfig.Mode.JOIN)return;
