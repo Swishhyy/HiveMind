@@ -66,12 +66,16 @@ final class NetworkControls {
     String botCommandList(){var nodes=PlayerBotOrders.targets(states(System.currentTimeMillis()),"all",System.currentTimeMillis());return nodes.isEmpty()?"No fresh online bots reported yet":"Online bots: "+String.join(", ",nodes.stream().map(s->s.reporterName()+" ("+s.reporter()+")").toList());}
     String requestBotCommand(String selector,String command){
         long now=System.currentTimeMillis();var nodes=PlayerBotOrders.targets(states(now),selector,now);if(nodes.isEmpty())throw new IllegalStateException("No fresh online autonomous bots; wait for telemetry or use #bots list");
-        command=ControlRules.command(command);UUID id=UUID.randomUUID(),target=selector.equalsIgnoreCase("all")?null:nodes.get(0).reporter();
-        chatRequests.values().removeIf(time->now-time>120000);if(chatRequests.size()>=64)throw new IllegalStateException("Too many pending bot commands");chatRequests.put(id,now);
-        if(!enqueue(new WebControlAction(id,target,Action.COMMAND,"",command,now))){chatRequests.remove(id);throw new IllegalStateException("Command queue is busy");}
+        command=ControlRules.command(command);chatRequests.values().removeIf(time->now-time>120000);
+        if(chatRequests.size()+nodes.size()>64)throw new IllegalStateException("Too many pending bot commands");
+        synchronized(actions){
+            if(closed||actions.remainingCapacity()<nodes.size())throw new IllegalStateException("Command queue is busy");
+            // Pin the selected live accounts now: a later join must not receive a team configuration edit.
+            for(State node:nodes){UUID id=UUID.randomUUID();chatRequests.put(id,now);actions.add(new WebControlAction(id,node.reporter(),Action.COMMAND,"",command,now));}
+        }
         return "Sent #"+command+" to "+String.join(", ",nodes.stream().map(State::reporterName).toList())+"; waiting for bot confirmations";
     }
-    boolean enqueue(WebControlAction action){return !closed&&actions.offer(action);}
+    boolean enqueue(WebControlAction action){synchronized(actions){return !closed&&actions.offer(action);}}
     private Identity who(){return parent.localIdentity();}
     private boolean authority(){return parent.config().options().mode()!=NetworkConfig.Mode.JOIN;}
     private void publish(Packet packet){BotNetwork wire=parent.transport();if(wire!=null)wire.publish(packet);}

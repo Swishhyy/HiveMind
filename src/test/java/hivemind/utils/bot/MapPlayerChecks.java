@@ -9,7 +9,7 @@ public final class MapPlayerChecks {
     private static void check(boolean yes,String why){if(!yes)throw new AssertionError(why);}
     private static void rejects(Runnable r){try{r.run();throw new AssertionError("Invalid order accepted");}catch(IllegalArgumentException expected){}}
     public static void main(String[] args)throws Exception{runAll();System.out.println("Map/player checks passed: finite dimension-pinned surveys, coordinate bounds, persistent manual role, command guards and transient contact codec/expiry");}
-    private static ControlPackets.State node(UUID id,String name,String role,boolean online,long now){return new ControlPackets.State(id,name,"Ready",20,20,new Endpoint("minecraft:overworld",0,64,0),Map.of(),Map.of(),Map.of(),0,now,Map.of(),Map.of("role",role,"online",""+online));}
+    private static ControlPackets.State node(UUID id,String name,String role,boolean online,long now){return new ControlPackets.State(id,name,"Ready",20,20,new Endpoint("minecraft:overworld",0,64,0),Map.of(),Map.of(),Map.of(),0,now,Map.of(),Map.of("role",role,"connected",""+online));}
     public static void runAll()throws Exception{
         long sample=100000;UUID mike=UUID.randomUUID();ControlPackets.State bot=node(mike,"SeizureMike","bot",true,sample),manual=node(UUID.randomUUID(),"Dylan","player",true,sample),offline=node(UUID.randomUUID(),"Offline","bot",false,sample),stale=node(UUID.randomUUID(),"Old","bot",true,sample-11000);
         var nodes=List.of(bot,manual,offline,stale);check(PlayerBotOrders.targets(nodes,"all",sample).equals(List.of(bot)),"Player commands must skip manual clients, offline clients and stale telemetry");

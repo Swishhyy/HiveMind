@@ -8,7 +8,7 @@ import java.util.*;
 public final class PlayerBotOrders {
     private PlayerBotOrders(){}
     public static List<State> targets(Collection<State> states,String selector,long now){
-        var live=states.stream().filter(s->s.valid(now)&&now-s.observedAt()<=10000&&!ClientRole.player(s.session())&&!s.session().getOrDefault("online","true").equals("false")).toList();
+        var live=states.stream().filter(s->s.valid(now)&&now-s.observedAt()<=10000&&!ClientRole.player(s.session())&&!s.session().getOrDefault("connected","false").equals("false")).toList();
         if(selector.equalsIgnoreCase("all"))return live;
         var matches=live.stream().filter(s->s.reporterName().equalsIgnoreCase(selector)||s.reporter().toString().equalsIgnoreCase(selector)).toList();
         if(matches.isEmpty())throw new IllegalArgumentException("No fresh online bot named "+selector+"; use #bots list");
