@@ -5,7 +5,7 @@ import java.util.List;
 
 /** Flight decisions use observed positions; they never invent an unloaded player's location. */
 public final class FlightPolicy {
-    public enum Mode { TRAVEL, ESCAPE, PURSUIT }
+    public enum Mode { TRAVEL, ESCAPE, PURSUIT, SURVEY }
     public record Point(double x, double y, double z) {
         public double distanceSquared(Point other) {
             return Math.pow(x-other.x,2)+Math.pow(y-other.y,2)+Math.pow(z-other.z,2);

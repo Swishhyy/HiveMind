@@ -39,12 +39,15 @@ public final class NetworkSettings {
     }
     private static final Map<String, Spec> SPECS = new LinkedHashMap<>();
     static {
-        bool("Autonomy","botAutoRespawn botPersistentTracking botPeriodicReports botReportAllTrusted botUseElytra botElytraCombatEscape botElytraPursuit");
+        bool("Autonomy","botAutoRespawn botPersistentTracking botPeriodicReports botReportAllTrusted botUseElytra botElytraCombatEscape botElytraPursuit botAerialSearch botEntityAwareness");
         number("Autonomy","long",1000,30000,"botRespawnDelayMS");
         number("Autonomy","long",30000,3600000,"botReportIntervalMS");
         number("Autonomy","integer",96,8192,"botFlightMinimumDistance botFlightRoamDistance");
         number("Autonomy","integer",2,64,"botFlightRocketReserve");
         number("Autonomy","integer",512,8192,"botFlightEscapeDistance");
+        number("Autonomy","integer",64,512,"botFlightSurveySpacing");
+        number("Autonomy","integer",16,128,"botFlightSurveyHeight");
+        number("Autonomy","integer",64,512,"botEntityAwarenessRange");
         bool("Movement", "allowBreak allowPlace allowSprint allowParkour allowWaterBucketFall");
         number("Movement","integer",3,1024,"maxFallHeightBucket");
         number("Stalking","integer",0,10000,"stalkTerrainPenalty");

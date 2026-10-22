@@ -223,7 +223,8 @@ public final class ConflictProcess extends BaritoneProcessHelper implements IBeh
 
     private PathingCommand tryFightMob(boolean safe){
         if(!Baritone.settings().botFightHostileMobs.value||playerThreat()||baritone.getSculkProcess().isActive()||baritone.getFlight().escaping())return null;
-        var candidates=ctx.entitiesStream().filter(entity->entity instanceof Mob&&entity.isAlive()&&threats.containsKey(entity.getUUID())
+        java.util.stream.Stream<? extends Entity> nearby=Baritone.settings().botEntityAwareness.value?baritone.getAwareness().mobs().stream():ctx.entitiesStream();
+        var candidates=nearby.filter(entity->entity instanceof Mob&&entity.isAlive()&&threats.containsKey(entity.getUUID())
                 &&entity.distanceToSqr(ctx.player())<=20*20).map(entity->(Mob)entity).toList();
         boolean dangerous=candidates.stream().anyMatch(entity->isType(entity,"warden")||isType(entity,"creeper")||isType(entity,"wither")||isType(entity,"ender_dragon"));
         if(safe&&MeleeCombat.prepare(ctx,false))return new PathingCommand(null,PathingCommandType.REQUEST_PAUSE);

@@ -20,6 +20,7 @@ package baritone.utils.mining;
 import org.junit.Test;
 
 public final class MiningPoliciesTest {
+    @Test public void surveysExpandAndResumeWithoutRepeatingOldAnchors() throws Exception {baritone.utils.bot.SurveyChecks.runAll();}
     @Test public void flightCombatAndExplosiveCadenceRespondToLiveConditions(){baritone.utils.bot.FlightCombatChecks.runAll();}
     @Test public void autonomousOrdersMarkersAndReportsSurviveOnlyIntendedInterruptions() throws Exception {baritone.utils.bot.AutonomyChecks.runAll();}
     @Test

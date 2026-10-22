@@ -121,6 +121,7 @@ public final class NetworkBehavior extends Behavior {
     public NetworkTeamwork team(){return team;}
     public boolean isTeammate(UUID id){return team.ally(id);}
     public boolean visited(net.minecraft.core.BlockPos point){return atlas!=null&&atlas.visited(MiningRouteAccess.dimension(ctx),Math.floorDiv(point.getX(),16),Math.floorDiv(point.getZ(),16));}
+    public boolean mapped(net.minecraft.core.BlockPos point){return visited(point)||terrain!=null&&terrain.tile(MiningRouteAccess.dimension(ctx),Math.floorDiv(point.getX(),16),Math.floorDiv(point.getZ(),16))!=null;}
     public List<Sighting> sightings(String name) {
         return marks.all(System.currentTimeMillis(), ttl()).stream().filter(s -> name == null || s.playerName().equalsIgnoreCase(name)).limit(32).toList();
     }
@@ -183,8 +184,9 @@ public final class NetworkBehavior extends Behavior {
                 if (message instanceof Sighting sighting && !sighting.reporter().equals(ctx.player().getUUID())) marks.accept(sighting, now, ttl());
             }
             team.tick(now);controls.tick(now);
-            if(ctx.player().isAlive()&&(network!=null||viewer!=null||baritone.getRoamProcess().isActive()))sampler.tick(now);
-            if ((network != null || viewer != null || baritone.getRoamProcess().isActive()) && ctx.player().isAlive() && now - lastScan >= 1000) { scan(now); lastScan = now; }
+            boolean scouting=network!=null||viewer!=null||baritone.getRoamProcess().isActive()||baritone.getStalkProcess().isActive()||baritone.getFlight().flying();
+            if(ctx.player().isAlive()&&scouting)sampler.tick(now);
+            if (scouting && ctx.player().isAlive() && now - lastScan >= 1000) { scan(now); lastScan = now; }
             if (viewer != null && now - lastPage >= 1000) { viewer.snapshot(atlas.json(now, network == null ? "Local observations · network off" : network.status(), MiningRouteAccess.dimension(ctx), peers()));viewer.controls(controls.json(now));lastPage = now; }
             if (now - lastSave >= 30000) { save(atlas);saveTerrain(); lastSave = now; }
             if (storageError != null) { String problem = storageError; storageError = null; throw new IllegalStateException(problem); }

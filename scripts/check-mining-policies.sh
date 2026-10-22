@@ -15,6 +15,9 @@ fi
     src/main/java/baritone/utils/bot/TrustedControl.java \
     src/main/java/baritone/utils/bot/AutonomyPolicy.java \
     src/main/java/baritone/utils/bot/FlightPolicy.java \
+    src/main/java/baritone/utils/bot/SurveyPolicy.java \
+    src/main/java/baritone/utils/bot/SurveyRoute.java \
+    src/test/java/baritone/utils/bot/SurveyChecks.java \
     src/main/java/baritone/utils/social/CombatPolicy.java \
     src/main/java/baritone/utils/social/CombatCadence.java \
     src/test/java/baritone/utils/bot/FlightCombatChecks.java \
@@ -79,3 +82,4 @@ java -cp "$task_classes:src/main/resources" baritone.utils.network.TeamChecks
 
 java -cp "$task_classes:src/main/resources" baritone.utils.bot.AutonomyChecks
 java -cp "$task_classes:src/main/resources" baritone.utils.bot.FlightCombatChecks
+java -cp "$task_classes:src/main/resources" baritone.utils.bot.SurveyChecks

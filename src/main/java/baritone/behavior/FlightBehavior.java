@@ -24,6 +24,7 @@ import baritone.api.process.IBaritoneProcess;
 import baritone.process.ElytraProcess;
 import baritone.process.elytra.ElytraBehavior;
 import baritone.utils.bot.FlightPolicy;
+import baritone.utils.bot.AerialSurvey;
 import baritone.utils.bot.FlightPolicy.Mode;
 import baritone.utils.bot.FlightPolicy.Point;
 import net.minecraft.core.BlockPos;
@@ -45,6 +46,7 @@ public final class FlightBehavior extends Behavior {
     private Point lastTarget,lastDestination;
     private List<BlockPos> threats=List.of();
     private BlockPos takeoff;
+    private BlockPos nextSurveyPoint;
     private boolean airborne;
     private Object world;
     private final Map<BlockPos,Long> blockedTakeoffs=new HashMap<>();
@@ -68,6 +70,7 @@ public final class FlightBehavior extends Behavior {
         return FlightPolicy.supplied(requested,durability,rockets(),Baritone.settings().botFlightRocketReserve.value,Baritone.settings().elytraMinFireworksBeforeLanding.value,Baritone.settings().elytraMinimumDurability.value);
     }
     public boolean capable(){return supplied(Mode.TRAVEL);}
+    public boolean survey(IBaritoneProcess task,BlockPos point){return start(task,point,Mode.SURVEY);}
     public boolean travel(IBaritoneProcess task,BlockPos point){
         if(flying())return owner==task;
         if(ctx.player()==null||Math.hypot(point.getX()-ctx.player().getX(),point.getZ()-ctx.player().getZ())<Math.max(96,Baritone.settings().botFlightMinimumDistance.value))return false;
@@ -75,7 +78,7 @@ public final class FlightBehavior extends Behavior {
     }
     public boolean pursue(IBaritoneProcess task,Player target){
         if(!FlightPolicy.shouldPursue(baritone.getStalkProcess().hunting(),Baritone.settings().botElytraPursuit.value,target.isFallFlying(),
-                Math.hypot(target.getX()-ctx.player().getX(),target.getZ()-ctx.player().getZ()),target.getY()-ctx.player().getY())||!ctx.player().hasLineOfSight(target))return false;
+                Math.hypot(target.getX()-ctx.player().getX(),target.getZ()-ctx.player().getZ()),target.getY()-ctx.player().getY())||baritone.getAwareness().player(target.getUUID())==null)return false;
         Point next=observe(target);boolean accepted=start(task,position(next),Mode.PURSUIT);
         if(accepted)targetId=target.getUUID();return accepted;
     }
@@ -101,8 +104,9 @@ public final class FlightBehavior extends Behavior {
         if(flight.isActive()){
             if(requested!=Mode.ESCAPE&&owner!=task)return false;
             if(owner==task&&mode==requested)return true;
+            if(requested!=Mode.PURSUIT)destination=cruiseDestination(destination,requested);
             if(!flight.retargetFor(task,destination,requested==Mode.ESCAPE))return false;
-            owner=task;mode=requested;started=now;lastDestination=point(destination);lastReplan=now;reason=label(requested,destination);return true;
+            owner=task;mode=requested;nextSurveyPoint=null;started=now;lastDestination=point(destination);lastReplan=now;reason=label(requested,destination);return true;
         }
         if(!supplied(requested)||ctx.minecraft().gui.screen()!=null||ctx.player().isInWater()||ctx.player().isInLava()
                 ||ctx.player().containerMenu!=ctx.player().inventoryMenu||!ctx.player().inventoryMenu.getCarried().isEmpty())return false;
@@ -115,11 +119,20 @@ public final class FlightBehavior extends Behavior {
             if(requested!=Mode.PURSUIT)destination=cruiseDestination(destination,requested);
             flight.travelFor(task,new baritone.api.pathing.goals.GoalBlock(destination),launch,requested==Mode.ESCAPE);
             owner=task;mode=requested;started=lastReplan=now;world=ctx.world();takeoff=launch;airborne=ctx.player().isFallFlying();
+            nextSurveyPoint=null;
             lastDestination=point(destination);reason=label(requested,destination);return true;
         }catch(RuntimeException e){reason="Flight retry: "+e.getMessage();backoff(now,requested);return false;}
     }
-    private String label(Mode requested,BlockPos pos){return (requested==Mode.ESCAPE?"Escaping by elytra":requested==Mode.PURSUIT?"Pursuing by elytra":"Flying")+" toward "+pos.getX()+" "+pos.getZ();}
+    private String label(Mode requested,BlockPos pos){return (requested==Mode.ESCAPE?"Escaping by elytra":requested==Mode.PURSUIT?"Pursuing by elytra":requested==Mode.SURVEY?"Surveying by elytra":"Flying")+" toward "+pos.getX()+" "+pos.getZ();}
     private BlockPos cruiseDestination(BlockPos destination,Mode requested){
+        if(requested==Mode.SURVEY){
+            BlockPos loaded=ctx.world().hasChunkAt(destination)?destination:ctx.playerFeet();
+            int surface=ctx.world().getHeight(Heightmap.Types.MOTION_BLOCKING,loaded.getX(),loaded.getZ());
+            int height=Math.max(16,Math.min(128,Baritone.settings().botFlightSurveyHeight.value));
+            int y=surface<=ctx.world().getMinY()+1?Math.max(64,ctx.playerFeet().getY()):surface+height;
+            if(ctx.world().dimension()==Level.NETHER&&ctx.player().getY()<128)y=Math.min(112,y);
+            return new BlockPos(destination.getX(),Math.min(ctx.world().getMaxY()-8,y),destination.getZ());
+        }
         int y=Math.max(destination.getY()+16,ctx.playerFeet().getY()+(requested==Mode.ESCAPE?32:flying()?0:16));
         if(ctx.world().dimension()==Level.NETHER&&ctx.player().getY()<128)y=Math.min(112,y);
         else if(ctx.world().hasChunkAt(destination))y=Math.max(y,ctx.world().getHeight(Heightmap.Types.MOTION_BLOCKING,destination.getX(),destination.getZ())+16);
@@ -214,16 +227,35 @@ public final class FlightBehavior extends Behavior {
                 return;
             }
             UUID watched=owner==baritone.getStalkProcess()?baritone.getStalkProcess().target():targetId;
-            Player target=watched==null?null:ctx.world().players().stream().filter(p->p.getUUID().equals(watched)&&p.isAlive()&&!p.isSpectator()&&ctx.player().hasLineOfSight(p)).findFirst().orElse(null);
+            if(owner==baritone.getStalkProcess()&&watched!=null&&ctx.minecraft().getConnection()!=null&&ctx.minecraft().getConnection().getPlayerInfo(watched)==null){
+                reason="Target offline; landing to wait near the last known area";flight.requestLanding();return;
+            }
+            Player target=baritone.getAwareness().player(watched);
             if(owner==baritone.getStalkProcess()&&baritone.getStalkProcess().hunting()&&watched!=null&&(baritone.getNetwork().isTeammate(watched)
                     ||!Baritone.settings().killAllowTrustedTargets.value&&baritone.getBotControl().isTrusted(watched)||target!=null&&target.isCreative())){
                 reason="Landing: target is no longer an eligible opponent";flight.requestLanding();return;
+            }
+            if(target!=null&&owner==baritone.getStalkProcess())baritone.getStalkProcess().trackContact(target);
+            if(mode==Mode.SURVEY){
+                if(target!=null){
+                    baritone.getStalkProcess().surveyContact(target);nextSurveyPoint=null;
+                    mode=baritone.getStalkProcess().hunting()&&target.isFallFlying()&&Baritone.settings().botElytraPursuit.value?Mode.PURSUIT:Mode.TRAVEL;
+                    targetId=target.getUUID();observe(target);
+                }else{
+                    if(owner==baritone.getStalkProcess()&&!Baritone.settings().botAerialSearch.value){flight.requestLanding();return;}
+                    if(owner instanceof AerialSurvey survey&&lastDestination!=null&&Math.hypot(lastDestination.x()-ctx.player().getX(),lastDestination.z()-ctx.player().getZ())<80){
+                        if(nextSurveyPoint==null)nextSurveyPoint=survey.nextSurveyWaypoint();
+                        if(nextSurveyPoint==null){reason="Survey held: landing before continuing on foot";flight.requestLanding();return;}
+                        if(updateDestination(flight,cruiseDestination(nextSurveyPoint,Mode.SURVEY),now))nextSurveyPoint=null;
+                    }
+                    return;
+                }
             }
             if(target!=null&&owner==baritone.getStalkProcess()&&baritone.getStalkProcess().hunting()&&target.isFallFlying()&&Baritone.settings().botElytraPursuit.value){mode=Mode.PURSUIT;targetId=watched;}
             if(mode==Mode.PURSUIT){
                 if(!Baritone.settings().botElytraPursuit.value){flight.requestLanding();return;}
                 Point next=target==null?lastTarget:observe(target);
-                if(!FlightPolicy.fresh(now,lastSeen)||next==null){reason="Lost visual pursuit; landing to search the last sighting";flight.requestLanding();return;}
+                if(!FlightPolicy.fresh(now,lastSeen)||next==null){reason="Lost entity contact; landing to search the last known position";flight.requestLanding();return;}
                 if(target!=null&&!target.isFallFlying()&&target.distanceToSqr(ctx.player())<48*48){reason="Landing: opponent is back on the ground";flight.requestLanding();return;}
                 updateDestination(flight,position(next),now);return;
             }
@@ -237,9 +269,10 @@ public final class FlightBehavior extends Behavior {
             }
         }
     }
-    private void updateDestination(ElytraProcess flight,BlockPos destination,long now){
+    private boolean updateDestination(ElytraProcess flight,BlockPos destination,long now){
         Point next=point(destination);if(FlightPolicy.replan(now,lastReplan,lastDestination,next)&&flight.retargetFor(owner,destination,mode==Mode.ESCAPE)){
-            lastDestination=next;lastReplan=now;reason=label(mode,destination);
+            lastDestination=next;lastReplan=now;reason=label(mode,destination);return true;
         }
+        return false;
     }
 }

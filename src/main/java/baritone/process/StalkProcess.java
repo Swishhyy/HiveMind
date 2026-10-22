@@ -20,6 +20,8 @@ package baritone.process;
 import baritone.Baritone;
 import baritone.utils.network.TeamPackets.Kind;
 import baritone.utils.bot.TrackingOrderStore.Order;
+import baritone.utils.bot.AerialSurvey;
+import baritone.utils.bot.SurveyRoute;
 import baritone.api.behavior.IBehavior;
 import baritone.api.event.events.TickEvent;
 import baritone.api.event.events.BlockChangeEvent;
@@ -65,11 +67,12 @@ import java.nio.file.Path;
 import java.util.*;
 import java.util.concurrent.ThreadLocalRandom;
 
-/** UUID-specific tracking using ordinary loaded-world movement, real sight lines, and real melee. */
-public final class StalkProcess extends BaritoneProcessHelper implements IBehavior {
+/** UUID-specific tracking using loaded entity contacts, real sight lines for reports, and real melee. */
+public final class StalkProcess extends BaritoneProcessHelper implements IBehavior,AerialSurvey {
     private enum Phase { SEARCH, WATCH, DRINK, SCATTER, APPROACH, ATTACK }
     private record Seen(BlockPos position,long time) {}
     private final Map<UUID,Seen> seen=new HashMap<>();
+    private Seen nearbyContact;
     private final ExplosiveCombat explosives;
     private final WatchPolicy.Station watchStation=new WatchPolicy.Station();
     private CombatStyle combatStyle=CombatStyle.MELEE;
@@ -101,6 +104,9 @@ public final class StalkProcess extends BaritoneProcessHelper implements IBehavi
     private String retryReason="";
     private Order restoring;
     private boolean retainOrder,offlineWaiting;
+    private SurveyRoute survey;
+    private boolean surveyAir,freshSurveyAnchor;
+    private long lastContactReport;
     private long nextSupplyMove;
     private long searchStarted,taskStarted,ambushAt,approachStarted,attackStarted,lastProgress,lastStrike,lastRecorded,lastReport,nextMemoryError;
     private float lastTargetHealth;
@@ -162,6 +168,26 @@ public final class StalkProcess extends BaritoneProcessHelper implements IBehavi
         long now=System.currentTimeMillis();searchStarted=taskStarted=now;
         if(committedCombat()){approachStarted=lastProgress=now;}
     }
+    public void surveyContact(Player target){
+        if(!isActive()||!target.getUUID().equals(targetId))return;
+        contact(target);searchAnchor=target.blockPosition().immutable();freshSurveyAnchor=true;targetMissing=false;
+        phase=Phase.WATCH;searchGoal=null;watchStation.reset();transported();
+    }
+    public void trackContact(Player target){
+        if(!isActive()||!target.getUUID().equals(targetId))return;
+        nearbyContact=new Seen(target.blockPosition().immutable(),System.currentTimeMillis());
+        searchAnchor=nearbyContact.position();freshSurveyAnchor=true;
+    }
+    private Seen lastLocal(){
+        Seen visual=seen.get(targetId);
+        return nearbyContact!=null&&System.currentTimeMillis()-nearbyContact.time()<=120000&&(visual==null||nearbyContact.time()>visual.time())?nearbyContact:visual;
+    }
+    private void contact(Player target){
+        trackContact(target);
+        if(ctx.player().hasLineOfSight(target)){record(target);return;}
+        long now=System.currentTimeMillis();
+        if(now-lastContactReport>=30000){lastContactReport=now;tell("Nearby entity contact: "+targetName+" at "+coordinates(MiningRouteAccess.dimension(ctx),target.blockPosition())+"; no clear sight line");}
+    }
     public void start(String requested) { start(requested,false,false,CombatStyle.MELEE); }
     public void startHunt(String requested) { startHunt(requested,CombatStyle.parse(Baritone.settings().killCombatStyle.value)); }
     public void startHunt(String requested,CombatStyle style) { start(requested,true,false,style); }
@@ -222,11 +248,11 @@ public final class StalkProcess extends BaritoneProcessHelper implements IBehavi
         taskStarted=searchStarted=System.currentTimeMillis();searchAnchor=ctx.playerFeet().immutable();
         rememberedPlaces=memory().places(targetId,MiningRouteAccess.dimension(ctx),taskStarted,retention());
         tell((hunt?"Hunting ":"Stalking ")+targetName+"; observing from about "+distance()+" blocks");
-        if(loaded(targetId)==null)tell("Checking saved sightings/bases and a bounded local search; target coordinates are not globally available");
+        if(loaded(targetId)==null)tell("Checking saved sightings/bases, then an expanding survey; target coordinates are not globally available");
     }
 
     private Player loaded(UUID id) {
-        return ctx.world().players().stream().filter(player->player.getUUID().equals(id)&&player.isAlive()&&!player.isSpectator()).findFirst().orElse(null);
+        return baritone.getAwareness().player(id);
     }
     private void rememberPlayers() {
         if(ctx.world()!=observedWorld) { seen.clear();observedWorld=ctx.world(); }
@@ -347,7 +373,7 @@ public final class StalkProcess extends BaritoneProcessHelper implements IBehavi
             if(hunt&&(target.isCreative()||target.isSpectator()))return stop("Target is not currently a survival-mode opponent");
             if(hunt&&!Baritone.settings().killAllowTrustedTargets.value&&baritone.getBotControl().isTrusted(targetId))
                 {baritone.getAutonomy().clear();return stop("Target became a trusted controller");}
-            if(ctx.player().hasLineOfSight(target))record(target);
+            contact(target);
             if(hunt){
                 String retreat=retreatReason(target);if(retreat!=null)return scatter(target,retreat,true);
                 if(baritone.getFlight().pursue(this,target))return pause();
@@ -764,10 +790,11 @@ public final class StalkProcess extends BaritoneProcessHelper implements IBehavi
         if(safe)baritone.getInputOverrideHandler().clearAllKeys();return pause();
     }
     private PathingCommand search(boolean failed,boolean safe) {
-        long now=System.currentTimeMillis();Seen local=seen.get(targetId);
+        long now=System.currentTimeMillis();Seen local=lastLocal();
         Sighting shared=baritone.getNetwork().hint(targetId,MiningRouteAccess.dimension(ctx));
         if(SharedSightings.shouldRedirect(shared,peerSearch,local==null?0:local.time(),peerSearchAt,now)) {
             peerSearch=shared;peerSearchAt=now;checkedLastSeen=true;searchAnchor=MiningRouteAccess.position(shared.point());
+            freshSurveyAnchor=true;
             searchGoal=new GoalStandoff(searchAnchor,distance());searchStarted=now;legTicks=siteWait=0;retryAt=0;
             tell(shared.reporterName()+" saw "+targetName+" at "+coordinates(shared.point().dimension(),searchAnchor)
                     +" "+Math.max(0,(now-shared.observedAt())/1000)+"s ago; checking that report");
@@ -787,19 +814,44 @@ public final class StalkProcess extends BaritoneProcessHelper implements IBehavi
             }
         }
         if(searchGoal==null) {
-            Seen last=seen.get(targetId);
-            if(!checkingMemoryOnly&&!checkedLastSeen&&last!=null) { checkedLastSeen=true;searchGoal=new GoalStandoff(last.position(),distance()); }
+            Seen last=lastLocal();
+            if(!checkingMemoryOnly&&!checkedLastSeen&&last!=null) { checkedLastSeen=true;searchAnchor=last.position();freshSurveyAnchor=true;searchGoal=new GoalStandoff(last.position(),distance()); }
             else if(memoryStep<rememberedPlaces.size()) {
                 var place=rememberedPlaces.get(memoryStep++);searchGoal=new GoalStandoff(MiningRouteAccess.position(place.point()),distance());
+                searchAnchor=MiningRouteAccess.position(place.point());freshSurveyAnchor=true;
                 tell("Checking "+place.label()+" for "+targetName+" at "+coordinates(place.point().dimension(),MiningRouteAccess.position(place.point())));
             } else {
                 if(checkingMemoryOnly)return restartSearch("Saved places checked; waiting before checking them again",safe,true);
-                int radius=SocialPolicy.searchRadius(Baritone.settings().stalkSearchRadius.value);
-                if(searchStep>=SocialPolicy.searchSteps(radius))return restartSearch("Local search pass completed; waiting before searching again",safe,true);
-                SocialPolicy.Offset offset=SocialPolicy.searchOffset(searchStep++,radius);
-                searchGoal=new GoalXZ(searchAnchor.getX()+offset.x(),searchAnchor.getZ()+offset.z());
+                boolean aerial=Baritone.settings().botAerialSearch.value&&baritone.getFlight().capable();
+                BlockPos point=chooseSurvey(aerial);
+                if(point==null)return retry(Phase.SEARCH,"Survey route is blocked by the world border; trying later",safe);
+                if(aerial&&baritone.getFlight().survey(this,point))return pause();
             }
         }return path(searchGoal);
+    }
+    private BlockPos chooseSurvey(boolean aerial){
+        if(survey==null||aerial!=surveyAir){
+            surveyAir=aerial;BlockPos origin=aerial&&searchAnchor!=null?searchAnchor:ctx.playerFeet();
+            survey=new SurveyRoute(MiningRouteAccess.root(ctx),"search-"+targetId+(aerial?"-air":"-ground"),MiningRouteAccess.endpoint(ctx,origin),
+                    aerial?Baritone.settings().botFlightSurveySpacing.value:Math.max(64,SocialPolicy.searchRadius(Baritone.settings().stalkSearchRadius.value)/4),
+                    baritone.getNetwork().team().heading(baritone.utils.network.TeamPackets.Kind.SEARCH,targetId));
+        }
+        if(freshSurveyAnchor&&searchAnchor!=null){
+            if(Math.hypot(survey.origin().x()-searchAnchor.getX(),survey.origin().z()-searchAnchor.getZ())>256)survey.reanchor(MiningRouteAccess.endpoint(ctx,searchAnchor));
+            freshSurveyAnchor=false;
+        }
+        BlockPos point=null;
+        for(int attempt=0;attempt<64;attempt++){
+            BlockPos candidate=MiningRouteAccess.position(survey.next());
+            if(!ctx.world().getWorldBorder().isWithinBounds(candidate)||candidate.distSqr(ctx.playerFeet())<48*48)continue;
+            point=candidate;if(!baritone.getNetwork().mapped(candidate))break;
+        }
+        survey.save();if(point==null)return null;
+        searchGoal=new GoalXZ(point.getX(),point.getZ());searchStarted=taskStarted=System.currentTimeMillis();legTicks=siteWait=0;return point;
+    }
+    @Override public BlockPos nextSurveyWaypoint(){
+        if(!isActive()||phase!=Phase.SEARCH||offlineWaiting||checkingMemoryOnly||!Baritone.settings().botAerialSearch.value||!baritone.getFlight().capable())return null;
+        return chooseSurvey(true);
     }
     private PathingCommand restartSearch(String reason,boolean safe,boolean recycle) {
         searchGoal=null;legTicks=siteWait=0;
@@ -893,14 +945,14 @@ public final class StalkProcess extends BaritoneProcessHelper implements IBehavi
     }
     @Override public void onLostControl() {
         if(isActive()&&baritone.getAutonomy()!=null&&!retainOrder&&ctx.player()!=null&&ctx.player().isAlive()&&ctx.world()!=null&&ctx.world()==observedWorld)baritone.getAutonomy().clear();
-        retainOrder=false;offlineWaiting=false;
+        retainOrder=false;offlineWaiting=false;survey=null;freshSurveyAnchor=false;nearbyContact=null;
         if(isActive()) { String remaining=explosives.remaining();if(remaining!=null)tell(remaining); }
         releaseUse();restoreWeapon();explosives.reset();combatStyle=CombatStyle.MELEE;meleeFallback=false;targetId=owner=null;targetName=null;hunt=checkingMemoryOnly=watching=endAfterScatter=reachedRear=checkedLastSeen=false;
         perceptible=drinkStarted=invisibilityFailed=damageConfirmed=stalkSneak=false;drinkTicks=drinkWait=totemDelay=explosiveRecheck=0;explosiveBackoff=5;lastProgress=lastStrike=0;lastWarning=null;afterDrink=Phase.SEARCH;
         phase=Phase.SEARCH;watchedPlayer=null;searchAnchor=vantageAnchor=vantage=lastReported=scatterAnchor=scatterWaypoint=null;searchGoal=null;scatterDistance=scatterReplan=0;
         watchStation.reset();retryAt=lastRetryReport=0;retryCount=0;retryReason="";recycleVantages=targetMissing=false;
         searchStep=memoryStep=legTicks=siteWait=gazeTicks=quietTicks=scatterTicks=scatterQuiet=failedPaths=attempts=attackCount=0;
-        ambushAt=approachStarted=attackStarted=lastRecorded=lastReport=0;rememberedPlaces=List.of();failedVantages.clear();
+        ambushAt=approachStarted=attackStarted=lastRecorded=lastReport=lastContactReport=0;rememberedPlaces=List.of();failedVantages.clear();
         peerSearch=null;peerSearchAt=0;
         baritone.getInputOverrideHandler().setInputForceState(Input.SNEAK,false);baritone.getInputOverrideHandler().setInputForceState(Input.SPRINT,false);
     }

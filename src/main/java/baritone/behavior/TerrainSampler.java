@@ -29,7 +29,7 @@ import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
 import java.util.*;
 
-/** Samples one already-loaded chunk per half second; never asks the world to generate or load a chunk. */
+/** Samples nearby loaded terrain in a small tick budget, including the sides of a fast flight. */
 final class TerrainSampler {
     private final NetworkBehavior parent;
     private final Baritone bot;
@@ -37,15 +37,23 @@ final class TerrainSampler {
     private long next;
     TerrainSampler(NetworkBehavior parent,Baritone bot){this.parent=parent;this.bot=bot;}
     void tick(long now){
-        if(now<next)return;next=now+500;var ctx=bot.getPlayerContext();var world=ctx.world();String dimension=MiningRouteAccess.dimension(ctx);
-        int cx=Math.floorDiv(ctx.playerFeet().getX(),16),cz=Math.floorDiv(ctx.playerFeet().getZ(),16),bestX=0,bestZ=0;double best=Double.POSITIVE_INFINITY;boolean found=false;
+        if(now<next)return;next=now+100;
         sampled.values().removeIf(time->now-time>120000);
+        long deadline=System.nanoTime()+4_000_000;
+        for(int tiles=0;tiles<4;tiles++){
+            if(tiles>0&&System.nanoTime()>=deadline)return;
+            if(!sample(now))return;
+        }
+    }
+    private boolean sample(long now){
+        var ctx=bot.getPlayerContext();var world=ctx.world();String dimension=MiningRouteAccess.dimension(ctx);
+        int cx=Math.floorDiv(ctx.playerFeet().getX(),16),cz=Math.floorDiv(ctx.playerFeet().getZ(),16),bestX=0,bestZ=0;double best=Double.POSITIVE_INFINITY;boolean found=false;
         for(int x=cx-4;x<=cx+4;x++)for(int z=cz-4;z<=cz+4;z++){
             BlockPos point=new BlockPos(x*16,ctx.playerFeet().getY(),z*16);if(!world.hasChunkAt(point))continue;
             String key=dimension+":"+x+":"+z;long previous=sampled.getOrDefault(key,0L);if(now-previous<30000)continue;
             double score=(previous==0?0:1000)+(x-cx)*(x-cx)+(z-cz)*(z-cz);if(score<best){best=score;bestX=x;bestZ=z;found=true;}
         }
-        if(!found)return;sampled.put(dimension+":"+bestX+":"+bestZ,now);
+        if(!found)return false;sampled.put(dimension+":"+bestX+":"+bestZ,now);
         int[] colors=new int[256],heights=new int[256];
         boolean ceiling=dimension.equals("minecraft:the_nether")&&ctx.playerFeet().getY()<128;
         for(int z=0;z<16;z++)for(int x=0;x<16;x++){
@@ -59,10 +67,12 @@ final class TerrainSampler {
             colors[z*16+x]=state.getMapColor(world,pos).col&0xffffff;heights[z*16+x]=y;
         }
         StringBuilder rgb=new StringBuilder(1536),h=new StringBuilder(1024);
-        for(int i=0;i<256;i++){rgb.append(String.format(Locale.ROOT,"%06x",colors[i]));h.append(String.format(Locale.ROOT,"%04x",heights[i]&0xffff));}
+        HexFormat hex=HexFormat.of();
+        for(int i=0;i<256;i++){rgb.append(hex.toHexDigits(colors[i]),2,8);h.append(hex.toHexDigits((short)heights[i]));}
         var who=parent.localIdentity();parent.record(new Tile(who.id(),who.name(),dimension,bestX,bestZ,rgb.toString(),h.toString(),now));
         int checked=0;for(BlockPos pos:world.getChunk(bestX,bestZ).getBlockEntities().keySet()){
-            if(++checked>64)break;if(pos.distSqr(ctx.playerFeet())>48*48)continue;
+            int range=ctx.player().isFallFlying()?96:48;
+            if(++checked>64)break;if(pos.distSqr(ctx.playerFeet())>range*range)continue;
             var state=world.getBlockState(pos);String block=BuiltInRegistries.BLOCK.getKey(state.getBlock()).getPath();
             if(!ConstructionPolicy.isContainer(block)&&!block.endsWith("_bed")&&!block.equals("furnace")&&!block.equals("blast_furnace")&&!block.equals("smoker"))continue;
             var ray=world.clip(new ClipContext(ctx.playerHead(),Vec3.atCenterOf(pos),ClipContext.Block.COLLIDER,ClipContext.Fluid.NONE,ctx.player()));
@@ -70,5 +80,6 @@ final class TerrainSampler {
                 parent.record(new Site(who.id(),who.name(),MiningRouteAccess.endpoint(ctx,pos),"Possible base","Visible "+block.replace('_',' ')+"; could also be a generated structure",false,now));break;
             }
         }
+        return true;
     }
 }
