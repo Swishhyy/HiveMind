@@ -25,6 +25,6 @@ public final class SessionCommand extends Command {
         catch(IllegalArgumentException|IllegalStateException e){throw new CommandInvalidStateException(e.getMessage());}
     }
     @Override public Stream<String> tabComplete(String label,IArgConsumer args){return Stream.empty();}
-    @Override public String getShortDesc(){return "Log out, wait, or reconnect this Minecraft client";}
-    @Override public List<String> getLongDesc(){return List.of("session logout - Stay offline until session reconnect.","session logout <5-86400 seconds> - Log out temporarily, then reconnect.","session reconnect/status - Rejoin the last multiplayer server or inspect the session.","The standalone controller connection remains active on the game menu. A closed Minecraft process needs a launcher to start it again.");}
+    @Override public String getShortDesc(){return "Leave the server, wait, or reconnect while Minecraft stays open";}
+    @Override public List<String> getLongDesc(){return List.of("session logout - Leave the server for the menu until session reconnect.","session logout <5-86400 seconds> - Leave temporarily, then reconnect.","session reconnect/status - Rejoin the last multiplayer server or inspect the session.","Minecraft and its controller connection stay running on the menu during manual or combat logout.");}
 }
