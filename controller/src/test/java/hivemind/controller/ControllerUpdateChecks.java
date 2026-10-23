@@ -20,7 +20,7 @@ public final class ControllerUpdateChecks {
     }
     public static void main(String[] args)throws Exception {
         if(args.length>0&&args[0].equals("--hold")){try(var channel=java.nio.channels.FileChannel.open(Path.of(args[2]),StandardOpenOption.WRITE);var lock=channel.lock()){Files.writeString(Path.of(args[1]),"ready");Thread.sleep(30000);}return;}
-        if(args.length>0&&args[0].equals("--probe")){Files.writeString(Path.of(args[1]),String.join("\n",Arrays.copyOfRange(args,2,args.length)));return;}
+        if(args.length>0&&args[0].equals("--probe")){Path marker=Path.of(args[1]),partial=Path.of(args[1]+".tmp");Files.writeString(partial,String.join("\n",Arrays.copyOfRange(args,2,args.length)));Files.move(partial,marker,StandardCopyOption.ATOMIC_MOVE);return;}
         Path root=Files.createTempDirectory("hivemind controller update ");try{
             Path jar=root.resolve("my controller.jar"),candidate=root.resolve("candidate.jar");Files.copy(Path.of("build/distributions/hivemind-controller.jar"),jar);byte[] original=Files.readAllBytes(jar);candidate(candidate,"hivemind-controller");var p=manifest(candidate,"0.1.0.10");byte[] metadata=properties(p),data=Files.readAllBytes(candidate);
             var expected=ControllerUpdateManifest.read(metadata);ControllerUpdater.verify(candidate,expected);
