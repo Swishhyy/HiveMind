@@ -28,6 +28,18 @@ public final class ExpeditionLoadout {
     };}
     public static boolean portable(ItemStack stack){return stack.getItem() instanceof BlockItem block&&block.getBlock() instanceof net.minecraft.world.level.block.ShulkerBoxBlock;}
     public static int count(IPlayerContext ctx,String key){if(EquipmentLoadout.ARMOR.containsKey(key))return EquipmentLoadout.count(ctx,key);int total=BotInventory.count(ctx,s->matches(s,key));if(key.equals(SupplyReserves.ELYTRA)&&matches(ctx.player().getItemBySlot(EquipmentSlot.CHEST),key))total++;if(key.equals(SupplyReserves.TOTEMS)&&matches(ctx.player().getOffhandItem(),key))total++;return total;}
+    public static Map<String,Integer> counts(IPlayerContext ctx,Collection<String> keys){Map<String,Integer> result=new LinkedHashMap<>();keys.forEach(key->result.put(key,count(ctx,key)));return Map.copyOf(result);}
+    /** Box contents count for expedition planning, never for a rocket click or an equipped item. */
+    public static Map<String,Integer> boxedCounts(IPlayerContext ctx,Collection<String> keys){
+        Map<String,Integer> result=new LinkedHashMap<>();
+        for(int slot=0;slot<36;slot++){
+            ItemStack box=ctx.player().getInventory().getItem(slot);if(!portable(box))continue;
+            var contents=box.get(net.minecraft.core.component.DataComponents.CONTAINER);if(contents==null)continue;
+            var items=net.minecraft.core.NonNullList.<ItemStack>withSize(27,ItemStack.EMPTY);contents.copyInto(items);
+            for(ItemStack item:items)if(!item.isEmpty())for(String key:keys)if(matches(item,key))result.merge(key,item.getCount()*box.getCount(),Integer::sum);
+        }
+        return Map.copyOf(result);
+    }
     public static Map<String,Integer> targets(IPlayerContext ctx){Map<String,Integer> targets=new LinkedHashMap<>(SupplyReserves.targets(HiveMind.settings().botExpeditionRockets.value,HiveMind.settings().botExpeditionFood.value,HiveMind.settings().botExpeditionElytras.value,HiveMind.settings().botExpeditionTotems.value));if(!HiveMind.settings().botUseElytra.value){targets.remove(SupplyReserves.ROCKETS);targets.remove(SupplyReserves.ELYTRA);}if(!HiveMind.settings().botAutoTotem.value)targets.remove(SupplyReserves.TOTEMS);EquipmentLoadout.addTargets(targets);return Map.copyOf(targets);}
     public static Map<String,Integer> missing(IPlayerContext ctx){Map<String,Integer> targets=targets(ctx);Map<String,Integer> counts=new HashMap<>();targets.keySet().forEach(key->counts.put(key,count(ctx,key)));return SupplyReserves.missing(targets,counts);}
 }

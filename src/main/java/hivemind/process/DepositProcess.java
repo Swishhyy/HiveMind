@@ -73,6 +73,9 @@ public final class DepositProcess extends HiveMindProcessHelper {
     private Stage stage = Stage.IDLE;
     private final StockBoxTrip stockBoxes=new StockBoxTrip();
     private boolean unpackStarted;
+    private boolean portableStarted,portableRecovering,portableOnly,usedPortable;
+    private long portableDeadline;
+    private Map<String,Integer> portableBefore=Map.of();
     private int pendingBoxEmptySlots;
     private Path tripRoot;
     private String depositDimension;
@@ -199,6 +202,7 @@ public final class DepositProcess extends HiveMindProcessHelper {
     public String lastDepositError() { return lastDepositError; }
     public void startFetch(Map<String,Integer> targets){startFetch(targets,false);}
     public void startExpeditionFetch(Map<String,Integer> targets){startFetch(targets,true);}
+    public void startCarriedFetch(Map<String,Integer> targets){if(isActive())throw new IllegalStateException("A storage trip is already active");portableOnly=true;try{startFetch(targets,true);}catch(RuntimeException error){portableOnly=false;throw error;}}
     private int fetchGoal(String id,int target){return fetchVariants?SupplyReserves.refillGoal(id,target):target;}
     private int fetchCount(String id){return fetchVariants?ExpeditionLoadout.count(ctx,id):BotItems.count(ctx,id);}
     private void startFetch(Map<String,Integer> targets,boolean variants) {
@@ -206,9 +210,13 @@ public final class DepositProcess extends HiveMindProcessHelper {
         if (targets.isEmpty() || targets.size()>128 || targets.values().stream().anyMatch(n->n<1||n>1000000)) throw new IllegalArgumentException("Invalid withdrawal request");
         if (ctx.player().containerMenu != ctx.player().inventoryMenu || !ctx.player().containerMenu.getCarried().isEmpty()) throw new IllegalStateException("Close containers and clear the cursor before fetching items");
         stockBoxes.reset();unpackStarted=false;fetchVariants=variants;
-        if(hivemind.getShulkerProcess().requestItems(targets,variants)){
-            tripRoot=MiningRouteAccess.root(ctx);fetchTargets=Map.copyOf(targets);fetch=resupply=true;lastFetchError=null;transition(Stage.PORTABLE);return;
+        if(hivemind.getShulkerProcess().hasPortableItems(targets,variants)||hivemind.getShulkerProcess().hasPendingRecovery()){
+            tripRoot=MiningRouteAccess.root(ctx);fetchTargets=Map.copyOf(targets);fetch=resupply=true;lastFetchError=null;
+            returnDimension=MiningRouteAccess.dimension(ctx);returnTo=ctx.playerFeet().immutable();movedItems=0;
+            portableStarted=false;portableRecovering=false;usedPortable=true;portableBefore=Map.of();portableDeadline=System.currentTimeMillis()+120000;
+            transition(Stage.PORTABLE);return;
         }
+        if(portableOnly)throw new IllegalStateException("Requested carried supplies changed or are no longer available");
         BotBaseAccess.discoverEnderChests(ctx);MiningRouteAccess.deposits(ctx); BlockPos feet=ctx.playerFeet();
         remainingChests.clear();remainingChests.addAll(MiningRouteAccess.store(ctx).orderedDeposits(MiningRouteAccess.dimension(ctx),feet.getX(),feet.getY(),feet.getZ(),HiveMind.settings().mineTravelBetweenDimensions.value));
         remainingChests.removeIf(storage->storage.rule().kind()==StorageRule.Kind.DISABLED);
@@ -260,14 +268,7 @@ public final class DepositProcess extends HiveMindProcessHelper {
             return fail("the server or save changed");
         }
         if(stage==Stage.STOCK_BOX)return unpackStockBox();
-        if(stage==Stage.PORTABLE){
-            if(hivemind.getShulkerProcess().isActive())return new PathingCommand(null,PathingCommandType.DEFER);
-            Map<String,Integer> remaining=Map.copyOf(fetchTargets);
-            boolean complete=remaining.entrySet().stream().allMatch(entry->fetchCount(entry.getKey())>=fetchGoal(entry.getKey(),entry.getValue()));boolean variants=fetchVariants,emergency=survivalSupply;
-            onLostControl();
-            if(complete)return new PathingCommand(null,PathingCommandType.CANCEL_AND_SET_GOAL);
-            try{startFetch(remaining,variants);survivalSupply=emergency;}catch(IllegalStateException error){fetch=resupply=true;survivalSupply=emergency;return fail(error.getMessage());}return new PathingCommand(null,PathingCommandType.DEFER);
-        }
+        if(stage==Stage.PORTABLE)return portableFetch();
         if (calcFailed) {
             return stage == Stage.RETURN ? fail("no usable route to the mining site") : tryNextStorage("storage #" + storageId + " is unreachable");
         }
@@ -429,10 +430,45 @@ public final class DepositProcess extends HiveMindProcessHelper {
         if(fetch&&!fetchComplete())return fail("Requested supplies were not found or could not be transferred from the accessible containers");
         closeOwnedMenu();
         if(stockBoxes.borrowed()>0)logDirect("Unpacked "+stockBoxes.borrowed()+" storage shulkers; "+(fetchComplete()?"requested reserves filled":"some requested supplies are still unavailable"));
+        else if(usedPortable)logDirect("Refilled requested reserves from carried shulkers");
         else logDirect((resupply ? "Restocked " : "Deposited ") + movedItems + " items");
         if (returnTo != null && (resupply || hivemind.getMineProcess().isActive())) transition(Stage.RETURN);
         else onLostControl();
         return new PathingCommand(null, PathingCommandType.CANCEL_AND_SET_GOAL);
+    }
+
+    /** A quiet-period, placement or retry delay is not evidence that carried stock is unavailable. */
+    private PathingCommand portableFetch(){
+        var shulkers=hivemind.getShulkerProcess();long now=System.currentTimeMillis();
+        if(shulkers.isActive())return new PathingCommand(null,PathingCommandType.DEFER);
+        if(portableStarted){
+            portableStarted=false;
+            if(shulkers.hasPendingRecovery())return fail("Carried shulker recovery is still pending; keeping its checkpoint and remaining stock");
+            var after=stockCounts();
+            if(!portableRecovering&&after.entrySet().stream().noneMatch(e->e.getValue()>portableBefore.getOrDefault(e.getKey(),0)))
+                return fail("Carried shulker yielded no confirmed supplies; check placement space and inventory room before retrying");
+            portableRecovering=false;portableDeadline=now+120000;
+        }
+        if(fetchComplete()&&!shulkers.hasPendingRecovery())return finishTransfer();
+        if(now>=portableDeadline)return fail("Could not safely open carried shulkers; supplies remain carried. Check clear ground, threats and inventory room");
+        if(shulkers.hasPortableItems(fetchTargets,fetchVariants)||shulkers.hasPendingRecovery()){
+            if(hivemind.getElytraProcess().isActive())return new PathingCommand(null,PathingCommandType.DEFER);
+            var before=stockCounts();boolean recovery=shulkers.hasPendingRecovery();
+            if(shulkers.requestItems(fetchTargets,fetchVariants)){
+                portableBefore=before;portableRecovering=recovery;portableStarted=true;
+                hivemind.getOperations().journal().note("Supply","Opening carried shulker before considering external storage");
+                return new PathingCommand(null,PathingCommandType.DEFER);
+            }
+            return pause();
+        }
+        if(portableOnly){logDirect("Used available carried supplies; reassessing remaining reserves before any storage trip");onLostControl();return new PathingCommand(null,PathingCommandType.CANCEL_AND_SET_GOAL);}
+        // Only exhausted/unhelpful carried stock permits a storage trip for the remaining request.
+        Map<String,Integer> remaining=Map.copyOf(fetchTargets);boolean variants=fetchVariants,emergency=survivalSupply;
+        BlockPos origin=returnTo;String originDimension=returnDimension;
+        onLostControl();
+        try{startFetch(remaining,variants);returnTo=origin;returnDimension=originDimension;survivalSupply=emergency;}
+        catch(IllegalStateException error){fetch=resupply=true;survivalSupply=emergency;return fail(error.getMessage());}
+        return new PathingCommand(null,PathingCommandType.DEFER);
     }
 
     private Map<String,Integer> stockCounts(){Map<String,Integer> counts=new java.util.LinkedHashMap<>();fetchTargets.keySet().forEach(key->counts.put(key,fetchCount(key)));return counts;}
@@ -629,6 +665,7 @@ public final class DepositProcess extends HiveMindProcessHelper {
         closeOwnedMenu();
         stage = Stage.IDLE;
         stockBoxes.reset();unpackStarted=false;pendingBoxEmptySlots=0;
+        portableStarted=portableRecovering=portableOnly=usedPortable=false;portableDeadline=0;portableBefore=Map.of();
         pendingSlot = -1;
         pendingStack = null;
         synchronizedMenuId = -1;

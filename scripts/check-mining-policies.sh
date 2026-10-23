@@ -15,6 +15,8 @@ fi
     src/main/java/hivemind/utils/bot/ActivityJournal.java \
     src/main/java/hivemind/utils/bot/StorageStockLedger.java \
     src/main/java/hivemind/utils/bot/TaskLoadoutStore.java \
+    src/main/java/hivemind/utils/bot/ResupplyPolicy.java \
+    src/test/java/hivemind/utils/bot/ResupplyChecks.java \
     src/main/java/hivemind/utils/bot/PortalLinks.java \
     src/test/java/hivemind/utils/bot/LongRunChecks.java \
     src/main/java/hivemind/utils/bot/TrustedControl.java \
@@ -101,6 +103,7 @@ fi
     src/test/java/hivemind/utils/social/SocialPolicyChecks.java
 java -cp "$task_classes" hivemind.utils.network.LoadoutChecks
 java -cp "$task_classes" hivemind.utils.bot.LongRunChecks
+java -cp "$task_classes" hivemind.utils.bot.ResupplyChecks
 java -cp "$task_classes" hivemind.utils.network.OperationsChecks
 java -cp "$task_classes" hivemind.utils.bot.MapPlayerChecks
 java -cp "$task_classes" hivemind.utils.mining.MiningPolicyChecks

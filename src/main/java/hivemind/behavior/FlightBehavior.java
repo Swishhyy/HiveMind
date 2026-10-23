@@ -112,7 +112,8 @@ public final class FlightBehavior extends Behavior {
             if(!flight.retargetFor(task,destination,requested==Mode.ESCAPE))return false;
             owner=task;mode=requested;nextSurveyPoint=null;started=now;lastDestination=point(destination);lastReplan=now;reason=label(requested,destination);return true;
         }
-        if(requested!=Mode.ESCAPE&&!hivemind.getOperations().prepareTrip(destination))return false;
+        if(requested!=Mode.ESCAPE&&(hivemind.getShulkerProcess().isActive()||hivemind.getShulkerProcess().hasPendingRecovery()||hivemind.getDepositProcess().isActive()
+                ||!hivemind.getOperations().prepareFlight()||!hivemind.getOperations().prepareTrip(destination)))return false;
         if(!supplied(requested)||ctx.minecraft().gui.screen()!=null||ctx.player().isInWater()||ctx.player().isInLava()
                 ||ctx.player().containerMenu!=ctx.player().inventoryMenu||!ctx.player().inventoryMenu.getCarried().isEmpty())return false;
         if(requested!=Mode.ESCAPE&&(hivemind.getConflictProcess().isActive()||hivemind.getSurvivalProcess().isActive()||hivemind.getSculkProcess().isActive()||ctx.player().isUsingItem()))return false;
@@ -238,7 +239,8 @@ public final class FlightBehavior extends Behavior {
             else cancel();return;
         }
         if(hivemind.getElytraProcess() instanceof ElytraProcess flight){
-            if(mode!=Mode.ESCAPE&&ctx.player().isFallFlying()&&hivemind.getShulkerProcess().hasPortableReserves()
+            if(mode!=Mode.ESCAPE&&airborne&&ctx.player().isFallFlying()&&HiveMind.settings().botAutoResupply.value&&HiveMind.settings().botExpeditionSupplies.value
+                &&hivemind.getShulkerProcess().hasPortableItems(hivemind.getOperations().flightRefillTargets(),true)
                 &&ctx.world().players().stream().noneMatch(p->p!=ctx.player()&&!p.isSpectator()&&!hivemind.getNetwork().isTeammate(p.getUUID())&&!hivemind.getBotControl().isTrusted(p.getUUID())&&p.distanceToSqr(ctx.player())<96*96)){
                 reason="Landing in a safe spot to refill carried shulker reserves";flight.requestLanding();return;
             }

@@ -16,14 +16,11 @@ import hivemind.utils.bot.*;
 import hivemind.utils.network.SupplyReserves;
 import hivemind.utils.mining.ConstructionPolicy;
 import hivemind.utils.mining.MiningRouteAccess;
-import hivemind.utils.social.BlastPolicy;
-import hivemind.process.elytra.ElytraBehavior;
 import hivemind.pathing.movement.CalculationContext;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.tags.ItemTags;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.MobCategory;
@@ -84,20 +81,9 @@ public final class ShulkerSupplyProcess extends HiveMindProcessHelper implements
     }
     private List<Need> loadout(){
         List<Need> wanted=new ArrayList<>();
-        ExpeditionLoadout.missing(ctx).forEach((key,target)->wanted.add(new Need(s->ExpeditionLoadout.matches(s,key),SupplyReserves.refillGoal(key,target),key,key)));
+        var targets=hivemind.getOperations().currentKitTargets();
+        ResupplyPolicy.missing(targets,ExpeditionLoadout.counts(ctx,targets.keySet())).forEach((key,target)->wanted.add(new Need(s->ExpeditionLoadout.matches(s,key),SupplyReserves.refillGoal(key,target),key,key)));
         if(HiveMind.settings().allowWaterBucketFall.value&&ctx.world().dimension()!=net.minecraft.world.level.Level.NETHER)wanted.add(new Need(s->s.is(Items.WATER_BUCKET),1,"water bucket"));
-        if(hivemind.getMineProcess().isActive()){
-            wanted.add(new Need(s->BotInventory.pickaxe(s,hivemind.getMineProcess().targetsAncientDebris()),1,"pickaxe"));
-            wanted.add(new Need(BotInventory::building,Math.max(32,HiveMind.settings().botMinimumBlocks.value),"building blocks"));
-        }
-        if(hivemind.getStalkProcess().hunting()){
-            wanted.add(new Need(s->(s.is(ItemTags.SWORDS)||s.is(ItemTags.AXES))&&(!s.isDamageableItem()||s.getMaxDamage()-s.getDamageValue()>Math.max(1,HiveMind.settings().botToolReserve.value)),1,"weapon"));
-            String style=hivemind.getStalkProcess().combatStyle();
-            if(!style.equals("melee")){
-                if(!style.equals("anchor")){wanted.add(new Need(s->s.is(Items.END_CRYSTAL),16,"crystals"));wanted.add(new Need(s->s.is(Items.OBSIDIAN),16,"obsidian"));}
-                if(!style.equals("crystal")&&BlastPolicy.anchorDimension(MiningRouteAccess.dimension(ctx))){wanted.add(new Need(s->s.is(Items.RESPAWN_ANCHOR),8,"anchors"));wanted.add(new Need(s->s.is(Items.GLOWSTONE),16,"glowstone"));}
-            }
-        }
         return wanted;
     }
     public boolean requestItems(Map<String,Integer> targets){return requestItems(targets,false);}
@@ -105,7 +91,18 @@ public final class ShulkerSupplyProcess extends HiveMindProcessHelper implements
         return request(targets.entrySet().stream().map(entry->new Need(s->(variants?ExpeditionLoadout.matches(s,entry.getKey()):BotItems.ordinary(s)&&BuiltInRegistries.ITEM.getKey(s.getItem()).toString().equals(entry.getKey())),variants?SupplyReserves.refillGoal(entry.getKey(),entry.getValue()):entry.getValue(),entry.getKey(),variants?entry.getKey():null)).toList());
     }
     public String reserveStatus(){return "Armor "+EquipmentLoadout.ARMOR.keySet().stream().filter(key->EquipmentLoadout.count(ctx,key)>0).count()+"/4, rockets "+ExpeditionLoadout.count(ctx,"@rockets")+"/"+HiveMind.settings().botExpeditionRockets.value+", food "+ExpeditionLoadout.count(ctx,"@food")+"/"+HiveMind.settings().botExpeditionFood.value+", usable elytras "+ExpeditionLoadout.count(ctx,"@elytra")+"/"+HiveMind.settings().botExpeditionElytras.value+", totems "+ExpeditionLoadout.count(ctx,"@totems")+"/"+HiveMind.settings().botExpeditionTotems.value;}
-    public boolean hasPortableReserves(){if(ctx.player()==null)return false;var wanted=ExpeditionLoadout.missing(ctx);if(wanted.isEmpty())return false;for(int slot=0;slot<36;slot++){var stack=ctx.player().getInventory().getItem(slot);if(!shulker(stack))continue;var contents=stack.get(DataComponents.CONTAINER);if(contents==null)continue;var items=net.minecraft.core.NonNullList.<ItemStack>withSize(27,ItemStack.EMPTY);contents.copyInto(items);if(items.stream().anyMatch(item->wanted.keySet().stream().anyMatch(key->ExpeditionLoadout.matches(item,key))))return true;}return false;}
+    public boolean hasPortableItems(Map<String,Integer> targets,boolean variants){
+        if(ctx.player()==null||targets.isEmpty())return false;
+        var wanted=targets.entrySet().stream().filter(e->(variants?ExpeditionLoadout.count(ctx,e.getKey()):BotItems.count(ctx,e.getKey()))<(variants?SupplyReserves.refillGoal(e.getKey(),e.getValue()):e.getValue())).toList();
+        if(wanted.isEmpty())return false;
+        for(int slot=0;slot<36;slot++){
+            var stack=ctx.player().getInventory().getItem(slot);if(!shulker(stack))continue;
+            var contents=stack.get(DataComponents.CONTAINER);if(contents==null)continue;
+            var items=net.minecraft.core.NonNullList.<ItemStack>withSize(27,ItemStack.EMPTY);contents.copyInto(items);
+            if(items.stream().anyMatch(item->!item.isEmpty()&&wanted.stream().anyMatch(e->variants?ExpeditionLoadout.matches(item,e.getKey()):BotItems.ordinary(item)&&BotItems.id(item).equals(e.getKey()))))return true;
+        }
+        return false;
+    }
     public boolean hasPendingRecovery(){load();return store.box()!=null;}
     public boolean requestSupplies(){return ctx.player()!=null&&request(loadout());}
     private boolean request(List<Need> wanted){
