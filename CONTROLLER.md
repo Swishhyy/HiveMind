@@ -33,7 +33,24 @@ The **Sessions** page can reconnect a bot, log it out for 60 seconds, or leave i
 
 Under **Settings → Sessions**, enable `botCombatLog`, choose `botCombatLogHealth` (default 8 health points), `botCombatLogWaitMS` (default 60000), `botAutoReconnect`, and `botReconnectDelayMS`. Combat logging is off until enabled. The controller requires recent damage, a nearby untrusted non-teammate player, and health at/below the threshold. Reconnect attempts back off to five minutes rather than flooding a server. Manual logout overrides automatic reconnect. A running queued mining job is remembered when requesting logout and resumes five seconds after rejoining, if the same job still heads its queue and autonomous work is not manually paused.
 
-Combat logging sends a real disconnect; a server may keep an avatar present or reject subsequent joins. It cannot undo server-side combat tags. Reconnecting uses the client's already authenticated Minecraft account. It does not sign into Microsoft accounts or launch a closed/crashed Minecraft JVM. Keep clients running, or use your existing launcher/process supervisor to restart crashed game instances. Saved named tracking orders remain in the client; map history, policies and reconnect decisions remain in the controller. Raw combat clicks and live entity references stay in Minecraft.
+Combat logging sends a real disconnect; a server may keep an avatar present or reject subsequent joins. It cannot undo server-side combat tags. Reconnecting uses the client's already authenticated Minecraft account. The separate local supervisor described below can restart a crashed JVM; the normal relay cannot launch a client on another computer. Saved named tracking orders remain in the client; map history, policies and reconnect decisions remain in the controller. Raw combat clicks and live entity references stay in Minecraft.
+
+## Local game supervisor
+
+Run one extra controller JAR process **on each bot computer** for each Minecraft client you want restarted. First configure your normal Minecraft launcher and authenticated account. Its foreground command must stay running for the life of the game and return a nonzero exit code on a crash; a launcher that starts a second process and immediately exits cannot be supervised this way.
+
+Save a `bot-one.properties` file with absolute paths, adjusting the launch command for that host. Each numbered `arg` is one literal argument; no shell interpolation is performed.
+
+```properties
+workdir=/home/you/minecraft/bot-one
+instance=/home/you/minecraft/bot-one
+arg.0=/home/you/bin/run-minecraft-foreground
+restartDelaySeconds=15
+```
+
+Then run `java -jar hivemind-controller.jar --supervise /home/you/bot-one.properties`. Start the ordinary controller separately with `java -jar hivemind-controller.jar` (possibly on a different machine). For a second bot, make another profile and run another supervisor process. `instance` is the game directory containing `mods` and `hivemind/updates`; `workdir` is the launch command's working directory. On Windows, use forward slashes in the properties paths, for example `C:/Minecraft/bot-one`, and point `arg.0` at a foreground executable or wrapper.
+
+A nonzero game exit restarts after 15, 30, 60 ... up to 300 seconds; a normal zero exit stops the supervisor. If a client update is staged, the supervisor waits while the install plan exists so its separate updater helper can finish before launching again. Inspect the local installer log if that plan stays present after a failed update. This mode does not create or authenticate launcher accounts, suppress game errors, or replace the ordinary controller. Close the supervisor before deliberately uninstalling that bot instance.
 
 ## Automatic updates
 

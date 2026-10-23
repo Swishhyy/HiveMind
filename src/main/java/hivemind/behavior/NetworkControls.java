@@ -219,6 +219,23 @@ final class NetworkControls {
         if(online&&!bot.isPlayerClient()&&bot.getSurvivalProcess().isActive())details.put("blocker",bot.getSurvivalProcess().status());
         if(online&&!bot.isPlayerClient())details.put("loadout",bot.getShulkerProcess().reserveStatus());
         if(online&&!bot.isPlayerClient())details.put("deathInventory",bot.getCompanionProcess().deathInventoryStatus());
+        if(online&&!bot.isPlayerClient()){
+            var journal=bot.getOperations().journal();journal.note("Task",details.get("task"));
+            if(!details.get("blocker").isBlank())journal.note("Blocked",details.get("blocker")+"; next: "+details.get("next"));
+            details.put("kit",bot.getOperations().kitName());
+            int i=0;for(var event:journal.recent(10))details.put("event"+i++,event.time()+"|"+event.kind()+"|"+event.message());
+        }
+        if(online&&!bot.isPlayerClient()){
+            int index=0;
+            for(var stock:bot.getDepositProcess().stockObservations()){
+                if(index>=7)break;
+                var point=stock.point();
+                StringJoiner items=new StringJoiner(",");
+                stock.items().entrySet().stream().sorted(Map.Entry.<String,Integer>comparingByValue().reversed()).limit(5)
+                    .forEach(entry->items.add(entry.getKey()+"="+entry.getValue()));
+                details.put("stock"+index++,stock.seen()+"|"+(stock.privateStock()?"private":"shared")+"|"+point.dimension()+"|"+point.x()+" "+point.y()+" "+point.z()+"|"+items);
+            }
+        }
         details.put("flight",bot.isPlayerClient()?"Manual":bot.getFlight().status());details.put("recoveries",""+bot.getOperations().recoveries());
         details.put("available",""+(online&&!bot.isPlayerClient()&&!hivemind.utils.bot.BotWork.foreground(bot)&&!bot.getJobManager().hasQueuedJobs()&&!bot.getAutonomy().paused()&&bot.getAutonomy().order()==null));
         if(parent.transport()!=null)details.putAll(parent.transport().health());

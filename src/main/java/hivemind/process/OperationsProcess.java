@@ -10,6 +10,7 @@ import hivemind.utils.HiveMindProcessHelper;
 import hivemind.utils.bot.*;
 import hivemind.utils.mining.MiningRouteAccess;
 import hivemind.utils.network.*;
+import hivemind.utils.social.BlastPolicy;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.entity.EquipmentSlot;
@@ -30,6 +31,9 @@ public final class OperationsProcess extends HiveMindProcessHelper implements IB
     private String blocker="",next="Continue current task";
     private int recoveries;
     private java.nio.file.Path serverRoot;
+    private java.util.UUID loadoutAccount;
+    private TaskLoadoutStore kits;
+    private ActivityJournal journal;
     public OperationsProcess(HiveMind bot){super(bot);}
     @Override public boolean isTemporary(){return true;}
     @Override public double priority(){return .3;}
@@ -53,7 +57,7 @@ public final class OperationsProcess extends HiveMindProcessHelper implements IB
         if(supplying&&baseTrip){
             if(now>=supplyDeadline){abortBase("Bot base trip timed out");return new PathingCommand(null,PathingCommandType.REQUEST_PAUSE);}
             var destination=returningFromBase?supplyOrigin:baseDestination;
-            if(!destination.dimension().equals(MiningRouteAccess.dimension(ctx))){try{if(!hivemind.getPortalTravelProcess().isActive())hivemind.getPortalTravelProcess().start(destination.dimension());return new PathingCommand(null,PathingCommandType.DEFER);}catch(RuntimeException error){abortBase("Base route unavailable: "+error.getMessage());return new PathingCommand(null,PathingCommandType.REQUEST_PAUSE);}}
+            if(!destination.dimension().equals(MiningRouteAccess.dimension(ctx))){try{if(!hivemind.getPortalTravelProcess().isActive())hivemind.getPortalTravelProcess().start(destination.dimension(),MiningRouteAccess.position(destination));return new PathingCommand(null,PathingCommandType.DEFER);}catch(RuntimeException error){abortBase("Base route unavailable: "+error.getMessage());return new PathingCommand(null,PathingCommandType.REQUEST_PAUSE);}}
             GoalNear goal=new GoalNear(MiningRouteAccess.position(destination),3);if(!goal.isInGoal(ctx.playerFeet()))return new PathingCommand(goal,PathingCommandType.REVALIDATE_GOAL_AND_PATH);
             if(returningFromBase){baseTrip=returningFromBase=supplying=false;nextSupply=now+60000;next="Resume original task";return new PathingCommand(null,PathingCommandType.REQUEST_PAUSE);}
             if(!safeRestock())return new PathingCommand(null,PathingCommandType.REQUEST_PAUSE);
@@ -64,22 +68,34 @@ public final class OperationsProcess extends HiveMindProcessHelper implements IB
         if(sidestep!=null&&now<recoveryUntil&&!failed)return new PathingCommand(new GoalNear(sidestep,1),PathingCommandType.REVALIDATE_GOAL_AND_PATH);
         return new PathingCommand(null,PathingCommandType.REQUEST_PAUSE);
     }
+    private TaskLoadoutStore.Mode activeKit(){
+        if(hivemind.getStalkProcess().hunting())return TaskLoadoutStore.Mode.HUNT;
+        if(hivemind.getMineProcess().isActive())return hivemind.getMineProcess().targetsAncientDebris()?TaskLoadoutStore.Mode.NETHER:TaskLoadoutStore.Mode.MINE;
+        if(hivemind.getPortalTravelProcess().isActive()||ctx.world()!=null&&MiningRouteAccess.dimension(ctx).equals("minecraft:the_nether"))return TaskLoadoutStore.Mode.NETHER;
+        return TaskLoadoutStore.Mode.ROAM;
+    }
+    public String kitName(){return activeKit().name().toLowerCase(Locale.ROOT);}
+    public TaskLoadoutStore kits(){ensureScope();if(kits==null||!ctx.player().getUUID().equals(loadoutAccount)){loadoutAccount=ctx.player().getUUID();kits=new TaskLoadoutStore(serverRoot,loadoutAccount);}return kits;}
+    public ActivityJournal journal(){kits();if(journal==null)journal=new ActivityJournal(serverRoot,loadoutAccount);return journal;}
+    public void reloadKits(){kits=null;}
+    public Map<String,Integer> kitTargets(TaskLoadoutStore.Mode mode){return kits().targets(mode,ExpeditionLoadout.targets(ctx),mode==TaskLoadoutStore.Mode.NETHER&&hivemind.getMineProcess().targetsAncientDebris(),BlastPolicy.anchorDimension(MiningRouteAccess.dimension(ctx)),hivemind.getStalkProcess().combatStyle(),HiveMind.settings().botRestockBlocks.value);}
+    private Map<String,Integer> kitTargets(){return kitTargets(activeKit());}
     private Map<String,Integer> supplies(){
-        Map<String,Integer> targets=new LinkedHashMap<>(ExpeditionLoadout.missing(ctx));
-        if(BotInventory.count(ctx,BotInventory::building)<Math.max(32,HiveMind.settings().botMinimumBlocks.value))targets.put(SupplyReserves.BLOCKS,Math.max(32,HiveMind.settings().botRestockBlocks.value));
+        Map<String,Integer> targets=new LinkedHashMap<>(kitTargets());
+        targets.entrySet().removeIf(e->ExpeditionLoadout.count(ctx,e.getKey())>=SupplyReserves.minimum(e.getKey(),e.getValue()));
         return targets;
     }
-    private void ensureScope(){var here=MiningRouteAccess.root(ctx);if(serverRoot==null){serverRoot=here;return;}if(!serverRoot.equals(here)){serverRoot=here;obstacles.clear();onLostControl();nextSupply=0;walkUntil=0;blockerUntil=0;}}
+    private void ensureScope(){var here=MiningRouteAccess.root(ctx);if(serverRoot==null){serverRoot=here;return;}if(!serverRoot.equals(here)){serverRoot=here;loadoutAccount=null;kits=null;journal=null;obstacles.clear();onLostControl();nextSupply=0;walkUntil=0;blockerUntil=0;}}
     public boolean prepareTrip(BlockPos destination){
         long now=System.currentTimeMillis();if(supplying)return false;
-        if(ctx.player()==null||ctx.world()==null||ctx.player().isCreative()||hivemind.isPlayerClient()||hivemind.getFlight().flying()||destination.distSqr(ctx.playerFeet())<=256*256||now<nextSupply||!HiveMind.settings().botExpeditionSupplies.value||!HiveMind.settings().botAutoResupply.value||busy()||hivemind.getDepositProcess().isActive())return true;
+        if(ctx.player()==null||ctx.world()==null||ctx.player().isCreative()||hivemind.isPlayerClient()||hivemind.getFlight().flying()||destination.distSqr(ctx.playerFeet())<=256*256&&!hivemind.getStalkProcess().hunting()||now<nextSupply||!HiveMind.settings().botExpeditionSupplies.value||!HiveMind.settings().botAutoResupply.value||busy()||hivemind.getDepositProcess().isActive())return true;
         ensureScope();nextSupply=now+30000;Map<String,Integer> targets=supplies();if(targets.isEmpty())return true;
         try{beginRestock(targets);return false;}
         catch(RuntimeException error){blocker="Supply check: "+error.getMessage();next="Continue with available supplies; retry storage in 60 seconds";nextSupply=now+60000;blockerUntil=nextSupply;return true;}
     }
     private boolean safeRestock(){return ctx.minecraft().gui.screen()==null&&ctx.player().containerMenu==ctx.player().inventoryMenu&&ctx.player().inventoryMenu.getCarried().isEmpty()&&hivemind.getShulkerProcess().safeForResupply();}
-    private void abortBase(String reason){supplying=baseTrip=returningFromBase=false;baseDestination=supplyOrigin=null;blocker=reason;blockerUntil=nextSupply=System.currentTimeMillis()+60000;next="Continue original task; inspect the base route";}
-    public void requestRestock(){if(ctx.player()==null||ctx.world()==null||hivemind.isPlayerClient()||hivemind.getAutonomy().paused())throw new IllegalStateException("Join the world and resume the bot before resupplying");if(supplying||hivemind.getDepositProcess().isActive()||hivemind.getShulkerProcess().isActive())throw new IllegalStateException("A supply trip is already active");if(busy()||!hivemind.getShulkerProcess().safeGrounded())throw new IllegalStateException("Wait until the bot is grounded in a safe spot with closed containers");ensureScope();Map<String,Integer> targets=new LinkedHashMap<>(ExpeditionLoadout.targets(ctx));targets.entrySet().removeIf(e->SupplyReserves.refilled(e.getKey(),e.getValue(),ExpeditionLoadout.count(ctx,e.getKey())));if(targets.isEmpty())return;beginRestock(targets);}
+    private void abortBase(String reason){supplying=baseTrip=returningFromBase=false;baseDestination=supplyOrigin=null;blocker=reason;blockerUntil=nextSupply=System.currentTimeMillis()+60000;next="Continue original task; inspect the base route";journal().note("Supply",reason);}
+    public void requestRestock(){if(ctx.player()==null||ctx.world()==null||hivemind.isPlayerClient()||hivemind.getAutonomy().paused())throw new IllegalStateException("Join the world and resume the bot before resupplying");if(supplying||hivemind.getDepositProcess().isActive()||hivemind.getShulkerProcess().isActive())throw new IllegalStateException("A supply trip is already active");if(busy()||!hivemind.getShulkerProcess().safeGrounded())throw new IllegalStateException("Wait until the bot is grounded in a safe spot with closed containers");ensureScope();Map<String,Integer> targets=new LinkedHashMap<>(kitTargets());targets.entrySet().removeIf(e->SupplyReserves.refilled(e.getKey(),e.getValue(),ExpeditionLoadout.count(ctx,e.getKey())));if(targets.isEmpty())return;beginRestock(targets);}
     private void beginRestock(Map<String,Integer> targets){long now=System.currentTimeMillis();
         if(hivemind.getShulkerProcess().hasPortableReserves()&&!safeRestock()){hivemind.getFlight().cancel();supplyTargets=Map.copyOf(targets);supplying=waitingPortable=true;supplyDeadline=now+60000;blocker="Waiting for a quiet spot to open carried shulkers";next="Fill reserves from carried boxes before leaving";return;}
         BotBaseAccess.discoverEnderChests(ctx);BotBaseAccess.scan(ctx);supplyOrigin=baseDestination=null;baseTrip=returningFromBase=false;
@@ -94,6 +110,7 @@ public final class OperationsProcess extends HiveMindProcessHelper implements IB
         if(hivemind.getAutonomy().paused()||!BotWork.active(hivemind)||busy()){progress.sample("",0,0,false,now);return;}
         if(!supplying&&!hivemind.getDepositProcess().isActive()&&!hivemind.getFlight().flying()){
             BlockPos destination=hivemind.getScoutProcess().destination();if(destination==null)destination=hivemind.getRoamProcess().destination();if(destination==null&&hivemind.getStalkProcess().isActive())destination=hivemind.getStalkProcess().teamPoint();
+            if(destination==null&&hivemind.getStalkProcess().hunting())destination=ctx.playerFeet();
             if(destination!=null&&!prepareTrip(destination))return;
         }
         if(supplying||hivemind.getDepositProcess().isActive()||now<recoveryUntil||!HiveMind.settings().botStuckRecovery.value)return;
@@ -102,7 +119,7 @@ public final class OperationsProcess extends HiveMindProcessHelper implements IB
         recoveries++;BlockPos failed=ctx.playerFeet().immutable();var who=hivemind.getNetwork().localIdentity();var obstacle=new OperationsPackets.Obstacle(who.id(),who.name(),MiningRouteAccess.endpoint(ctx,failed),"Repeated navigation failure",now+120000,now);accept(obstacle,now);hivemind.getNetwork().publishOperation(obstacle);
         hivemind.getFlight().cancel();hivemind.getPathingBehavior().secretInternalSegmentCancel();hivemind.getInputOverrideHandler().clearAllKeys();
         sidestep=null;if(action!=RecoveryPolicy.Action.REPATH){for(int n=0;n<8;n++){double angle=(recoveries+n)*Math.PI/4;BlockPos p=failed.offset((int)Math.round(Math.cos(angle)*5),0,(int)Math.round(Math.sin(angle)*5));if(ctx.world().hasChunkAt(p)&&ctx.world().getWorldBorder().isWithinBounds(p)&&ctx.world().getBlockState(p).getCollisionShape(ctx.world(),p).isEmpty()&&ctx.world().getBlockState(p.above()).getCollisionShape(ctx.world(),p.above()).isEmpty()&&!ctx.world().getBlockState(p.below()).getCollisionShape(ctx.world(),p.below()).isEmpty()){sidestep=p;break;}}}
-        if(action==RecoveryPolicy.Action.WALK)walkUntil=now+120000;recoveryUntil=now+(sidestep==null?1000:5000);blockerUntil=now+15000;blocker="Navigation stalled: "+action.name().toLowerCase(Locale.ROOT);next=action==RecoveryPolicy.Action.WALK?"Walk away from failed launch area before retrying flight":sidestep==null?"Calculate a fresh route":"Take a short detour, then resume";
+        if(action==RecoveryPolicy.Action.WALK)walkUntil=now+120000;recoveryUntil=now+(sidestep==null?1000:5000);blockerUntil=now+15000;blocker="Navigation stalled: "+action.name().toLowerCase(Locale.ROOT);next=action==RecoveryPolicy.Action.WALK?"Walk away from failed launch area before retrying flight":sidestep==null?"Calculate a fresh route":"Take a short detour, then resume";journal().note("Navigation",blocker+" at "+failed+"; "+next);
     }
     @Override public void onLostControl(){baseTrip=returningFromBase=waitingPortable=false;baseDestination=supplyOrigin=null;supplying=false;recoveryUntil=0;sidestep=null;}
     @Override public String displayName0(){return blocker;}

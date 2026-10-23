@@ -6,6 +6,7 @@ import hivemind.utils.network.SupplyReserves;
 import hivemind.process.elytra.ElytraBehavior;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.item.*;
+import net.minecraft.tags.ItemTags;
 import java.util.*;
 /** Counts compatible food and rocket variants, and includes usable worn wings / offhand totems once. */
 public final class ExpeditionLoadout {
@@ -18,6 +19,11 @@ public final class ExpeditionLoadout {
         case SupplyReserves.BLOCKS->BotInventory.building(stack);
         case "@pickaxe"->BotInventory.pickaxe(stack,false);
         case "@debris_pickaxe"->BotInventory.pickaxe(stack,true);
+        case "@weapon"->(stack.is(ItemTags.SWORDS)||stack.is(ItemTags.AXES))&&(!stack.isDamageableItem()||stack.getMaxDamage()-stack.getDamageValue()>Math.max(1,HiveMind.settings().botToolReserve.value));
+        case "@crystals"->stack.is(Items.END_CRYSTAL);
+        case "@obsidian"->stack.is(Items.OBSIDIAN);
+        case "@anchors"->stack.is(Items.RESPAWN_ANCHOR);
+        case "@glowstone"->stack.is(Items.GLOWSTONE);
         default->EquipmentLoadout.ARMOR.containsKey(key)?EquipmentLoadout.matches(stack,key):BotItems.id(stack).equals(key)&&BotItems.expeditionSupply(stack);
     };}
     public static boolean portable(ItemStack stack){return stack.getItem() instanceof BlockItem block&&block.getBlock() instanceof net.minecraft.world.level.block.ShulkerBoxBlock;}

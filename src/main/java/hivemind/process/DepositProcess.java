@@ -43,6 +43,7 @@ import hivemind.utils.bot.StockBoxTrip;
 import hivemind.utils.bot.StorageAccessPolicy;
 import hivemind.utils.bot.EmergencySupplies;
 import hivemind.utils.bot.BotBaseAccess;
+import hivemind.utils.bot.StorageStockLedger;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.component.DataComponents;
@@ -106,9 +107,44 @@ public final class DepositProcess extends HiveMindProcessHelper {
     private StorageRule storageRule = StorageRule.DEFAULT;
     private final List<WorldRoutes.Storage> remainingChests = new ArrayList<>();
     private final Set<Integer> refusedSlots = new HashSet<>();
+    private StorageStockLedger observedStock;
+    private Path stockWorld;
+    private java.util.UUID stockAccount;
 
     public DepositProcess(HiveMind hivemind) {
         super(hivemind);
+    }
+
+    public List<StorageStockLedger.Observation> stockObservations(){
+        if(ctx.player()==null||ctx.world()==null)return observedStock==null?List.of():observedStock.recent();
+        Path world=MiningRouteAccess.root(ctx);java.util.UUID account=ctx.player().getUUID();
+        if(observedStock==null||!world.equals(stockWorld)||!account.equals(stockAccount)){
+            observedStock=new StorageStockLedger(world,account);stockWorld=world;stockAccount=account;
+        }
+        return observedStock.recent();
+    }
+
+    /** Read only contents confirmed by the server for this open menu. Stale sightings never authorize a transfer. */
+    private void rememberStock(int slots){
+        if(slots<27||openedMenu==null||synchronizedMenuId!=openedMenu.containerId)return;
+        stockObservations();if(observedStock==null)return;
+        Map<String,Integer> counts=new java.util.LinkedHashMap<>();
+        for(int i=0;i<slots;i++){
+            ItemStack stack=openedMenu.slots.get(i).getItem();if(stack.isEmpty())continue;
+            counts.merge(BuiltInRegistries.ITEM.getKey(stack.getItem()).toString(),stack.getCount(),Integer::sum);
+            if(ExpeditionLoadout.portable(stack)){
+                var contents=stack.get(DataComponents.CONTAINER);
+                if(contents!=null){
+                    var items=net.minecraft.core.NonNullList.<ItemStack>withSize(27,ItemStack.EMPTY);contents.copyInto(items);
+                    for(ItemStack item:items)if(!item.isEmpty())counts.merge("inside:"+BuiltInRegistries.ITEM.getKey(item.getItem()),item.getCount()*stack.getCount(),Integer::sum);
+                }
+            }
+        }
+        // A full chest can have more than 128 distinct component variants; store only bounded item totals.
+        if(counts.size()>128)counts=new java.util.LinkedHashMap<>(counts.entrySet().stream().limit(128).collect(java.util.stream.Collectors.toMap(Map.Entry::getKey,Map.Entry::getValue,(a,b)->a,java.util.LinkedHashMap::new)));
+        observedStock.observe(new WorldRoutes.Endpoint(depositDimension,chest.getX(),chest.getY(),chest.getZ()),
+                ctx.world().getBlockState(chest).is(Blocks.ENDER_CHEST),counts,System.currentTimeMillis());
+        hivemind.getOperations().journal().note("Storage","Observed "+depositDimension+" "+chest.toShortString()+" ("+counts.size()+" item types)");
     }
 
     public static boolean supports(Block block) {
@@ -242,7 +278,7 @@ public final class DepositProcess extends HiveMindProcessHelper {
         String requiredDimension = stage == Stage.RETURN ? returnDimension : depositDimension;
         if (!currentDimension.equals(requiredDimension)) {
             if (!HiveMind.settings().mineTravelBetweenDimensions.value) return fail("dimension travel is disabled");
-            hivemind.getPortalTravelProcess().start(requiredDimension);
+            hivemind.getPortalTravelProcess().start(requiredDimension,stage==Stage.RETURN?returnTo:chest);
             return pause();
         }
         if (stage != Stage.RETURN && HiveMind.settings().mineAvoidSculk.value
@@ -319,6 +355,7 @@ public final class DepositProcess extends HiveMindProcessHelper {
         if (storageSlots != 27 && storageSlots != 54) {
             return fail("unsupported chest slot layout");
         }
+        if(pendingSlot<0&&contentRevision>openRevision)rememberStock(storageSlots);
         if (pendingSlot >= 0) {
             if (++pendingTicks < 5) return pause();
             // Correct client prediction may produce no slot update at all. Reopening requests
@@ -329,6 +366,7 @@ public final class DepositProcess extends HiveMindProcessHelper {
                 transition(Stage.OPEN);
                 return pause();
             }
+            rememberStock(storageSlots);
             ItemStack remaining = pendingWithdrawal ? ItemStack.EMPTY : ctx.player().getInventory().getItem(pendingSlot);
             int remainingCount = remaining.getItem() == pendingStack.getItem() ? remaining.getCount() : 0;
             int transferred = pendingWithdrawal ? Math.max(0, BotInventory.count(ctx,
@@ -338,6 +376,7 @@ public final class DepositProcess extends HiveMindProcessHelper {
                 refusedSlots.add(pendingSlot);
             } else {
                 movedItems += transferred;
+                hivemind.getOperations().journal().note("Transfer",(pendingWithdrawal?"Withdrew ":"Deposited ")+transferred+" "+BotItems.id(pendingStack)+" at storage #"+storageId);
                 if (!pendingWithdrawal) hivemind.getMineProcess().recordDeposit(pendingStack, transferred);
                 if (!remaining.isEmpty()) {
                     refusedSlots.add(pendingSlot); // A partial stack filled the remaining chest space.
@@ -503,6 +542,7 @@ public final class DepositProcess extends HiveMindProcessHelper {
     }
 
     private PathingCommand fail(String reason) {
+        if(ctx.player()!=null&&ctx.world()!=null)hivemind.getOperations().journal().note("Storage failure",reason);
         if (fetch) { boolean emergency=survivalSupply;onLostControl(); lastFetchError=reason;if(emergency)hivemind.getSurvivalProcess().supplyFailed(reason); logDirect("Fetch stopped: "+reason); return new PathingCommand(null,PathingCommandType.CANCEL_AND_SET_GOAL); }
         if (hivemind.getJobManager() != null) hivemind.getJobManager().fail("Deposit: " + reason);
         if (resupply && hivemind.getSurvivalProcess() != null) hivemind.getSurvivalProcess().supplyFailed(reason);

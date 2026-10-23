@@ -237,7 +237,7 @@ public final class ShulkerSupplyProcess extends HiveMindProcessHelper implements
     public boolean ownsForRecovery(BlockPos pos){return stage==Stage.BREAK&&confirmed&&box!=null&&box.equals(pos)&&world==ctx.world()&&sameBlock();}
     private void transition(Stage next){stage=next;ticks=0;}
     private PathingCommand pause(){return new PathingCommand(null,PathingCommandType.REQUEST_PAUSE);}
-    private PathingCommand fail(String reason){logDirect(reason+(box==null?"":" at "+box.toShortString()));onLostControl();retryAt=System.currentTimeMillis()+60000;return new PathingCommand(null,PathingCommandType.CANCEL_AND_SET_GOAL);}
+    private PathingCommand fail(String reason){logDirect(reason+(box==null?"":" at "+box.toShortString()));if(ctx.player()!=null&&ctx.world()!=null)hivemind.getOperations().journal().note("Shulker failure",reason+(box==null?"":" at "+box.toShortString()));onLostControl();retryAt=System.currentTimeMillis()+60000;return new PathingCommand(null,PathingCommandType.CANCEL_AND_SET_GOAL);}
     private void closeMenu(){if(menu!=null&&ctx.player()!=null&&ctx.player().containerMenu==menu&&menu.getCarried().isEmpty())ctx.player().closeContainer();menu=null;}
     @Override public void onLostControl(){
         closeMenu();if(ctx.player()!=null){hivemind.getInputOverrideHandler().setInputForceState(Input.CLICK_LEFT,false);ctx.playerController().resetBlockRemoving();
