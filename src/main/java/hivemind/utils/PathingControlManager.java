@@ -18,6 +18,7 @@
 package hivemind.utils;
 
 import hivemind.HiveMind;
+import hivemind.utils.reliability.ActionArbiter;
 import hivemind.api.event.events.TickEvent;
 import hivemind.api.event.listener.AbstractGameEventListener;
 import hivemind.api.pathing.calc.IPathingControlManager;
@@ -208,7 +209,11 @@ public class PathingControlManager implements IPathingControlManager {
         while (iterator.hasNext()) {
             IHiveMindProcess proc = iterator.next();
 
-            PathingCommand exec = proc.onTick(Objects.equals(proc, inControlLastTick) && hivemind.getPathingBehavior().calcFailedLastTick(), hivemind.getPathingBehavior().isSafeToCancel());
+            PathingCommand exec;
+            var owner=ActionArbiter.owner(proc.getClass().getSimpleName());
+            try(var scope=hivemind.getActions().scope(owner.name(),owner.priority())){
+                exec = proc.onTick(Objects.equals(proc, inControlLastTick) && hivemind.getPathingBehavior().calcFailedLastTick(), hivemind.getPathingBehavior().isSafeToCancel());
+            }
             if (exec == null) {
                 if (proc.isActive()) {
                     throw new IllegalStateException(proc.displayName() + " actively returned null PathingCommand");

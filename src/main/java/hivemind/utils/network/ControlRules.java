@@ -28,8 +28,11 @@ public final class ControlRules {
     private final Path file;
     private Properties values;
     private long version;
+    private final Path clockFile;
+    private long commandClock;
     public ControlRules(Path root) {
         file=root.resolve("bot-network-controls.properties");values=AtomicProperties.read(file);
+        clockFile=root.resolve("controller-command-clock.properties");commandClock=Long.parseLong(AtomicProperties.read(clockFile).getProperty("revision","0"));
         version=Long.parseLong(values.getProperty("version","0"));
         if(version<0||version==Long.MAX_VALUE||values.size()>8192)throw new IllegalStateException("Invalid bot-network-controls.properties");
         Set<UUID> bots=new HashSet<>();boolean migrated=false;
@@ -53,6 +56,7 @@ public final class ControlRules {
         return value;
     }
     public long version(){return version;}
+    public long nextCommandTime(long now){long next=Math.max(now,Math.addExact(commandClock,1));Properties p=new Properties();p.setProperty("revision",""+next);AtomicProperties.write(clockFile,p);commandClock=next;return next;}
     public void change(Request request){
         String suffix=request.action()==Action.SETTING?"setting."+request.key():request.action()==Action.TRUST?"trust."+request.key():null;
         if(suffix==null)throw new IllegalArgumentException("Quick commands cannot be saved as policies");
@@ -107,8 +111,11 @@ public final class ControlRules {
             try{
                 if(request.action()==Action.COMMAND){
                     String command=command(request.value());
+                    String label=command.split(" ",2)[0].toLowerCase(Locale.ROOT);
+                    Boolean held=Set.of("stop","cancel","pause","forcecancel").contains(label)?Boolean.TRUE:Set.of("resume","roam").contains(label)?Boolean.FALSE:null;
+                    if(held!=null)rules.change(new Request(request.reporter(),request.reporterName(),request.id(),request.target(),Action.SETTING,"botFleetHold",held.toString(),now));
                     if(request.target()!=null&&!online.contains(request.target()))throw new IllegalArgumentException("Bot is offline; command was not run");
-                    return List.of(new Execute(host.id(),host.name(),request.id(),request.reporter(),request.target(),command,now));
+                    return List.of(new Execute(host.id(),host.name(),request.id(),request.reporter(),request.target(),command,rules.nextCommandTime(now)));
                 }
                 rules.change(request);
                 List<Packet> result=new ArrayList<>();

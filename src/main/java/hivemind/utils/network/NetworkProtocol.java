@@ -30,7 +30,8 @@ import java.util.*;
 
 /** Bounded, mutually authenticated, encrypted observations and explicitly routed client control. */
 public final class NetworkProtocol {
-    private static final int MAGIC = 0x484d4e44, VERSION = 7, MAX_FRAME = 65536;
+    public static final int VERSION = 8;
+    private static final int MAGIC = 0x484d4e44, MAX_FRAME = 65536;
     private static final SecureRandom RANDOM = new SecureRandom();
     public static final long MAX_AGE_MS = 600000, HISTORY_MS = 30L * 86400000, CLOCK_SKEW_MS = 10000;
     public sealed interface Message permits Sighting, Exploration, ControlPackets.Packet, TerrainPackets.Tile, TerrainPackets.Site, TerrainPackets.Marker {
@@ -139,7 +140,7 @@ public final class NetworkProtocol {
     }
     private static void header(DataOutputStream out) throws IOException { out.writeInt(MAGIC); out.writeInt(VERSION); }
     private static void header(DataInputStream in) throws IOException {
-        if (in.readInt() != MAGIC || in.readInt() != VERSION) throw new IOException("Incompatible bot network version");
+        if(in.readInt()!=MAGIC)throw new IOException("Not a HiveMind controller");int remote=in.readInt();if(remote!=VERSION)throw new IOException("Incompatible HiveMind network protocol: local "+VERSION+", remote "+remote+". Update the controller and affected clients; other component versions may differ.");
     }
     private static void checkPeer(Identity local, Identity remote) throws IOException {
         if (!local.scope().equals(remote.scope())) throw new IOException("Bots are connected to different Minecraft servers/scopes");

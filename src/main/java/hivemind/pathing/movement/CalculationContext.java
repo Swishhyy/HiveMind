@@ -22,6 +22,7 @@ import hivemind.utils.social.TraversalPolicy;
 import hivemind.utils.bot.SculkPolicy;
 import hivemind.utils.social.StealthPolicy;
 import hivemind.utils.bot.MiningZone;
+import hivemind.utils.reliability.RegionRules;
 import hivemind.utils.mining.MiningRouteAccess;
 import hivemind.api.IHiveMind;
 import hivemind.api.pathing.movement.ActionCosts;
@@ -95,6 +96,7 @@ public class CalculationContext {
 
     public final PrecomputedData precomputedData;
     private final List<ConstructionPolicy.Area> protectedAreas;
+    private final List<RegionRules.Region> behaviorRegions;
     private final boolean avoidSculk;
     private final BlockPos stalkTarget;
     private final int stalkClearance;
@@ -129,6 +131,7 @@ public class CalculationContext {
         double sculkCost = HiveMind.settings().sculkPathPenalty.value;
         this.sculkPenalty = Double.isFinite(sculkCost) ? Math.max(0, sculkCost) : 5000;
         this.protectedAreas = MiningWaypoints.protection(hivemind.getPlayerContext());
+        this.behaviorRegions=((HiveMind)hivemind).getReliability().regions().regions();
         this.preferAvoidConstruction = HiveMind.settings().preferAvoidConstruction.value;
         this.protectContainers = HiveMind.settings().protectContainers.value;
         double penalty = HiveMind.settings().constructionBreakPenalty.value;
@@ -238,7 +241,7 @@ public class CalculationContext {
         if (!HiveMind.settings().allowPlaceInFluidsFlow.value && !current.getFluidState().isEmpty() && !current.getFluidState().isSource()) {
             return COST_INF;
         }
-        return placeBlockCost;
+        return placeBlockCost+(behaviorRegions.stream().anyMatch(r->r.kind()==RegionRules.Kind.BUILD&&r.center().dimension().equals(miningWorld))&&behaviorRegions.stream().noneMatch(r->r.kind()==RegionRules.Kind.BUILD&&r.contains(miningWorld,x,z))?100:0);
     }
 
     public double breakCostMultiplierAt(int x, int y, int z, BlockState current) {
@@ -258,6 +261,7 @@ public class CalculationContext {
     public double sculkPathPenalty(int x, int y, int z) {
         // Both are immutable per-calculation movement hazards; ordinary melee/ambush approach omits player clearance.
         double penalty = avoidSculk ? sculk.penalty(x, y, z) * sculkPenalty : 0;
+        penalty+=RegionRules.penalty(behaviorRegions,miningWorld,x,z);
         if (stalkTarget != null) penalty += StealthPolicy.clearancePenalty(Math.hypot((double)x-stalkTarget.getX(),(double)z-stalkTarget.getZ()),stalkClearance);
         return penalty;
     }
@@ -276,6 +280,7 @@ public class CalculationContext {
     }
 
     public boolean isPossiblyProtected(int x, int y, int z) {
+        if(RegionRules.protectedAt(behaviorRegions,miningWorld,x,z))return true;
         for (ConstructionPolicy.Area area : protectedAreas) {
             if (area.contains(x, y, z)) {
                 return true;

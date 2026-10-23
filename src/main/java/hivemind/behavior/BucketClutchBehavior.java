@@ -65,10 +65,10 @@ public final class BucketClutchBehavior extends Behavior {
             if(destination<0)destination=8;
             ctx.playerController().windowClick(ctx.player().inventoryMenu.containerId,source,destination,ContainerInput.SWAP,ctx.player());source=destination;
         }
-        ctx.player().getInventory().setSelectedSlot(source);ctx.playerController().syncHeldItem();return ctx.player().getMainHandItem().is(item);
+        hivemind.getReliability().select(source);ctx.playerController().syncHeldItem();return ctx.player().getMainHandItem().is(item);
     }
     private void finish(){
-        if(previous>=0&&ctx.player()!=null&&ctx.minecraft().gameMode!=null){ctx.player().getInventory().setSelectedSlot(previous);ctx.playerController().syncHeldItem();}
+        if(previous>=0&&ctx.player()!=null&&ctx.minecraft().gameMode!=null){hivemind.getReliability().select(previous);ctx.playerController().syncHeldItem();}
         previous=-1;landing=placed=planned=null;attempted=false;wetTicks=pickupTicks=0;
     }
     @Override public void onTick(TickEvent event){

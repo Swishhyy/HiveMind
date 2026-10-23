@@ -23,6 +23,10 @@ public final class SupervisorChecks {
         try (var out = Files.newOutputStream(file)) { p.store(out, "test"); }
         check(ClientSupervisor.delaySeconds(15, 1) == 15 && ClientSupervisor.delaySeconds(15, 20) == 300, "Capped backoff");
         check(ClientSupervisor.read(file).command().size() == 6, "Explicit foreground launch profile");
+        check(ClientSupervisor.health(1000,0,2000,false,120,300)==ClientSupervisor.Health.STARTING,"Missing heartbeat gets startup grace");
+        check(ClientSupervisor.health(1000,0,400000,false,120,300)==ClientSupervisor.Health.FROZEN,"A live process with no tick heartbeat eventually fails");
+        check(ClientSupervisor.health(1000,2000,3000,false,120,300)==ClientSupervisor.Health.HEALTHY,"Fresh tick heartbeat is healthy");
+        check(ClientSupervisor.health(1000,2000,400000,true,120,300)==ClientSupervisor.Health.HELD,"Deliberate hold suppresses automatic recovery");
         ClientSupervisor.run(file);
         check(Files.readString(marker).equals("crashed"), "A nonzero exit restarted; zero exit stopped");
         p.remove("arg.2");

@@ -42,6 +42,8 @@ public final class NetworkSettings {
     }
     private static final Map<String, Spec> SPECS = new LinkedHashMap<>();
     static {
+        bool("Reliability","botFleetHold botAutomaticMaintenance botRequestSupplyDelivery");
+        choice("Reliability","botControllerOfflinePolicy","continue","hold","return");
         bool("Sessions","botCombatLog botAutoReconnect");
         number("Sessions","integer",1,20,"botCombatLogHealth");
         number("Sessions","long",5000,86400000,"botCombatLogWaitMS");

@@ -41,7 +41,7 @@ public final class HiveMindPlayerContext implements IPlayerContext {
     public HiveMindPlayerContext(HiveMind hivemind, Minecraft mc) {
         this.hivemind = hivemind;
         this.mc = mc;
-        this.playerController = new HiveMindPlayerController(mc);
+        this.playerController = new HiveMindPlayerController(hivemind,mc);
     }
 
     @Override

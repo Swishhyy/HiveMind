@@ -18,6 +18,7 @@
 package hivemind.behavior;
 
 import hivemind.HiveMind;
+import hivemind.utils.mining.MiningRouteAccess;
 import hivemind.api.event.events.TickEvent;
 import hivemind.api.event.events.type.EventState;
 import hivemind.api.process.IHiveMindProcess;
@@ -51,6 +52,9 @@ public final class FlightBehavior extends Behavior {
     private BlockPos takeoff;
     private BlockPos nextSurveyPoint;
     private boolean airborne;
+    private BlockPos flightOrigin;
+    private int departureRockets,departureDurability;
+    private long badConditionsUntil;
     private Object world;
     private final Map<BlockPos,Long> blockedTakeoffs=new HashMap<>();
     private int armorSlot=-1;
@@ -104,6 +108,7 @@ public final class FlightBehavior extends Behavior {
     }
     private boolean start(IHiveMindProcess task,BlockPos destination,Mode requested){
         long now=System.currentTimeMillis();
+        if(requested!=Mode.ESCAPE&&!flying()&&(hivemind.getReliability().holding()||now<badConditionsUntil))return false;
         if(ctx.player()==null||ctx.world()==null||hivemind.getAutonomy().paused()||now<(requested==Mode.ESCAPE?escapeRetryAt:retryAt)||!(hivemind.getElytraProcess() instanceof ElytraProcess flight))return false;
         if(flight.isActive()){
             if(requested!=Mode.ESCAPE&&owner!=task)return false;
@@ -126,6 +131,7 @@ public final class FlightBehavior extends Behavior {
             if(requested!=Mode.PURSUIT)destination=cruiseDestination(destination,requested);
             flight.travelFor(task,new hivemind.api.pathing.goals.GoalBlock(destination),launch,requested==Mode.ESCAPE);
             owner=task;mode=requested;started=lastReplan=now;world=ctx.world();takeoff=launch==null?ctx.playerFeet().immutable():launch;airborne=false;
+            flightOrigin=ctx.playerFeet().immutable();departureRockets=rockets();departureDurability=wingDurability(ctx.player().getItemBySlot(EquipmentSlot.CHEST));
             nextSurveyPoint=null;
             lastDestination=point(destination);reason=label(requested,destination);return true;
         }catch(RuntimeException e){reason="Flight retry: "+e.getMessage();backoff(now,requested);return false;}
@@ -154,6 +160,7 @@ public final class FlightBehavior extends Behavior {
         for(int x=-12;x<=12;x++)for(int z=-12;z<=12;z++)for(int y=-2;y<=3;y++){
             double value=x*x+z*z+Math.abs(y)*4;if(value>=score)continue;
             BlockPos p=feet.offset(x,y,z);
+            if(!hivemind.getReliability().routes().available("launch",MiningRouteAccess.endpoint(ctx,p),now))continue;
             if(blockedTakeoffs.keySet().stream().anyMatch(blocked->TakeoffState.sameFailedArea(point(p),point(blocked)))
                     ||!ctx.world().hasChunkAt(p)||!ctx.world().getWorldBorder().isWithinBounds(p)
                     ||!ctx.world().getBlockState(p).getFluidState().isEmpty()||!ctx.world().getBlockState(p.above()).getFluidState().isEmpty()
@@ -184,6 +191,7 @@ public final class FlightBehavior extends Behavior {
         return false;
     }
     private void blockTakeoff(BlockPos site,long now){
+        hivemind.getReliability().routes().failed("launch",MiningRouteAccess.endpoint(ctx,site),"Failed elytra launch",now);
         hivemind.getOperations().warn(site,"Failed elytra launch",60000);
         blockedTakeoffs.put(site,now+60000);while(blockedTakeoffs.size()>64)blockedTakeoffs.remove(blockedTakeoffs.entrySet().stream().min(Map.Entry.comparingByValue()).orElseThrow().getKey());
     }
@@ -230,7 +238,7 @@ public final class FlightBehavior extends Behavior {
         if(!hivemind.getElytraProcess().isActive()){
             if(hivemind.getStalkProcess().isActive())hivemind.getStalkProcess().transported();
             if(!airborne){if(takeoff!=null)blockTakeoff(takeoff,now);blockTakeoff(ctx.playerFeet().immutable(),now);backoff(now,mode);reason="Takeoff obstructed; moving away before trying another launch";}
-            else reason="Landed; ready for the next flight";
+            else {reason="Landed; ready for the next flight";if(ctx.player().onGround())hivemind.getReliability().routes().success("landing",MiningRouteAccess.endpoint(ctx,ctx.playerFeet()),now);if(flightOrigin!=null)hivemind.getReliability().budget().observe(Math.hypot((double)flightOrigin.getX()-ctx.playerFeet().getX(),(double)flightOrigin.getZ()-ctx.playerFeet().getZ()),Math.max(0,departureRockets-rockets()),Math.max(0,departureDurability-wingDurability(ctx.player().getItemBySlot(EquipmentSlot.CHEST))));}
             owner=null;targetId=null;restoreArmor();return;
         }
         if(hivemind.getAutonomy().paused())return;
@@ -239,6 +247,7 @@ public final class FlightBehavior extends Behavior {
             else cancel();return;
         }
         if(hivemind.getElytraProcess() instanceof ElytraProcess flight){
+            if(mode!=Mode.ESCAPE&&airborne&&hivemind.getReliability().health().poorFlightConditions()){badConditionsUntil=now+30000;reason="Landing after repeated server corrections or slow client ticks";flight.requestLanding();return;}
             if(mode!=Mode.ESCAPE&&airborne&&ctx.player().isFallFlying()&&HiveMind.settings().botAutoResupply.value&&HiveMind.settings().botExpeditionSupplies.value
                 &&hivemind.getShulkerProcess().hasPortableItems(hivemind.getOperations().flightRefillTargets(),true)
                 &&ctx.world().players().stream().noneMatch(p->p!=ctx.player()&&!p.isSpectator()&&!hivemind.getNetwork().isTeammate(p.getUUID())&&!hivemind.getBotControl().isTrusted(p.getUUID())&&p.distanceToSqr(ctx.player())<96*96)){

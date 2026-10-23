@@ -40,6 +40,7 @@ final class NetworkControls {
     private final Path settingsFile;
     private final ControlRules rules;
     private final ControlRules.Coordinator coordinator;
+    private final CommandLedger ledger;
     private final ArrayBlockingQueue<WebControlAction> actions=new ArrayBlockingQueue<>(64);
     private final Map<String,Object> before=new HashMap<>();
     private final Map<String,String> managed=new LinkedHashMap<>();
@@ -57,6 +58,7 @@ final class NetworkControls {
     NetworkControls(NetworkBehavior parent,HiveMind bot,Path root){
         this.parent=parent;this.bot=bot;settingsFile=root.resolve("bot-web-settings.properties");
         rules=new ControlRules(root);coordinator=new ControlRules.Coordinator(rules,parent.localIdentity());
+        ledger=new CommandLedger(root,parent.localIdentity().id());
         Properties saved=AtomicProperties.read(settingsFile);
         if(saved.size()>128)throw new IllegalStateException("Too many saved web settings");
         Map<String,String> values=new LinkedHashMap<>();
@@ -91,6 +93,9 @@ final class NetworkControls {
         else if(packet instanceof Execute execute){
             if(execute.target()!=null&&!execute.target().equals(who().id()))return;
             if(bot.isPlayerClient()&&execute.target()==null)return;
+            var verdict=ledger.check(execute.reporter(),execute.id(),execute.observedAt());
+            if(verdict!=CommandLedger.Verdict.NEW){Receipt previous=applied.get(execute.reporter()+":"+execute.id());if(previous!=null)publish(previous);else publish(receipt(execute.id(),execute.requester(),verdict==CommandLedger.Verdict.DUPLICATE,verdict==CommandLedger.Verdict.DUPLICATE?"Already accepted before reconnect/restart; inspect current status":"Superseded by a newer controller order",now));return;}
+            ledger.accept(execute.reporter(),execute.id(),execute.observedAt());
             applyOnce(execute.reporter(),execute.id(),execute.requester(),()->run(execute.command()),now);
         }else if(packet instanceof Policy policy){
             if(bot.isPlayerClient())return;
@@ -206,7 +211,7 @@ final class NetworkControls {
         }
         var target=bot.getCommandManager().getCommand(label);if(target==null)throw new IllegalArgumentException("Unknown bot command");
         String first=expanded.second().isEmpty()?"":expanded.second().get(0).getValue().toLowerCase(Locale.ROOT);bot.getAutonomy().beforeCommand(label,first);
-        target.execute(label,args);bot.getAutonomy().afterCommand(label,first);
+        target.execute(label,args);bot.getAutonomy().afterCommand(label,first);bot.getReliability().command(command);
         if(label.equals("deposit")&&first.equals("point")&&bot.getCommandManager().getCommand("storagepoint") instanceof hivemind.command.defaults.StoragePointCommand storage)return storage.result();
         if(target instanceof hivemind.command.defaults.BotBaseCommand base)return base.result();
         return "Accepted #"+command+"; "+status();
@@ -237,6 +242,7 @@ final class NetworkControls {
             }
         }
         details.put("flight",bot.isPlayerClient()?"Manual":bot.getFlight().status());details.put("recoveries",""+bot.getOperations().recoveries());
+        if(online&&!bot.isPlayerClient())details.putAll(bot.getReliability().details());
         details.put("available",""+(online&&!bot.isPlayerClient()&&!hivemind.utils.bot.BotWork.foreground(bot)&&!bot.getJobManager().hasQueuedJobs()&&!bot.getAutonomy().paused()&&bot.getAutonomy().order()==null));
         if(parent.transport()!=null)details.putAll(parent.transport().health());
         var queue=online&&!bot.isPlayerClient()?bot.getScoutProcess().queue():null;
@@ -269,6 +275,7 @@ final class NetworkControls {
     State state(long now){
         var ctx=bot.getPlayerContext();var session=SessionRuntime.get(ctx.minecraft().gameDirectory.toPath());
         Map<String,String> sessionState=new LinkedHashMap<>(session.snapshot());sessionState.put("role",bot.getClientRole().mode());
+        sessionState.put("protocol",""+NetworkProtocol.VERSION);sessionState.put("capabilities","reliability1,storage-leases,manual-player");
         sessionState.put("connected",Boolean.toString(ctx.player()!=null&&ctx.world()!=null&&ctx.minecraft().getConnection()!=null));if(bot.isPlayerClient())sessionState.put("automatic","false");
         Map<String,String> update=UpdateRuntime.ready()?UpdateRuntime.service().snapshot():Map.of();
         Map<String,String> settings=new LinkedHashMap<>();for(var spec:NetworkSettings.all())settings.put(spec.name(),setting(spec.name()).value.toString());

@@ -25,10 +25,11 @@ import static hivemind.utils.network.ControlPackets.*;
 
 /** Ephemeral team intent and host assignments; never part of observation history. */
 public final class TeamPackets {
-    public enum Kind { IDLE, MINE, STALK, HUNT, ROAM }
+    public enum Kind { IDLE, MINE, STALK, HUNT, ROAM, STORAGE }
     public record Intent(UUID reporter,String reporterName,Kind kind,UUID target,Endpoint point,Endpoint work,
-                         boolean explosive,boolean engaged,long observedAt) implements Packet {
-        public Intent { base(reporter,reporterName);Objects.requireNonNull(kind);Objects.requireNonNull(point); }
+                         boolean explosive,boolean engaged,long observedAt,Map<String,Integer> supplies) implements Packet {
+        public Intent(UUID reporter,String name,Kind kind,UUID target,Endpoint point,Endpoint work,boolean explosive,boolean engaged,long time){this(reporter,name,kind,target,point,work,explosive,engaged,time,Map.of());}
+        public Intent { base(reporter,reporterName);Objects.requireNonNull(kind);Objects.requireNonNull(point);if(supplies.size()>16||supplies.entrySet().stream().anyMatch(e->e.getKey()==null||!e.getKey().matches("[@a-z0-9_:./-]{1,100}")||e.getValue()==null||e.getValue()<1||e.getValue()>1000000))throw new IllegalArgumentException("Invalid stock reservation");supplies=Map.copyOf(supplies); }
     }
     public record Lease(Endpoint point,long until) { public Lease { Objects.requireNonNull(point); } }
     public record Plan(UUID reporter,String reporterName,Map<UUID,String> members,List<Intent> intents,Map<UUID,Lease> leases,long observedAt) implements Packet {
@@ -46,11 +47,11 @@ public final class TeamPackets {
     }
     private static Endpoint point(DataInputStream in)throws IOException { return in.readBoolean()?new Endpoint(text(in,128),in.readInt(),in.readInt(),in.readInt()):null; }
     private static void intent(DataOutputStream out,Intent p)throws IOException {
-        uuid(out,p.reporter());text(out,p.reporterName());out.writeByte(p.kind().ordinal());uuid(out,p.target());point(out,p.point());point(out,p.work());out.writeBoolean(p.explosive());out.writeBoolean(p.engaged());out.writeLong(p.observedAt());
+        uuid(out,p.reporter());text(out,p.reporterName());out.writeByte(p.kind().ordinal());uuid(out,p.target());point(out,p.point());point(out,p.work());out.writeBoolean(p.explosive());out.writeBoolean(p.engaged());out.writeLong(p.observedAt());out.writeByte(p.supplies().size());for(var entry:p.supplies().entrySet()){text(out,entry.getKey());out.writeInt(entry.getValue());}
     }
     private static Intent intent(DataInputStream in)throws IOException {
         UUID id=uuid(in);String name=text(in,16);int kind=in.readUnsignedByte();if(kind>=Kind.values().length)throw new IOException("Invalid team work");
-        return new Intent(id,name,Kind.values()[kind],uuid(in),point(in),point(in),in.readBoolean(),in.readBoolean(),in.readLong());
+        UUID target=uuid(in);Endpoint point=point(in),work=point(in);boolean explosive=in.readBoolean(),engaged=in.readBoolean();long time=in.readLong();int count=in.readUnsignedByte();if(count>16)throw new IOException("Too many reserved supplies");Map<String,Integer> stock=new LinkedHashMap<>();for(int i=0;i<count;i++){String key=text(in,100);if(stock.put(key,in.readInt())!=null)throw new IOException("Duplicate stock reservation");}return new Intent(id,name,Kind.values()[kind],target,point,work,explosive,engaged,time,stock);
     }
     static void encode(DataOutputStream out,Packet packet)throws IOException {
         if(packet instanceof Intent p)intent(out,p);

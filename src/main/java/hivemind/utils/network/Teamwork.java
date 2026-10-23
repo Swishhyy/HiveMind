@@ -39,11 +39,11 @@ public final class Teamwork {
         // Explicit release is immediate. A disconnected holder retains its grace period, so stale grants cannot overlap.
         leases.entrySet().removeIf(entry->{
             Intent intent=intents.get(entry.getKey());
-            return now>entry.getValue().until()+NetworkProtocol.CLOCK_SKEW_MS||intent!=null&&(intent.kind()!=Kind.MINE||!entry.getValue().point().equals(intent.work()));
+            return now>entry.getValue().until()+NetworkProtocol.CLOCK_SKEW_MS||intent!=null&&((intent.kind()!=Kind.MINE&&intent.kind()!=Kind.STORAGE)||!entry.getValue().point().equals(intent.work()));
         });
         List<Intent> ordered=intents.values().stream().sorted(Comparator.comparing(p->p.reporter().toString())).toList();
         for(Intent intent:ordered){
-            if(intent.kind()!=Kind.MINE||intent.work()==null)continue;
+            if(intent.kind()!=Kind.MINE&&intent.kind()!=Kind.STORAGE||intent.work()==null)continue;
             Lease existing=leases.get(intent.reporter());
             if(existing!=null){leases.put(intent.reporter(),new Lease(existing.point(),now+4000));continue;}
             if(now>=notBefore&&leases.size()<64&&leases.values().stream().noneMatch(lease->near(lease.point(),intent.work(),6)))leases.put(intent.reporter(),new Lease(intent.work(),now+4000));

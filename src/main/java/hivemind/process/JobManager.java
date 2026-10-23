@@ -44,6 +44,8 @@ public final class JobManager extends HiveMindProcessHelper implements IBehavior
     private String reason = "No jobs";
     private UUID requestOwner;
     private long nextError;
+    private boolean recoverableHold;
+    private long retryAt;
 
     public JobManager(HiveMind bot) { super(bot); }
     @Override public boolean isTemporary() { return true; }
@@ -61,6 +63,7 @@ public final class JobManager extends HiveMindProcessHelper implements IBehavior
         root = here; store = next; queue.clear(); queue.addAll(saved); current = null;
         nextId = Math.max(System.currentTimeMillis(), queue.stream().mapToLong(JobStore.Job::id).max().orElse(0) + 1);
         paused = !queue.isEmpty(); completedMining = false;
+        recoverableHold=paused&&!hivemind.getReliability().holding();retryAt=System.currentTimeMillis()+10000;
         reason = queue.isEmpty() ? "No jobs" : "Saved jobs are paused; use job resume";
     }
     public boolean runningJobs(){ensureLoaded();return !paused&&!queue.isEmpty();}
@@ -87,7 +90,7 @@ public final class JobManager extends HiveMindProcessHelper implements IBehavior
         return job.id();
     }
     public void pauseJobs() {
-        ensureLoaded(); paused = true; reason = "Paused by controller"; save();
+        ensureLoaded(); paused = true;recoverableHold=false; reason = "Paused by controller"; save();
         hivemind.getPathingBehavior().softCancelIfSafe();
     }
     public void resumeJobs() {
@@ -96,6 +99,7 @@ public final class JobManager extends HiveMindProcessHelper implements IBehavior
         if (current != null && !hivemind.getMineProcess().isActive() && !hivemind.getDepositProcess().isActive()
                 && !hivemind.getPortalTravelProcess().isActive()) { current = null; completedMining = false; }
         paused = false; reason = "Ready to resume";
+        recoverableHold=false;
     }
     public void cancelJobs() {
         ensureLoaded(); stopOwnedWork(); queue.clear(); current = null; paused = true; completedMining = false;
@@ -125,7 +129,6 @@ public final class JobManager extends HiveMindProcessHelper implements IBehavior
     }
     public void miningFinished() {
         if (current == null) return;
-        current = current.withDeposited(Math.max(current.deposited(), current.quantity())); queue.set(0, current);
         completedMining = true; reason = "Mining target reached; finishing storage trip"; save();
     }
     public void recordDeposit(int quantity) {
@@ -136,6 +139,7 @@ public final class JobManager extends HiveMindProcessHelper implements IBehavior
         if (current == null) return;
         boolean changed = !paused || !reason.equals(message);
         paused = true; reason = message; save();
+        recoverableHold=true;var recovery=hivemind.getReliability().failed("job:"+current.id(),message,current.deposited());retryAt=recovery.retryAt();
         if (changed) notifyOwner(current.owner(), "Job #" + current.id() + " paused: " + message);
     }
     private void notifyOwner(UUID owner, String message) {
@@ -146,18 +150,23 @@ public final class JobManager extends HiveMindProcessHelper implements IBehavior
     @Override public void onLostControl() {
         if (launching || queue.isEmpty()) return;
         paused = true; reason = "Stopped or disconnected; use job resume"; current = null; completedMining = false; save();
+        recoverableHold=!hivemind.getReliability().holding();retryAt=System.currentTimeMillis()+10000;
     }
     @Override public void onPlayerDeath() { fail("Player died; inspect equipment before resuming"); onLostControl(); }
     @Override public void onTick(TickEvent event) {
         if (event.getType() == TickEvent.Type.OUT || ctx.world() == null || ctx.player() == null) return;
         try {
             ensureLoaded();
+            if(paused&&recoverableHold&&System.currentTimeMillis()>=retryAt&&!hivemind.getReliability().holding()&&!hivemind.getAutonomy().paused()&&ctx.player().isAlive()&&!hivemind.getConflictProcess().isActive()&&!hivemind.getCompanionProcess().awaitingDeathInventory()&&ctx.player().containerMenu==ctx.player().inventoryMenu&&ctx.player().inventoryMenu.getCarried().isEmpty()){
+                paused=false;recoverableHold=false;current=null;completedMining=false;reason="Retrying saved job after checking recovery conditions";
+            }
             if (paused || queue.isEmpty() || hivemind.getCompanionProcess().awaitingDeathInventory()) return;
             if (current != null) {
                 if (hivemind.getMineProcess().isActive() || hivemind.getDepositProcess().isActive()
                         || hivemind.getPortalTravelProcess().isActive() || hivemind.getSurvivalProcess().isActive()) return;
                 if (!completedMining) { fail("Mining stopped before the requested quantity was reached"); return; }
                 notifyOwner(current.owner(), "Finished job #" + current.id() + " (" + current.quantity() + " " + String.join(",", current.blocks()) + ")");
+                hivemind.getReliability().success("job:"+current.id(),"Requested mining quantity observed; storage work finished without a reported failure");
                 queue.remove(0); current = null; completedMining = false; reason = "Ready for next job"; save();
             }
             if (queue.isEmpty() || BotWork.active(hivemind) || hivemind.getConflictProcess().isActive() || hivemind.getSculkProcess().isActive()

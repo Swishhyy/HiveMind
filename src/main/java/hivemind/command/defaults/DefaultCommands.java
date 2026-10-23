@@ -75,6 +75,7 @@ public final class DefaultCommands {
                 new BotBaseCommand(hivemind),
                 new KitCommand(hivemind),
                 new WhyCommand(hivemind),
+                new RegionCommand(hivemind),
                 new PlayerBotsCommand(hivemind),
                 new StoragePointCommand(hivemind),
                 new TrustCommand(hivemind),

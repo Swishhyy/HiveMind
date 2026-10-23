@@ -42,7 +42,7 @@ public final class ControlPackets {
         public State {
             base(reporter,reporterName);check(status,512);Objects.requireNonNull(point);
             if(!Float.isFinite(health)||health<0||health>1024||food<0||food>20)throw new IllegalArgumentException("Invalid bot vitals");
-            trusted=uuidMap(trusted,128,64);players=uuidMap(players,256,16);settings=stringMap(settings,128);update=stringMap(update,16);session=stringMap(session,16);
+            trusted=uuidMap(trusted,128,64);players=uuidMap(players,256,16);settings=stringMap(settings,160);update=stringMap(update,16);session=stringMap(session,32);
         }
     }
     public record Request(UUID reporter,String reporterName,UUID id,UUID target,Action action,String key,String value,long observedAt) implements Packet {
@@ -95,7 +95,7 @@ public final class ControlPackets {
     }
     private static void strings(DataOutputStream out,Map<String,String> map)throws IOException { out.writeShort(map.size());for(var entry:map.entrySet()){text(out,entry.getKey());text(out,entry.getValue());} }
     private static Map<String,String> strings(DataInputStream in)throws IOException {
-        int count=in.readUnsignedShort();if(count>128)throw new IOException("Too many settings");
+        int count=in.readUnsignedShort();if(count>160)throw new IOException("Too many settings");
         Map<String,String> map=new LinkedHashMap<>();for(int i=0;i<count;i++){String key=text(in,128);if(map.put(key,text(in,128))!=null)throw new IOException("Duplicate setting");}return map;
     }
     static void people(DataOutputStream out,Map<UUID,String> map)throws IOException { out.writeShort(map.size());for(var entry:map.entrySet()){uuid(out,entry.getKey());text(out,entry.getValue());} }

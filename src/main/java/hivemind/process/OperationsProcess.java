@@ -114,10 +114,18 @@ public final class OperationsProcess extends HiveMindProcessHelper implements IB
         boolean prepare=destination.distSqr(ctx.playerFeet())>256*256||hivemind.getStalkProcess().hunting()||hivemind.getMineProcess().isActive();
         if(hivemind.getFlight().flying()||!prepare||now<nextSupply||!HiveMind.settings().botExpeditionSupplies.value||!HiveMind.settings().botAutoResupply.value||busy()||hivemind.getDepositProcess().isActive())return true;
         ensureScope();nextSupply=now+30000;
-        var kit=kitTargets();var loose=ExpeditionLoadout.counts(ctx,kit.keySet());
-        var plan=ResupplyPolicy.plan(kit,loose,ExpeditionLoadout.boxedCounts(ctx,kit.keySet()),hivemind.getStalkProcess().hunting());
+        var kit=kitTargets();var loose=ExpeditionLoadout.counts(ctx,kit.keySet());var boxed=ExpeditionLoadout.boxedCounts(ctx,kit.keySet());
+        var plan=ResupplyPolicy.plan(kit,loose,boxed,hivemind.getStalkProcess().hunting());
         Map<String,Integer> targets=stockRetry.ready(plan.portable().isEmpty()?plan.storage():plan.portable(),loose,now);
-        if(plan.portable().isEmpty())targets=ResupplyPolicy.plan(targets,loose,Map.of(),hivemind.getStalkProcess().hunting()).storage();
+        // Plan an attainable leg plus the next known resupply approach, without treating boxed stock as usable midair.
+        double outward=Math.min(8192,Math.hypot((double)destination.getX()-ctx.playerFeet().getX(),(double)destination.getZ()-ctx.playerFeet().getZ()));
+        double home=MiningRouteAccess.store(ctx).deposits().stream().filter(s->s.endpoint().dimension().equals(MiningRouteAccess.dimension(ctx))).mapToDouble(s->Math.hypot((double)s.endpoint().x()-destination.getX(),(double)s.endpoint().z()-destination.getZ())).min().orElse(outward);
+        var estimate=hivemind.getReliability().budget().estimate(outward,Math.min(8192,home),HiveMind.settings().botFlightRocketReserve.value);
+        int needed=Math.min(kit.getOrDefault("@rockets",0),estimate.rockets());
+        if(needed>loose.getOrDefault("@rockets",0)+boxed.getOrDefault("@rockets",0)&&!stockRetry.ready(Map.of("@rockets",kit.getOrDefault("@rockets",0)),loose,now).isEmpty()){
+            var expanded=new LinkedHashMap<>(targets);expanded.put("@rockets",kit.get("@rockets"));targets=Map.copyOf(expanded);
+        }
+        if(plan.portable().isEmpty()&&needed<=loose.getOrDefault("@rockets",0)+boxed.getOrDefault("@rockets",0))targets=ResupplyPolicy.plan(targets,loose,Map.of(),hivemind.getStalkProcess().hunting()).storage();
         if(targets.isEmpty())return true;
         try{beginRestock(targets,!plan.portable().isEmpty());return false;}
         catch(RuntimeException error){stockRetry.finished(targets,loose,now);blocker="Supply check: "+error.getMessage();next="Continue with carried supplies; defer unchanged shortages for 10 minutes";nextSupply=now+60000;blockerUntil=nextSupply;return true;}

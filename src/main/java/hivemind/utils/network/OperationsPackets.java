@@ -8,7 +8,7 @@ import static hivemind.utils.network.ControlPackets.*;
 /** Live activity and transport data; never persisted as observation evidence or replayed as work. */
 public final class OperationsPackets {
     public record Snapshot(UUID reporter,String reporterName,Map<String,String> details,List<TaskQueue.Task> tasks,boolean paused,long observedAt) implements Packet {
-        public Snapshot {base(reporter,reporterName);if(details.size()>40||tasks.size()>32)throw new IllegalArgumentException("Operations snapshot too large");details.forEach((k,v)->{check(k,40);check(v,256);});details=Map.copyOf(details);tasks=List.copyOf(tasks);}
+        public Snapshot {base(reporter,reporterName);if(details.size()>64||tasks.size()>32)throw new IllegalArgumentException("Operations snapshot too large");details.forEach((k,v)->{check(k,40);check(v,256);});details=Map.copyOf(details);tasks=List.copyOf(tasks);}
     }
     public record Obstacle(UUID reporter,String reporterName,Endpoint point,String reason,long until,long observedAt) implements Packet {
         public Obstacle {base(reporter,reporterName);Objects.requireNonNull(point);check(reason,128);if(until<observedAt||until>observedAt+600000)throw new IllegalArgumentException("Invalid obstacle expiry");}
@@ -25,7 +25,7 @@ public final class OperationsPackets {
     static Packet decode(DataInputStream in,int type,UUID reporter,String name,long time)throws IOException{
         if(type==16)return new Obstacle(reporter,name,point(in),text(in,128),in.readLong(),time);
         if(type==17)return new Ping(reporter,name,in.readLong(),in.readBoolean(),time);
-        int size=in.readUnsignedByte();if(size>40)throw new IOException("Too many operation details");Map<String,String> details=new LinkedHashMap<>();for(int i=0;i<size;i++){String key=text(in,40);if(details.put(key,text(in,256))!=null)throw new IOException("Duplicate operation detail");}boolean paused=in.readBoolean();size=in.readUnsignedByte();if(size>32)throw new IOException("Too many map tasks");List<TaskQueue.Task> tasks=new ArrayList<>();for(int i=0;i<size;i++)tasks.add(new TaskQueue.Task(in.readLong(),text(in,16),point(in),in.readInt()));return new Snapshot(reporter,name,details,tasks,paused,time);
+        int size=in.readUnsignedByte();if(size>64)throw new IOException("Too many operation details");Map<String,String> details=new LinkedHashMap<>();for(int i=0;i<size;i++){String key=text(in,40);if(details.put(key,text(in,256))!=null)throw new IOException("Duplicate operation detail");}boolean paused=in.readBoolean();size=in.readUnsignedByte();if(size>32)throw new IOException("Too many map tasks");List<TaskQueue.Task> tasks=new ArrayList<>();for(int i=0;i<size;i++)tasks.add(new TaskQueue.Task(in.readLong(),text(in,16),point(in),in.readInt()));return new Snapshot(reporter,name,details,tasks,paused,time);
     }
     public static String json(Collection<Snapshot> snapshots){StringJoiner out=new StringJoiner(",","{","}");for(var p:snapshots){StringJoiner tasks=new StringJoiner(",","[","]");for(var t:p.tasks()){var e=t.point();tasks.add("{\"id\":"+t.id()+",\"kind\":"+NetworkAtlas.quote(t.kind())+",\"d\":"+NetworkAtlas.quote(e.dimension())+",\"x\":"+e.x()+",\"y\":"+e.y()+",\"z\":"+e.z()+",\"radius\":"+t.radius()+"}");}out.add(NetworkAtlas.quote(p.reporter().toString())+":{\"details\":"+ControlView.strings(p.details())+",\"paused\":"+p.paused()+",\"tasks\":"+tasks+",\"t\":"+p.observedAt()+"}");}return out.toString();}
 }

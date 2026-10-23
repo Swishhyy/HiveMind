@@ -121,11 +121,12 @@ public final class ShulkerSupplyProcess extends HiveMindProcessHelper implements
             transition(block.equals(recovery.item())?Stage.BREAK:Stage.PICKUP);return true;
         }
         needs=wanted.stream().filter(need->count(need)<need.count()).toList();if(needs.isEmpty())return false;
-        for(int slot=0;slot<36;slot++){
+        var candidates=java.util.stream.IntStream.range(0,36).boxed().sorted(java.util.Comparator.comparingInt(i->ctx.player().getInventory().getItem(i).get(DataComponents.CONTAINER)==null?1:0)).toList();
+        for(int slot:candidates){
             ItemStack stack=ctx.player().getInventory().getItem(slot);if(!shulker(stack))continue;
-            var contents=stack.get(DataComponents.CONTAINER);if(contents==null)continue;
-            var stacks=net.minecraft.core.NonNullList.<ItemStack>withSize(27,ItemStack.EMPTY);contents.copyInto(stacks);
-            boolean useful=stacks.stream().anyMatch(item->needs.stream().anyMatch(need->need.matches().test(item)&&count(need)<need.count()));
+            var contents=stack.get(DataComponents.CONTAINER);
+            var stacks=net.minecraft.core.NonNullList.<ItemStack>withSize(27,ItemStack.EMPTY);if(contents!=null)contents.copyInto(stacks);
+            boolean useful=contents==null?hivemind.getReliability().manifest().shouldInspect(ReliabilityProcess.boxSignature(stack),System.currentTimeMillis()):stacks.stream().anyMatch(item->needs.stream().anyMatch(need->need.matches().test(item)&&count(need)<need.count()));
             if(!useful)continue;
             BlockPos point=placement();if(point==null)return false;
             source=slot;boxItem=stack.copy();box=point;previous=ctx.player().getInventory().getSelectedSlot();beforeBoxes=count(s->s.is(boxItem.getItem()));moved=0;confirmed=recoveryOnly=false;
@@ -166,7 +167,7 @@ public final class ShulkerSupplyProcess extends HiveMindProcessHelper implements
                 if(!ctx.world().getBlockState(box).isAir())return fail("Placement space changed");
                 if(source>=9){ctx.playerController().windowClick(ctx.player().inventoryMenu.containerId,source,8,ContainerInput.SWAP,ctx.player());source=8;return pause();}
                 if(!shulker(ctx.player().getInventory().getItem(source)))return fail("Shulker inventory slot changed");
-                ctx.player().getInventory().setSelectedSlot(source);ctx.playerController().syncHeldItem();
+                hivemind.getReliability().select(source);ctx.playerController().syncHeldItem();
                 var rotation=RotationUtils.reachable(ctx,box.below());if(rotation.isEmpty())return fail("Cannot reach shulker placement face");
                 hivemind.getLookBehavior().updateTarget(RotationUtils.calcRotationFromVec3d(ctx.playerHead(),new Vec3(box.getX()+.5,box.getY()-.001,box.getZ()+.5),ctx.playerRotations()),true);
                 if(ctx.isLookingAt(box.below())){save(false);ctx.playerController().processRightClickBlock(ctx.player(),ctx.world(),InteractionHand.MAIN_HAND,new BlockHitResult(new Vec3(box.getX()+.5,box.getY(),box.getZ()+.5),Direction.UP,box.below(),false));transition(Stage.WAIT_PLACE);}
@@ -193,7 +194,7 @@ public final class ShulkerSupplyProcess extends HiveMindProcessHelper implements
                 if(!PortableSupplyPolicy.mayRecover(confirmed,sameBlock(),ctx.player().containerMenu==ctx.player().inventoryMenu&&ctx.player().inventoryMenu.getCarried().isEmpty()))return fail("Shulker recovery ownership changed");
                 int pick=BotInventory.slot(ctx,s->BotInventory.pickaxe(s,false));
                 if(pick>=9){ctx.playerController().windowClick(ctx.player().inventoryMenu.containerId,pick,8,ContainerInput.SWAP,ctx.player());return pause();}
-                if(pick>=0){ctx.player().getInventory().setSelectedSlot(pick);ctx.playerController().syncHeldItem();}
+                if(pick>=0){hivemind.getReliability().select(pick);ctx.playerController().syncHeldItem();}
                 var aim=RotationUtils.reachable(ctx,box);if(aim.isEmpty())return fail("Cannot reach placed shulker");hivemind.getLookBehavior().updateTarget(aim.get(),true);
                 if(ctx.isLookingAt(box))hivemind.getInputOverrideHandler().setInputForceState(Input.CLICK_LEFT,true);
             }
@@ -229,7 +230,7 @@ public final class ShulkerSupplyProcess extends HiveMindProcessHelper implements
         }
         closeMenu();transition(Stage.BREAK);return pause();
     }
-    public void onContents(int id){if(ctx.player()!=null&&id==ctx.player().containerMenu.containerId){synchronizedMenu=id;revision++;}}
+    public void onContents(int id){if(ctx.player()!=null&&id==ctx.player().containerMenu.containerId){synchronizedMenu=id;revision++;if(isActive()&&boxItem!=null&&!boxItem.isEmpty()&&ctx.player().containerMenu instanceof ShulkerBoxMenu)hivemind.getReliability().manifest().inspected(ReliabilityProcess.boxSignature(boxItem),System.currentTimeMillis());}}
     @Override public void onBlockChange(BlockChangeEvent event){if(stage==Stage.WAIT_PLACE&&box!=null&&event.getBlocks().stream().anyMatch(change->change.first().equals(box)))placementConfirmed=true;}
     public boolean ownsForRecovery(BlockPos pos){return stage==Stage.BREAK&&confirmed&&box!=null&&box.equals(pos)&&world==ctx.world()&&sameBlock();}
     private void transition(Stage next){stage=next;ticks=0;}
@@ -238,7 +239,7 @@ public final class ShulkerSupplyProcess extends HiveMindProcessHelper implements
     private void closeMenu(){if(menu!=null&&ctx.player()!=null&&ctx.player().containerMenu==menu&&menu.getCarried().isEmpty())ctx.player().closeContainer();menu=null;}
     @Override public void onLostControl(){
         closeMenu();if(ctx.player()!=null){hivemind.getInputOverrideHandler().setInputForceState(Input.CLICK_LEFT,false);ctx.playerController().resetBlockRemoving();
-            if(previous>=0&&ctx.minecraft().gameMode!=null){ctx.player().getInventory().setSelectedSlot(previous);ctx.playerController().syncHeldItem();}}
+            if(previous>=0&&ctx.minecraft().gameMode!=null){hivemind.getReliability().select(previous);ctx.playerController().syncHeldItem();}}
         previous=source=pending=-1;stage=Stage.IDLE;box=null;boxItem=ItemStack.EMPTY;needs=List.of();refused.clear();openRequested=confirmed=placementConfirmed=recoveryOnly=false;revision=openRevision=pendingRevision=0;synchronizedMenu=-1;ticks=moved=0;
     }
     @Override public void onTick(TickEvent event){

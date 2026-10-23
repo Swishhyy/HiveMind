@@ -305,6 +305,7 @@ public final class DepositProcess extends HiveMindProcessHelper {
         if (!isSafeToCancel) {
             return pause();
         }
+        if(!hivemind.getNetwork().team().storageAccess(new WorldRoutes.Endpoint(depositDimension,chest.getX(),chest.getY(),chest.getZ()),fetch?fetchTargets:Map.of()))return pause();
         hivemind.getInputOverrideHandler().clearAllKeys();
         ctx.playerController().resetBlockRemoving();
         if (stage == Stage.OPEN) {
@@ -376,6 +377,8 @@ public final class DepositProcess extends HiveMindProcessHelper {
             if (transferred == 0) {
                 refusedSlots.add(pendingSlot);
             } else {
+                hivemind.getReliability().success("storage:"+storageId,"Confirmed "+(pendingWithdrawal?"withdrawal":"deposit")+" of "+transferred+" "+BotItems.id(pendingStack));
+                hivemind.getReliability().routes().success("storage",new WorldRoutes.Endpoint(depositDimension,chest.getX(),chest.getY(),chest.getZ()),System.currentTimeMillis());
                 movedItems += transferred;
                 hivemind.getOperations().journal().note("Transfer",(pendingWithdrawal?"Withdrew ":"Deposited ")+transferred+" "+BotItems.id(pendingStack)+" at storage #"+storageId);
                 if (!pendingWithdrawal) hivemind.getMineProcess().recordDeposit(pendingStack, transferred);
@@ -592,9 +595,11 @@ public final class DepositProcess extends HiveMindProcessHelper {
     }
 
     private boolean chooseNextStorage() {
+        hivemind.getNetwork().team().releaseStorage();
         String dimension = MiningRouteAccess.dimension(ctx);
         WorldRoutes.Storage next = remainingChests.stream().filter(storage -> resupply || firstTransferable(false, storage.rule()).isPresent()).min(Comparator
-                .comparingInt((WorldRoutes.Storage storage) -> resupply ? (storage.rule().kind() == StorageRule.Kind.SUPPLIES ? 0 : 1) : (storage.rule().kind() == StorageRule.Kind.ANY ? 1 : 0))
+                .comparingDouble((WorldRoutes.Storage storage)->hivemind.getReliability().routes().penalty("storage",storage.endpoint(),System.currentTimeMillis()))
+                .thenComparingInt((WorldRoutes.Storage storage) -> resupply ? (storage.rule().kind() == StorageRule.Kind.SUPPLIES ? 0 : 1) : (storage.rule().kind() == StorageRule.Kind.ANY ? 1 : 0))
                 .thenComparing(Comparator.comparingInt((WorldRoutes.Storage storage) -> storage.rule().priority()).reversed())
                 .thenComparingInt(storage -> storage.endpoint().dimension().equals(dimension) ? 0 : 1)
                 .thenComparingDouble(storage -> storage.endpoint().dimension().equals(dimension)
@@ -611,6 +616,7 @@ public final class DepositProcess extends HiveMindProcessHelper {
     }
 
     private PathingCommand tryNextStorage(String reason) {
+        if(chest!=null){hivemind.getReliability().routes().failed("storage",new WorldRoutes.Endpoint(depositDimension,chest.getX(),chest.getY(),chest.getZ()),reason,System.currentTimeMillis());hivemind.getReliability().failed("storage:"+storageId,reason,movedItems);}
         suspendForConflict();
         if (!chooseNextStorage()) { if(fetch)return finishTransfer(); return fail(reason + "; all saved storage was tried (" + movedItems + " items deposited)"); }
         logDirect(reason + "; trying storage #" + storageId);
@@ -619,6 +625,7 @@ public final class DepositProcess extends HiveMindProcessHelper {
 
     /** Close our own menu before retreating, preserving the trip and any already-confirmed transfer credit. */
     public void suspendForConflict() {
+        hivemind.getNetwork().team().releaseStorage();
         if (!pendingWithdrawal && pendingSlot >= 0 && pendingStack != null && openedMenu != null && contentRevision > pendingRevision
                 && synchronizedMenuId == openedMenu.containerId) {
             ItemStack remaining = ctx.player().getInventory().getItem(pendingSlot);

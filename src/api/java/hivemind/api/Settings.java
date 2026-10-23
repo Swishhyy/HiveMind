@@ -321,6 +321,11 @@ public final class Settings {
     /** Pause mining for food, health, tool durability, inventory space, and building supplies. */
     public final Setting<Boolean> botSurvival = new Setting<>(true);
     public final Setting<Boolean> botStuckRecovery = new Setting<>(true);
+    /** Durable controller stop/pause, distributed as a policy even to bots that reconnect later. */
+    public final Setting<Boolean> botFleetHold = new Setting<>(false);
+    public final Setting<String> botControllerOfflinePolicy = new Setting<>("continue");
+    public final Setting<Boolean> botAutomaticMaintenance = new Setting<>(true);
+    public final Setting<Boolean> botRequestSupplyDelivery = new Setting<>(true);
     public final Setting<Boolean> botExpeditionSupplies = new Setting<>(true);
     public final Setting<Integer> botExpeditionRockets = new Setting<>(256);
     public final Setting<Integer> botExpeditionFood = new Setting<>(128);

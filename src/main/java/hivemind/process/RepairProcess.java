@@ -95,7 +95,7 @@ public final class RepairProcess extends HiveMindProcessHelper {
             }
             if(slot>=9){if(delay--<=0){ctx.playerController().windowClick(ctx.player().inventoryMenu.containerId,slot,0,ContainerInput.SWAP,ctx.player());slot=0;delay=10;}return pause();}
             if(delay-->0)return pause();
-            ctx.player().getInventory().setSelectedSlot(slot);ctx.playerController().syncHeldItem();
+            hivemind.getReliability().select(slot);ctx.playerController().syncHeldItem();
             int remaining=tool.getMaxDamage()-tool.getDamageValue();long now=System.currentTimeMillis();
             if(!atStation){atStation=true;lastDurability=remaining;lastProgress=now;}
             if(remaining>lastDurability){lastDurability=remaining;lastProgress=now;}
@@ -111,6 +111,6 @@ public final class RepairProcess extends HiveMindProcessHelper {
     private PathingCommand finish(String message,boolean success){boolean auto=automatic;onLostControl();result=message;if(!success&&auto)cooldown=System.currentTimeMillis()+600000;logDirect(message);return new PathingCommand(null,PathingCommandType.CANCEL_AND_SET_GOAL);}
     private boolean sameTool(ItemStack stack){return !stack.isEmpty()&&BuiltInRegistries.ITEM.getKey(stack.getItem()).toString().equals(item)&&stack.getEnchantments().keySet().stream().anyMatch(holder->holder.is(Enchantments.MENDING));}
     private PathingCommand pause(){return new PathingCommand(null,PathingCommandType.REQUEST_PAUSE);}
-    @Override public void onLostControl(){active=returning=atStation=false;if(previousSlot>=0&&ctx.player()!=null){ctx.player().getInventory().setSelectedSlot(previousSlot);if(ctx.minecraft().gameMode!=null)ctx.playerController().syncHeldItem();}previousSlot=-1;root=null;station=origin=null;slot=-1;}
+    @Override public void onLostControl(){active=returning=atStation=false;if(previousSlot>=0&&ctx.player()!=null){hivemind.getReliability().select(previousSlot);if(ctx.minecraft().gameMode!=null)ctx.playerController().syncHeldItem();}previousSlot=-1;root=null;station=origin=null;slot=-1;}
     @Override public String displayName0(){return "Repair: "+result;}
 }

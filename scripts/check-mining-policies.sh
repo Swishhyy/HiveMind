@@ -12,6 +12,8 @@ fi
     src/main/java/hivemind/utils/mining/DepositPolicy.java \
     src/main/java/hivemind/utils/bot/StorageRule.java \
     src/main/java/hivemind/utils/bot/AtomicProperties.java \
+    src/main/java/hivemind/utils/reliability/*.java \
+    src/test/java/hivemind/utils/bot/ReliabilityChecks.java \
     src/main/java/hivemind/utils/bot/ActivityJournal.java \
     src/main/java/hivemind/utils/bot/StorageStockLedger.java \
     src/main/java/hivemind/utils/bot/TaskLoadoutStore.java \
@@ -79,6 +81,7 @@ fi
     src/main/java/hivemind/utils/network/NetworkProtocol.java \
     src/main/java/hivemind/utils/network/ClientNetworkKey.java \
     src/main/java/hivemind/utils/network/ControlPackets.java \
+    src/main/java/hivemind/utils/network/CommandLedger.java \
     src/main/java/hivemind/utils/network/TeamPackets.java \
     src/main/java/hivemind/utils/network/Teamwork.java \
     src/main/java/hivemind/utils/network/RoamPolicy.java \
@@ -126,3 +129,5 @@ java -cp "$task_classes:src/main/resources" hivemind.utils.bot.SurveyChecks
 java -cp "$task_classes:src/main/resources" hivemind.utils.bot.CombatSupplyChecks
 
 java -cp "$task_classes:src/main/resources" hivemind.utils.bot.TakeoffChecks
+
+java -cp "$task_classes" hivemind.utils.bot.ReliabilityChecks

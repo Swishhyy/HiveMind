@@ -104,6 +104,8 @@ public class HiveMind implements IHiveMind {
     private final IElytraProcess elytraProcess;
 
     private final PathingControlManager pathingControlManager;
+    private final hivemind.utils.reliability.ActionArbiter actions = new hivemind.utils.reliability.ActionArbiter();
+    private final ReliabilityProcess reliability;
     private final SelectionManager selectionManager;
     private final CommandManager commandManager;
 
@@ -138,6 +140,7 @@ public class HiveMind implements IHiveMind {
 
         this.pathingControlManager = new PathingControlManager(this);
         {
+            this.reliability             = this.registerProcess(ReliabilityProcess::new);
             this.followProcess           = this.registerProcess(FollowProcess::new);
             this.mineProcess             = this.registerProcess(MineProcess::new);
             this.operations              = this.registerProcess(OperationsProcess::new);
@@ -174,6 +177,7 @@ public class HiveMind implements IHiveMind {
         this.flight = new FlightBehavior(this);
         this.autonomy = new AutonomyBehavior(this);
         this.commandManager = new CommandManager(this);
+        this.registerBehavior(this.reliability);
         this.registerBehavior(this.awareness);
         this.registerBehavior(this.roamProcess);
         this.registerBehavior(this.portalTravelProcess);
@@ -198,6 +202,9 @@ public class HiveMind implements IHiveMind {
     public void registerBehavior(IBehavior behavior) {
         this.gameEventHandler.registerEventListener(behavior);
     }
+
+    public hivemind.utils.reliability.ActionArbiter getActions(){return actions;}
+    public ReliabilityProcess getReliability(){return reliability;}
 
     public <T extends IBehavior> T registerBehavior(Function<HiveMind, T> constructor) {
         final T behavior = constructor.apply(this);
