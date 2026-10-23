@@ -88,7 +88,9 @@ public final class OperationsProcess extends HiveMindProcessHelper implements IB
     private void ensureScope(){var here=MiningRouteAccess.root(ctx);if(serverRoot==null){serverRoot=here;return;}if(!serverRoot.equals(here)){serverRoot=here;loadoutAccount=null;kits=null;journal=null;obstacles.clear();onLostControl();nextSupply=0;walkUntil=0;blockerUntil=0;}}
     public boolean prepareTrip(BlockPos destination){
         long now=System.currentTimeMillis();if(supplying)return false;
-        if(ctx.player()==null||ctx.world()==null||ctx.player().isCreative()||hivemind.isPlayerClient()||hivemind.getFlight().flying()||destination.distSqr(ctx.playerFeet())<=256*256&&!hivemind.getStalkProcess().hunting()||now<nextSupply||!HiveMind.settings().botExpeditionSupplies.value||!HiveMind.settings().botAutoResupply.value||busy()||hivemind.getDepositProcess().isActive())return true;
+        if(ctx.player()==null||ctx.world()==null||ctx.player().isCreative()||hivemind.isPlayerClient())return true;
+        boolean prepare=destination.distSqr(ctx.playerFeet())>256*256||hivemind.getStalkProcess().hunting()||hivemind.getMineProcess().isActive();
+        if(hivemind.getFlight().flying()||!prepare||now<nextSupply||!HiveMind.settings().botExpeditionSupplies.value||!HiveMind.settings().botAutoResupply.value||busy()||hivemind.getDepositProcess().isActive())return true;
         ensureScope();nextSupply=now+30000;Map<String,Integer> targets=supplies();if(targets.isEmpty())return true;
         try{beginRestock(targets);return false;}
         catch(RuntimeException error){blocker="Supply check: "+error.getMessage();next="Continue with available supplies; retry storage in 60 seconds";nextSupply=now+60000;blockerUntil=nextSupply;return true;}
@@ -110,7 +112,7 @@ public final class OperationsProcess extends HiveMindProcessHelper implements IB
         if(hivemind.getAutonomy().paused()||!BotWork.active(hivemind)||busy()){progress.sample("",0,0,false,now);return;}
         if(!supplying&&!hivemind.getDepositProcess().isActive()&&!hivemind.getFlight().flying()){
             BlockPos destination=hivemind.getScoutProcess().destination();if(destination==null)destination=hivemind.getRoamProcess().destination();if(destination==null&&hivemind.getStalkProcess().isActive())destination=hivemind.getStalkProcess().teamPoint();
-            if(destination==null&&hivemind.getStalkProcess().hunting())destination=ctx.playerFeet();
+            if(destination==null&&(hivemind.getStalkProcess().hunting()||hivemind.getMineProcess().isActive()))destination=ctx.playerFeet();
             if(destination!=null&&!prepareTrip(destination))return;
         }
         if(supplying||hivemind.getDepositProcess().isActive()||now<recoveryUntil||!HiveMind.settings().botStuckRecovery.value)return;
