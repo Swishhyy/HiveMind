@@ -39,6 +39,7 @@ public final class ControlRules {
             if(key.startsWith("global."))suffix=key.substring(7);
             else if(key.startsWith("bot.")&&key.length()>41&&key.charAt(40)=='.'){bots.add(UUID.fromString(key.substring(4,40)));suffix=key.substring(41);}
             else throw new IllegalStateException("Invalid control rule");
+            if(suffix.startsWith("setting.")&&NetworkSettings.retired(suffix.substring(8))){values.remove(key);migrated=true;continue;}
             String normalized=validate(suffix,values.getProperty(key));if(!normalized.equals(values.getProperty(key))){values.setProperty(key,normalized);migrated=true;}
         }
         if(bots.size()>64)throw new IllegalStateException("Too many individual bot policies");

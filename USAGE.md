@@ -30,7 +30,7 @@ Watch this [showcase video](https://youtu.be/CZkLXWo4Fg4)!
 
 `help`
 
-To toggle a boolean setting, just say its name in chat (for example saying `allowBreak` toggles whether HiveMind will consider breaking blocks). For a numeric setting, say its name then the new value (like `primaryTimeoutMS 250`). It's case insensitive. To reset a setting to its default value, say `acceptableThrowawayItems reset`. To reset all settings, say `reset`. To see all settings that have been modified from their default values, say `modified`.
+To toggle a boolean setting, just say its name in chat (for example saying `allowSprint` toggles whether HiveMind will sprint). For a numeric setting, say its name then the new value (like `primaryTimeoutMS 250`). It's case insensitive. To reset a setting to its default value, say `acceptableThrowawayItems reset`. To reset all settings, say `reset`. To see all settings that have been modified from their default values, say `modified`.
 
 Commands in HiveMind:
 
@@ -69,9 +69,7 @@ Settings are documented in [Settings.java](src/api/java/hivemind/api/Settings.ja
 
 There are about a hundred settings, but here are some fun / interesting / important ones that you might want to look at changing in normal usage of HiveMind. The documentation for each can be found at the above links.
 
-- `allowBreak`
 - `allowSprint`
-- `allowPlace`
 - `allowParkour`
 - `allowParkourPlace`
 - `blockPlacementPenalty`

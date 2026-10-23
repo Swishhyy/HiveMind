@@ -154,7 +154,7 @@ public final class GetToBlockProcess extends HiveMindProcessHelper implements IG
         return !newBlacklist.isEmpty();
     }
 
-    // this is to signal to MineProcess that we don't care about the allowBreak setting
+    // Inspect candidate mine targets without applying movement costs.
     // it is NOT to be used to actually calculate a path
     public class GetToBlockCalculationContext extends CalculationContext {
 

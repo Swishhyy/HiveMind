@@ -27,7 +27,7 @@ public final class MeleeCombat {
         return best;
     }
     public static boolean prepare(IPlayerContext ctx,boolean shield){
-        if(!HiveMind.settings().allowInventory.value||ctx.minecraft().gameMode==null||ctx.player().containerMenu!=ctx.player().inventoryMenu||!ctx.player().inventoryMenu.getCarried().isEmpty())return false;
+        if(ctx.minecraft().gameMode==null||ctx.player().containerMenu!=ctx.player().inventoryMenu||!ctx.player().inventoryMenu.getCarried().isEmpty())return false;
         int current=weapon(ctx,shield),source=-1,destination=current;
         double best=current<0?-1:score(ctx.player().getInventory().getItem(current),shield);
         for(int i=9;i<36;i++){double value=score(ctx.player().getInventory().getItem(i),shield);if(value>best){source=i;best=value;}}

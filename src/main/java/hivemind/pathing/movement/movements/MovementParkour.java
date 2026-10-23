@@ -279,8 +279,7 @@ public class MovementParkour extends Movement {
             }
         } else if (!ctx.playerFeet().equals(src)) {
             if (ctx.playerFeet().equals(src.relative(direction)) || ctx.player().position().y - src.y > 0.0001) {
-                if (HiveMind.settings().allowPlace.value // see PR #3775
-                        && ((HiveMind) hivemind).getInventoryBehavior().hasGenericThrowaway()
+                if (((HiveMind) hivemind).getInventoryBehavior().hasGenericThrowaway()
                         && !MovementHelper.canWalkOn(ctx, dest.below())
                         && !ctx.player().onGround()
                         && MovementHelper.attemptToPlaceABlock(state, hivemind, dest.below(), true, false) == PlaceResult.READY_TO_PLACE

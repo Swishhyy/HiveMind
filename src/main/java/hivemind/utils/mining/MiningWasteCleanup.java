@@ -66,7 +66,7 @@ public final class MiningWasteCleanup {
 
     /** True means the mining process must pause this tick. Never takes items onto the cursor. */
     public boolean tick(boolean safeToCancel, BlockOptionalMetaLookup targets) {
-        if (!HiveMind.settings().mineDiscardWaste.value || !HiveMind.settings().allowInventory.value
+        if (!HiveMind.settings().mineDiscardWaste.value
                 || targets == null || ctx.player() == null || ctx.world() == null
                 || ctx.minecraft().gui.screen() != null || ctx.player().containerMenu != ctx.player().inventoryMenu
                 || !ctx.player().inventoryMenu.getCarried().isEmpty()) {

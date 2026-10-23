@@ -69,7 +69,7 @@ public final class FlightBehavior extends Behavior {
     private boolean supplied(Mode requested){
         if(ctx.player()==null||ctx.world()==null||!ctx.player().isAlive()||!HiveMind.settings().botUseElytra.value||!hivemind.getElytraProcess().isLoaded())return false;
         int durability=wingDurability(ctx.player().getItemBySlot(EquipmentSlot.CHEST));
-        if(HiveMind.settings().allowInventory.value)for(int i=0;i<36;i++)durability=Math.max(durability,wingDurability(ctx.player().getInventory().getItem(i)));
+        for(int i=0;i<36;i++)durability=Math.max(durability,wingDurability(ctx.player().getInventory().getItem(i)));
         return FlightPolicy.supplied(requested,durability,rockets(),HiveMind.settings().botFlightRocketReserve.value,HiveMind.settings().elytraMinFireworksBeforeLanding.value,HiveMind.settings().elytraMinimumDurability.value);
     }
     public boolean capable(){return !hivemind.getOperations().walking()&&supplied(Mode.TRAVEL);}
@@ -196,7 +196,7 @@ public final class FlightBehavior extends Behavior {
     private boolean equipWings(Mode requested){
         int minimum=FlightPolicy.durability(requested,HiveMind.settings().elytraMinimumDurability.value);
         if(wingDurability(ctx.player().getItemBySlot(EquipmentSlot.CHEST))>=minimum)return true;
-        if(!HiveMind.settings().allowInventory.value||ctx.minecraft().gameMode==null||EquipmentLoadout.bound(ctx.player().getItemBySlot(EquipmentSlot.CHEST)))return false;
+        if(ctx.minecraft().gameMode==null||EquipmentLoadout.bound(ctx.player().getItemBySlot(EquipmentSlot.CHEST)))return false;
         for(int i=0;i<36;i++)if(wingDurability(ctx.player().getInventory().getItem(i))>=minimum&&!EquipmentLoadout.bound(ctx.player().getInventory().getItem(i))){
             ItemStack previous=ctx.player().getItemBySlot(EquipmentSlot.CHEST).copy();exchangeChest(i);
             if(wingDurability(ctx.player().getItemBySlot(EquipmentSlot.CHEST))<minimum)return false;

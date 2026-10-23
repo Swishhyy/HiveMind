@@ -52,7 +52,7 @@ public final class NetworkSettings {
         number("Loadout","integer",3,4,"botExpeditionTotems");
         number("Loadout","integer",64,128,"botExpeditionFood");
         number("Loadout","integer",2,4,"botExpeditionElytras");
-        bool("Survival","botUseShulkers botUseEnderChests botAutoArmor botRestockArmor botEmergencyBucketClutch");
+        bool("Survival","botUseEnderChests botAutoArmor botRestockArmor botEmergencyBucketClutch");
         bool("Autonomy","botAutoRespawn botPersistentTracking botPeriodicReports botReportAllTrusted botUseElytra botElytraCombatEscape botElytraPursuit botAerialSearch botEntityAwareness botRenderEntityESP botRenderMobESP");
         number("Autonomy","long",1000,30000,"botRespawnDelayMS");
         number("Autonomy","long",30000,3600000,"botReportIntervalMS");
@@ -63,7 +63,7 @@ public final class NetworkSettings {
         number("Autonomy","integer",16,128,"botFlightSurveyHeight");
         number("Autonomy","integer",64,2048,"botEntityAwarenessRange");
         number("Sharing","integer",32,512,"botTerrainViewRange");
-        bool("Movement", "allowInventory allowBreak allowPlace allowSprint allowParkour allowWaterBucketFall");
+        bool("Movement", "allowSprint allowParkour allowWaterBucketFall");
         number("Movement","integer",3,1024,"maxFallHeightBucket");
         number("Stalking","integer",0,10000,"stalkTerrainPenalty");
         bool("Mining", "mineAutoDeposit mineDiscardWaste mineTravelBetweenDimensions preferAvoidConstruction protectContainers mineAvoidSculk");
@@ -115,6 +115,11 @@ public final class NetworkSettings {
         number("Sharing","long",10000,600000,"networkSightingTTLMS");
     }
     private NetworkSettings() {}
+    /** Old capability switches are accepted only while migrating saved settings or older policies. */
+    public static boolean retired(String name) {
+        return Set.of("allowbreak", "allowbreakanyway", "allowplace", "allowinventory", "botuseshulkers")
+                .contains(name.toLowerCase(Locale.ROOT));
+    }
     private static void bool(String group,String names) { for(String name:names.split(" ")) put(new Spec(name,group,"boolean",0,0,List.of())); }
     private static void number(String group,String type,long min,long max,String names) { for(String name:names.split(" ")) put(new Spec(name,group,type,min,max,List.of())); }
     private static void choice(String group,String name,String... options) { put(new Spec(name,group,"choice",0,0,List.of(options))); }
@@ -127,7 +132,7 @@ public final class NetworkSettings {
     }
     public static Map<String,String> normalize(Map<String,String> values) {
         Map<String,String> result=new LinkedHashMap<>();
-        values.forEach((name,value)->result.put(name,spec(name).normalize(value)));
+        values.forEach((name,value)->{if(!retired(name))result.put(name,spec(name).normalize(value));});
         return Map.copyOf(result);
     }
 }

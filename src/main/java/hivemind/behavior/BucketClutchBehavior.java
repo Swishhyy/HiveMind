@@ -60,7 +60,6 @@ public final class BucketClutchBehavior extends Behavior {
         if(previous<0)previous=ctx.player().getInventory().getSelectedSlot();
         if(ctx.player().isUsingItem())ctx.minecraft().gameMode.releaseUsingItem(ctx.player());
         if(source>=9){
-            if(!HiveMind.settings().allowInventory.value)return false;
             int destination=-1;
             for(int i=0;i<9;i++)if(ctx.player().getInventory().getItem(i).isEmpty()){destination=i;break;}
             if(destination<0)destination=8;

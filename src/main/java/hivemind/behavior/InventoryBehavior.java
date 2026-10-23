@@ -59,9 +59,6 @@ public final class InventoryBehavior extends Behavior implements Helper {
 
     @Override
     public void onTick(TickEvent event) {
-        if (!HiveMind.settings().allowInventory.value) {
-            return;
-        }
         if (event.getType() == TickEvent.Type.OUT) {
             return;
         }
@@ -204,10 +201,6 @@ public final class InventoryBehavior extends Behavior implements Helper {
     }
 
     public boolean throwaway(boolean select, Predicate<? super ItemStack> desired) {
-        return throwaway(select, desired, HiveMind.settings().allowInventory.value);
-    }
-
-    public boolean throwaway(boolean select, Predicate<? super ItemStack> desired, boolean allowInventory) {
         LocalPlayer p = ctx.player();
         NonNullList<ItemStack> inv = p.getInventory().getNonEquipmentItems();
         for (int i = 0; i < 9; i++) {
@@ -241,15 +234,13 @@ public final class InventoryBehavior extends Behavior implements Helper {
             }
         }
 
-        if (allowInventory) {
-            for (int i = 9; i < 36; i++) {
-                if (desired.test(inv.get(i))) {
-                    if (select) {
-                        requestSwapWithHotBar(i, 7);
-                        p.getInventory().setSelectedSlot(7);
-                    }
-                    return true;
+        for (int i = 9; i < 36; i++) {
+            if (desired.test(inv.get(i))) {
+                if (select) {
+                    requestSwapWithHotBar(i, 7);
+                    p.getInventory().setSelectedSlot(7);
                 }
+                return true;
             }
         }
 

@@ -1,9 +1,9 @@
-**HiveMind bundle 0.1.0.12 — clients/controller 0.1.0.11**
+**HiveMind bundle 0.1.0.13 — clients/controller 0.1.0.12**
 
-- Emergency hunger/tool resupply now uses category-aware loose and boxed stock, fixing the older loose-only path shown as Survival WAIT. Automatic care retries after 30 seconds when enabled. Incomplete withdrawals report failure rather than success.
-- Armor reserves fill missing/worn vanilla helmet, chestplate, leggings and boots from ordinary storage or shulkers. Safe inventory automation equips carried armor using material, protection and durability ranking, skips binding-cursed candidates, and preserves displaced gear. Grounded noncombat bots proactively equip carried usable wings without requiring rockets first; flight requirements remain enforced.
-- Placed ender chests are private withdrawal-only access points. Bots discover nearby loaded ones or use registered/base access points, opening their own account's ender inventory for supplies, armor and useful shulkers. No automatic ender deposits, access-block placement or mining.
-- Dashboard now exposes **allowInventory** and the new **botAutoArmor**, **botRestockArmor**, **botUseEnderChests** toggles. Shulker errors name the exact disabled settings, and loadout status includes inventory automation and armor counts.
-- Storage block validation waits until arrival plus a brief loading grace period; actual mismatches report the location and observed block. Existing registrations are not silently deleted.
+- Breaking, placing, inventory movement and shulker use are built-in bot capabilities with no disable switches. Remove the old toggles from chat settings, config forms and dashboard controls, along with the obsolete break-exception list.
+- Remove the matching gates across mining, pathing, building, storage-shulker acquisition/recovery, equipment swaps, totems, elytra supplies, bucket clutches and mining waste cleanup. Bots can use these capabilities as their tasks need them.
+- Ignore old local/profile switches, migrate saved global and individual controller policies, clean client web-settings files, and tolerate retired fields from older policy senders. Other settings and trust persist; newly submitted retired switches are rejected.
 
-Update/restart the controller and clients for the shared settings catalogue. All components changed and are versioned 0.1.0.11; updater URLs and bot filenames remain stable, protocol stays 7. Automated policy, controller and Fabric checks cover the release; live multiplayer gear swaps, storage permissions and placement still need gameplay testing.
+Update/restart the controller and clients for the settings catalogue and saved-policy migration. Bot, player and controller components are version 0.1.0.12; the release bundle is 0.1.0.13. Updater channels and filenames keep their existing conventions. Contextual terrain/container protections, safe shulker placement/recovery, manual player role and ordinary task controls are preserved.
+
+Validation: automated policy, controller, Fabric and Windows builds; public release hashes and updater-channel checks. Live Minecraft gameplay still needs testing.

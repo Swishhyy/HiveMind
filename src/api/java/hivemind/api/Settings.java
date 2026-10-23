@@ -59,24 +59,9 @@ public final class Settings {
     private static final Logger LOGGER = LoggerFactory.getLogger("HiveMind");
 
     /**
-     * Allow HiveMind to break blocks
-     */
-    public final Setting<Boolean> allowBreak = new Setting<>(true);
-
-    /**
-     * Blocks that hivemind will be allowed to break even with allowBreak set to false
-     */
-    public final Setting<List<Block>> allowBreakAnyway = new Setting<>(new ArrayList<>());
-
-    /**
      * Allow HiveMind to sprint
      */
     public final Setting<Boolean> allowSprint = new Setting<>(true);
-
-    /**
-     * Allow HiveMind to place blocks
-     */
-    public final Setting<Boolean> allowPlace = new Setting<>(true);
 
     /**
      * Allow HiveMind to place blocks in fluid source blocks
@@ -87,11 +72,6 @@ public final class Settings {
      * Allow HiveMind to place blocks in flowing fluid
      */
     public final Setting<Boolean> allowPlaceInFluidsFlow = new Setting<>(true);
-
-    /**
-     * Allow HiveMind to move items in your inventory to your hotbar
-     */
-    public final Setting<Boolean> allowInventory = new Setting<>(false);
 
     /**
      * Wait this many ticks between InventoryBehavior moving inventory items
@@ -447,7 +427,6 @@ public final class Settings {
     public final Setting<Boolean> botAutoArmor = new Setting<>(true);
     public final Setting<Boolean> botRestockArmor = new Setting<>(true);
     public final Setting<Boolean> botUseEnderChests = new Setting<>(true);
-    public final Setting<Boolean> botUseShulkers = new Setting<>(true);
     public final Setting<Boolean> botEmergencyBucketClutch = new Setting<>(true);
     public final Setting<Boolean> botAerialSearch = new Setting<>(true);
     /** Nearby server-loaded entities may be acquired behind cover; visual reports still require line of sight. */

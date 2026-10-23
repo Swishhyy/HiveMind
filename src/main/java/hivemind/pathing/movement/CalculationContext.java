@@ -38,7 +38,6 @@ import net.minecraft.core.Holder;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.ai.attributes.Attributes;
-import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.enchantment.*;
@@ -73,8 +72,6 @@ public class CalculationContext {
     public final boolean canSprint;
     protected final double placeBlockCost; // protected because you should call the function instead
     public final boolean stealth;
-    public final boolean allowBreak;
-    public final List<Block> allowBreakAnyway;
     public final boolean allowParkour;
     public final boolean allowParkourPlace;
     public final boolean allowJumpAtBuildLimit;
@@ -143,14 +140,12 @@ public class CalculationContext {
         double trackingPenalty=((HiveMind)hivemind).getStalkProcess().terrainPenalty();
         this.stalkTarget = ((HiveMind) hivemind).getStalkProcess().avoidanceCenter();
         this.stalkClearance = Math.min(24,Math.max(8,HiveMind.settings().stalkDistance.value-8));
-        this.hasThrowaway = !stealth && HiveMind.settings().allowPlace.value && ((HiveMind) hivemind).getInventoryBehavior().hasGenericThrowaway();
+        this.hasThrowaway = !stealth && ((HiveMind) hivemind).getInventoryBehavior().hasGenericThrowaway();
         int waterSlot=player.getInventory().findSlotMatchingItem(STACK_BUCKET_WATER);
         this.hasWaterBucket = HiveMind.settings().allowWaterBucketFall.value && waterSlot>=0
-                &&(Inventory.isHotbarSlot(waterSlot)||HiveMind.settings().allowInventory.value)&&world.dimension()!=Level.NETHER;
+                &&world.dimension()!=Level.NETHER;
         this.canSprint = !((HiveMind) hivemind).getStalkProcess().quietMovement() && !((HiveMind) hivemind).getSculkProcess().quiet() && HiveMind.settings().allowSprint.value && player.getFoodData().getFoodLevel() > 6;
         this.placeBlockCost = HiveMind.settings().blockPlacementPenalty.value+trackingPenalty;
-        this.allowBreak = !stealth && HiveMind.settings().allowBreak.value;
-        this.allowBreakAnyway = stealth ? List.of() : new ArrayList<>(HiveMind.settings().allowBreakAnyway.value);
         this.allowParkour = !stealth && HiveMind.settings().allowParkour.value;
         this.allowParkourPlace = !stealth && HiveMind.settings().allowParkourPlace.value;
         this.allowJumpAtBuildLimit = HiveMind.settings().allowJumpAtBuildLimit.value;
@@ -228,7 +223,7 @@ public class CalculationContext {
 
     public double costOfPlacingAt(int x, int y, int z, BlockState current) {
         if (sculkProtected(x, y, z, current)) return COST_INF;
-        if (!hasThrowaway) { // only true if allowPlace is true, see constructor
+        if (!hasThrowaway) { // Requires available building material and an editable route.
             return COST_INF;
         }
         if (isPossiblyProtected(x, y, z)) {
@@ -249,9 +244,6 @@ public class CalculationContext {
     public double breakCostMultiplierAt(int x, int y, int z, BlockState current) {
         if (stealth || !insideMiningBoundary(x,y,z)) return COST_INF;
         if (sculkProtected(x, y, z, current)) return COST_INF;
-        if (!allowBreak && !allowBreakAnyway.contains(current.getBlock())) {
-            return COST_INF;
-        }
         if (isPossiblyProtected(x, y, z)) {
             return COST_INF;
         }
