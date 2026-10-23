@@ -66,7 +66,7 @@ public final class OperationsProcess extends HiveMindProcessHelper implements IB
     }
     private Map<String,Integer> supplies(){
         Map<String,Integer> targets=new LinkedHashMap<>(ExpeditionLoadout.missing(ctx));
-        if(HiveMind.settings().allowPlace.value&&BotInventory.count(ctx,BotInventory::building)<Math.max(32,HiveMind.settings().botMinimumBlocks.value))targets.put(SupplyReserves.BLOCKS,Math.max(32,HiveMind.settings().botRestockBlocks.value));
+        if(BotInventory.count(ctx,BotInventory::building)<Math.max(32,HiveMind.settings().botMinimumBlocks.value))targets.put(SupplyReserves.BLOCKS,Math.max(32,HiveMind.settings().botRestockBlocks.value));
         return targets;
     }
     private void ensureScope(){var here=MiningRouteAccess.root(ctx);if(serverRoot==null){serverRoot=here;return;}if(!serverRoot.equals(here)){serverRoot=here;obstacles.clear();onLostControl();nextSupply=0;walkUntil=0;blockerUntil=0;}}

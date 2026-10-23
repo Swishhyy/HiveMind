@@ -80,8 +80,10 @@ public class SettingsUtil {
                     return;
                 }
 
-                String settingName = matcher.group("setting").toLowerCase();
+                String settingName = matcher.group("setting").toLowerCase(java.util.Locale.ROOT);
                 String settingValue = matcher.group("value");
+                // These capabilities are always available; ignore obsolete switches from older profiles.
+                if (List.of("allowbreak", "allowbreakanyway", "allowplace", "allowinventory", "botuseshulkers").contains(settingName)) return;
                 // TODO remove soonish
                 if ("allowjumpat256".equals(settingName)) {
                     settingName = "allowjumpatbuildlimit";

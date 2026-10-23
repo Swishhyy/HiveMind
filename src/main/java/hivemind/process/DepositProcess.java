@@ -440,7 +440,6 @@ public final class DepositProcess extends HiveMindProcessHelper {
         if(slot<0&&fetch&&fetchVariants&&!fetchComplete()){
             for(int i=0;i<storageSlots;i++)if(!refusedSlots.contains(i)&&openedMenu.slots.get(i).mayPickup(ctx.player())&&usefulStockBox(openedMenu.slots.get(i).getItem())){slot=i;break;}
             if(slot>=0){
-                if(!HiveMind.settings().botUseShulkers.value||!HiveMind.settings().allowInventory.value||!HiveMind.settings().allowPlace.value||!HiveMind.settings().allowBreak.value)return fail("Cannot unpack storage shulkers; disabled settings: "+hivemind.getShulkerProcess().disabledSettings());
                 if(hivemind.getShulkerProcess().hasPendingRecovery())return fail("Recover the outstanding portable shulker before taking another box from storage");
                 pendingBoxEmptySlots=emptyInventorySlots();
                 if(!stockBoxes.canBorrow(pendingBoxEmptySlots))return fail(stockBoxes.borrowed()>=8?"Eight storage boxes were tried this trip; refill again after checking stock":"Free at least two main-inventory slots before collecting a storage shulker");

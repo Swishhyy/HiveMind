@@ -302,7 +302,7 @@ public final class StalkProcess extends HiveMindProcessHelper implements IBehavi
     }
     /** Restore needed supplies displaced by flight; one normal inventory swap at a time. */
     public boolean prepareSupplies(CombatStyle style){
-        if(!HiveMind.settings().allowInventory.value||ctx.player()==null||!ctx.player().isAlive()||ctx.minecraft().gameMode==null||hivemind.getConflictProcess().isActive()||hivemind.getSculkProcess().isActive()||hivemind.getElytraProcess().isActive()||ctx.player().containerMenu!=ctx.player().inventoryMenu||!ctx.player().inventoryMenu.getCarried().isEmpty())return false;
+        if(ctx.player()==null||!ctx.player().isAlive()||ctx.minecraft().gameMode==null||hivemind.getConflictProcess().isActive()||hivemind.getSculkProcess().isActive()||hivemind.getElytraProcess().isActive()||ctx.player().containerMenu!=ctx.player().inventoryMenu||!ctx.player().inventoryMenu.getCarried().isEmpty())return false;
         if(hivemind.getShulkerProcess().requestSupplies())return true;
         long now=System.currentTimeMillis();if(now<nextSupplyMove)return true;
         List<java.util.function.Predicate<ItemStack>> needs=new ArrayList<>();

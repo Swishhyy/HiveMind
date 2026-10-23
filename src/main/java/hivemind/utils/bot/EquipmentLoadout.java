@@ -29,7 +29,7 @@ public final class EquipmentLoadout {
         if(source>=9)ctx.playerController().windowClick(ctx.player().inventoryMenu.containerId,menu,8,ContainerInput.SWAP,ctx.player());return true;
     }
     public static boolean equipOne(HiveMind bot){
-        var ctx=bot.getPlayerContext();if(bot.isPlayerClient()||!HiveMind.settings().allowInventory.value||!HiveMind.settings().botAutoArmor.value||ctx.player()==null||ctx.world()==null||!ctx.player().isAlive()||ctx.minecraft().gameMode==null||ctx.minecraft().gui.screen()!=null||ctx.player().containerMenu!=ctx.player().inventoryMenu||!ctx.player().inventoryMenu.getCarried().isEmpty()||!ctx.player().onGround()||ctx.player().isFallFlying()||ctx.player().isUsingItem()||bot.getFlight().flying()||bot.getElytraProcess().isActive()||bot.getAutonomy().paused())return false;
+        var ctx=bot.getPlayerContext();if(bot.isPlayerClient()||!HiveMind.settings().botAutoArmor.value||ctx.player()==null||ctx.world()==null||!ctx.player().isAlive()||ctx.minecraft().gameMode==null||ctx.minecraft().gui.screen()!=null||ctx.player().containerMenu!=ctx.player().inventoryMenu||!ctx.player().inventoryMenu.getCarried().isEmpty()||!ctx.player().onGround()||ctx.player().isFallFlying()||ctx.player().isUsingItem()||bot.getFlight().flying()||bot.getElytraProcess().isActive()||bot.getAutonomy().paused())return false;
         boolean wings=HiveMind.settings().botUseElytra.value&&!bot.getStalkProcess().committedCombat()&&!bot.getConflictProcess().isActive();
         for(var entry:ARMOR.entrySet()){
             var worn=ctx.player().getItemBySlot(entry.getValue());if(bound(worn))continue;

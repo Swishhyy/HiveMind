@@ -654,20 +654,6 @@ public final class MineProcess extends HiveMindProcessHelper implements IMinePro
     }
 
     private BlockOptionalMetaLookup filterFilter() {
-        if (this.filter == null) {
-            return null;
-        }
-        if (!HiveMind.settings().allowBreak.value) {
-            BlockOptionalMetaLookup f = new BlockOptionalMetaLookup(this.filter.blocks()
-                    .stream()
-                    .filter(e -> HiveMind.settings().allowBreakAnyway.value.contains(e.getBlock()))
-                    .toArray(BlockOptionalMeta[]::new));
-            if (f.blocks().isEmpty()) {
-                logDirect("Unable to mine when allowBreak is false and target block is not in allowBreakAnyway!");
-                return null;
-            }
-            return f;
-        }
         return filter;
     }
 

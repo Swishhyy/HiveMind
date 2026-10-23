@@ -30,7 +30,7 @@ public final class CombatBehavior extends Behavior {
             &&!hivemind.getAutonomy().paused()&&BotWork.active(hivemind)&&ctx.minecraft().gui.screen()==null
             &&ctx.player().containerMenu==ctx.player().inventoryMenu&&ctx.player().inventoryMenu.getCarried().isEmpty();}
     public boolean ensureTotem(){
-        if(!active()||!HiveMind.settings().botAutoTotem.value||!HiveMind.settings().allowInventory.value
+        if(!active()||!HiveMind.settings().botAutoTotem.value
                 ||hivemind.getStalkProcess().hunting()&&!HiveMind.settings().killUseTotems.value
                 ||ctx.player().getOffhandItem().is(Items.TOTEM_OF_UNDYING)||lastTotemSwap==hivemind.clientTick())return false;
         if(ctx.player().isUsingItem()&&ctx.player().getUsedItemHand()==InteractionHand.OFF_HAND){

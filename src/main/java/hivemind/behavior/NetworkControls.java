@@ -61,7 +61,9 @@ final class NetworkControls {
         if(saved.size()>128)throw new IllegalStateException("Too many saved web settings");
         Map<String,String> values=new LinkedHashMap<>();
         for(String key:saved.stringPropertyNames())values.put(key,saved.getProperty(key));
-        setValues(NetworkSettings.normalize(values));
+        Map<String,String> normalized=NetworkSettings.normalize(values);
+        if(normalized.size()!=values.size()){Properties migrated=new Properties();normalized.forEach(migrated::setProperty);AtomicProperties.write(settingsFile,migrated);}
+        setValues(normalized);
     }
     String botCommandList(){var nodes=PlayerBotOrders.targets(states(System.currentTimeMillis()),"all",System.currentTimeMillis());return nodes.isEmpty()?"No fresh online bots reported yet":"Online bots: "+String.join(", ",nodes.stream().map(s->s.reporterName()+" ("+s.reporter()+")").toList());}
     String requestBotCommand(String selector,String command){

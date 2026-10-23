@@ -42,7 +42,32 @@ public final class ControlChecks {
         return new State(bot.id(),bot.name(),"Idle",20,20,new Endpoint("minecraft:overworld",0,64,0),Map.of(),Map.of("stalkDistance","40"),Map.of(A.id(),A.name()),0,now);
     }
     public static void main(String[] args)throws Exception{runAll();System.out.println("Control checks passed: automatic keys, persisted defaults/overrides, trust, command deduplication, host-only dispatch, receipt delivery, HTTP auth/mutations, no command history replay");}
-    public static void runAll()throws Exception{keysAndPolicies();packetBounds();liveRouting();httpActions();}
+    public static void runAll()throws Exception{retiredCapabilityPolicies();keysAndPolicies();packetBounds();liveRouting();httpActions();}
+    private static void retiredCapabilityPolicies()throws Exception{
+        Path root=Files.createTempDirectory("hivemind-capability-migration-");
+        try{
+            List<String> retired=List.of("allowBreak","allowBreakAnyway","allowPlace","allowInventory","botUseShulkers");
+            Properties saved=new Properties();saved.setProperty("version","123");
+            for(String name:retired){saved.setProperty("global.setting."+name,"false");saved.setProperty("bot."+A.id()+".setting."+name,"false");}
+            saved.setProperty("global.setting.stalkDistance","48");saved.setProperty("bot."+A.id()+".setting.stalkDistance","64");
+            saved.setProperty("global.trust."+B.id(),"true");
+            Path file=root.resolve("bot-network-controls.properties");hivemind.utils.bot.AtomicProperties.write(file,saved);
+            ControlRules rules=new ControlRules(root);
+            check(rules.version()>123,"Capability migration must advance policy revision");
+            check(rules.settings(A.id()).equals(Map.of("stalkDistance","64"))&&rules.settings(B.id()).equals(Map.of("stalkDistance","48")),"Old false switches must not affect valid global or individual settings");
+            check(rules.trust(A.id()).get(B.id()),"Migration must preserve trust");
+            Properties disk=hivemind.utils.bot.AtomicProperties.read(file);
+            for(String name:retired){
+                check(!disk.containsKey("global.setting."+name)&&!disk.containsKey("bot."+A.id()+".setting."+name),"Retired switch persisted after migration: "+name);
+                check(NetworkSettings.all().stream().noneMatch(spec->spec.name().equals(name)),"Retired switch still appears in the dashboard");
+                try{rules.change(request(null,Action.SETTING,name,"false",System.currentTimeMillis()));throw new AssertionError("Retired switch could be recreated: "+name);}catch(IllegalArgumentException expected){}
+            }
+            check(new ControlRules(root).version()==rules.version(),"Migration should persist once and survive a restart");
+            Map<String,String> legacy=new HashMap<>();retired.forEach(name->legacy.put(name,"false"));legacy.put("stalkDistance","56");
+            check(NetworkSettings.normalize(legacy).equals(Map.of("stalkDistance","56")),"Older client policies must ignore retired false switches while applying valid settings");
+            try{NetworkSettings.normalize(Map.of("unknownTypo","false"));throw new AssertionError("Unrelated invalid settings were silently ignored");}catch(IllegalArgumentException expected){}
+        }finally{try(var paths=Files.walk(root)){for(Path path:paths.sorted(Comparator.reverseOrder()).toList())Files.deleteIfExists(path);}}
+    }
     private static void keysAndPolicies()throws Exception{
         Path root=Files.createTempDirectory("hivemind-controls-");
         try{

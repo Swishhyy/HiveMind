@@ -562,30 +562,28 @@ public final class BuilderProcess extends HiveMindProcessHelper implements IBuil
             return new PathingCommand(null, PathingCommandType.CANCEL_AND_SET_GOAL);
         }
 
-        if (HiveMind.settings().allowInventory.value) {
-            ArrayList<Integer> usefulSlots = new ArrayList<>();
-            List<BlockState> noValidHotbarOption = new ArrayList<>();
-            outer:
-            for (BlockState desired : desirableOnHotbar) {
-                for (int i = 0; i < 9; i++) {
-                    if (valid(approxPlaceable.get(i), desired, true)) {
-                        usefulSlots.add(i);
-                        continue outer;
-                    }
+        ArrayList<Integer> usefulSlots = new ArrayList<>();
+        List<BlockState> noValidHotbarOption = new ArrayList<>();
+        outer:
+        for (BlockState desired : desirableOnHotbar) {
+            for (int i = 0; i < 9; i++) {
+                if (valid(approxPlaceable.get(i), desired, true)) {
+                    usefulSlots.add(i);
+                    continue outer;
                 }
-                noValidHotbarOption.add(desired);
             }
+            noValidHotbarOption.add(desired);
+        }
 
-            outer:
-            for (int i = 9; i < 36; i++) {
-                for (BlockState desired : noValidHotbarOption) {
-                    if (valid(approxPlaceable.get(i), desired, true)) {
-                        if (!hivemind.getInventoryBehavior().attemptToPutOnHotbar(i, usefulSlots::contains)) {
-                            // awaiting inventory move, so pause
-                            return new PathingCommand(null, PathingCommandType.REQUEST_PAUSE);
-                        }
-                        break outer;
+        outer:
+        for (int i = 9; i < 36; i++) {
+            for (BlockState desired : noValidHotbarOption) {
+                if (valid(approxPlaceable.get(i), desired, true)) {
+                    if (!hivemind.getInventoryBehavior().attemptToPutOnHotbar(i, usefulSlots::contains)) {
+                        // awaiting inventory move, so pause
+                        return new PathingCommand(null, PathingCommandType.REQUEST_PAUSE);
                     }
+                    break outer;
                 }
             }
         }
@@ -1118,7 +1116,6 @@ public final class BuilderProcess extends HiveMindProcessHelper implements IBuil
             }
             BlockState sch = getSchematic(x, y, z, current);
             if (sch != null) {
-                // TODO this can return true even when allowPlace is off.... is that an issue?
                 if (sch.getBlock() instanceof AirBlock) {
                     // we want this to be air, but they're asking if they can place here
                     // this won't be a schematic block, this will be a throwaway
@@ -1147,7 +1144,7 @@ public final class BuilderProcess extends HiveMindProcessHelper implements IBuil
 
         @Override
         public double breakCostMultiplierAt(int x, int y, int z, BlockState current) {
-            if ((!allowBreak && !allowBreakAnyway.contains(current.getBlock())) || isPossiblyProtected(x, y, z)) {
+            if (stealth || isPossiblyProtected(x, y, z)) {
                 return COST_INF;
             }
             BlockState sch = getSchematic(x, y, z, current);

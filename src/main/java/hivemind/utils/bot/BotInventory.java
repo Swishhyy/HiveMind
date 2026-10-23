@@ -63,5 +63,5 @@ public final class BotInventory {
         return -1;
     }
     public static boolean needsFood(IPlayerContext ctx) { return count(ctx, BotInventory::food) < SurvivalPolicy.bounded(HiveMind.settings().botMinimumFood.value, 1, 64); }
-    public static boolean needsBlocks(IPlayerContext ctx) { return HiveMind.settings().allowPlace.value && count(ctx, BotInventory::building) < SurvivalPolicy.bounded(HiveMind.settings().botMinimumBlocks.value, 0, 128); }
+    public static boolean needsBlocks(IPlayerContext ctx) { return count(ctx, BotInventory::building) < SurvivalPolicy.bounded(HiveMind.settings().botMinimumBlocks.value, 0, 128); }
 }

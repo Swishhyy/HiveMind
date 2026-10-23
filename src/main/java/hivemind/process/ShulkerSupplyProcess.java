@@ -70,8 +70,7 @@ public final class ShulkerSupplyProcess extends HiveMindProcessHelper implements
     private static boolean shulker(ItemStack stack){return stack.getItem() instanceof BlockItem item&&item.getBlock() instanceof ShulkerBoxBlock;}
     private int count(Predicate<ItemStack> filter){return BotInventory.count(ctx,filter);}
     private int count(Need need){return need.category()==null?count(need.matches()):ExpeditionLoadout.count(ctx,need.category());}
-    public String disabledSettings(){var disabled=new ArrayList<String>();if(!HiveMind.settings().botUseShulkers.value)disabled.add("botUseShulkers");if(!HiveMind.settings().allowInventory.value)disabled.add("allowInventory");if(!HiveMind.settings().allowPlace.value)disabled.add("allowPlace");if(!HiveMind.settings().allowBreak.value)disabled.add("allowBreak");return String.join(", ",disabled);}
-    private boolean allowed(){return !hivemind.getCompanionProcess().awaitingDeathInventory()&&HiveMind.settings().botUseShulkers.value&&HiveMind.settings().allowInventory.value&&HiveMind.settings().allowPlace.value&&HiveMind.settings().allowBreak.value
+    private boolean allowed(){return !hivemind.getCompanionProcess().awaitingDeathInventory()
             &&ctx.player()!=null&&ctx.world()!=null&&ctx.player().isAlive()&&!hivemind.getAutonomy().paused()&&ctx.minecraft().gameMode!=null;}
     public boolean safeForResupply(){return safeSite();}
     public boolean safeGrounded(){return rawSafeSite();}
@@ -105,8 +104,8 @@ public final class ShulkerSupplyProcess extends HiveMindProcessHelper implements
     public boolean requestItems(Map<String,Integer> targets,boolean variants){
         return request(targets.entrySet().stream().map(entry->new Need(s->(variants?ExpeditionLoadout.matches(s,entry.getKey()):BotItems.ordinary(s)&&BuiltInRegistries.ITEM.getKey(s.getItem()).toString().equals(entry.getKey())),variants?SupplyReserves.refillGoal(entry.getKey(),entry.getValue()):entry.getValue(),entry.getKey(),variants?entry.getKey():null)).toList());
     }
-    public String reserveStatus(){return "Inventory automation "+HiveMind.settings().allowInventory.value+", armor "+EquipmentLoadout.ARMOR.keySet().stream().filter(key->EquipmentLoadout.count(ctx,key)>0).count()+"/4, rockets "+ExpeditionLoadout.count(ctx,"@rockets")+"/"+HiveMind.settings().botExpeditionRockets.value+", food "+ExpeditionLoadout.count(ctx,"@food")+"/"+HiveMind.settings().botExpeditionFood.value+", usable elytras "+ExpeditionLoadout.count(ctx,"@elytra")+"/"+HiveMind.settings().botExpeditionElytras.value+", totems "+ExpeditionLoadout.count(ctx,"@totems")+"/"+HiveMind.settings().botExpeditionTotems.value;}
-    public boolean hasPortableReserves(){if(ctx.player()==null||!HiveMind.settings().botUseShulkers.value)return false;var wanted=ExpeditionLoadout.missing(ctx);if(wanted.isEmpty())return false;for(int slot=0;slot<36;slot++){var stack=ctx.player().getInventory().getItem(slot);if(!shulker(stack))continue;var contents=stack.get(DataComponents.CONTAINER);if(contents==null)continue;var items=net.minecraft.core.NonNullList.<ItemStack>withSize(27,ItemStack.EMPTY);contents.copyInto(items);if(items.stream().anyMatch(item->wanted.keySet().stream().anyMatch(key->ExpeditionLoadout.matches(item,key))))return true;}return false;}
+    public String reserveStatus(){return "Armor "+EquipmentLoadout.ARMOR.keySet().stream().filter(key->EquipmentLoadout.count(ctx,key)>0).count()+"/4, rockets "+ExpeditionLoadout.count(ctx,"@rockets")+"/"+HiveMind.settings().botExpeditionRockets.value+", food "+ExpeditionLoadout.count(ctx,"@food")+"/"+HiveMind.settings().botExpeditionFood.value+", usable elytras "+ExpeditionLoadout.count(ctx,"@elytra")+"/"+HiveMind.settings().botExpeditionElytras.value+", totems "+ExpeditionLoadout.count(ctx,"@totems")+"/"+HiveMind.settings().botExpeditionTotems.value;}
+    public boolean hasPortableReserves(){if(ctx.player()==null)return false;var wanted=ExpeditionLoadout.missing(ctx);if(wanted.isEmpty())return false;for(int slot=0;slot<36;slot++){var stack=ctx.player().getInventory().getItem(slot);if(!shulker(stack))continue;var contents=stack.get(DataComponents.CONTAINER);if(contents==null)continue;var items=net.minecraft.core.NonNullList.<ItemStack>withSize(27,ItemStack.EMPTY);contents.copyInto(items);if(items.stream().anyMatch(item->wanted.keySet().stream().anyMatch(key->ExpeditionLoadout.matches(item,key))))return true;}return false;}
     public boolean hasPendingRecovery(){load();return store.box()!=null;}
     public boolean requestSupplies(){return ctx.player()!=null&&request(loadout());}
     private boolean request(List<Need> wanted){
@@ -194,7 +193,6 @@ public final class ShulkerSupplyProcess extends HiveMindProcessHelper implements
             case TRANSFER -> {return transfer();}
             case BREAK -> {
                 if(!sameBlock()) {transition(Stage.PICKUP);return pause();}
-                if(!HiveMind.settings().allowBreak.value)return fail("Enable allowBreak to recover the placed shulker");
                 if(!PortableSupplyPolicy.mayRecover(confirmed,sameBlock(),ctx.player().containerMenu==ctx.player().inventoryMenu&&ctx.player().inventoryMenu.getCarried().isEmpty()))return fail("Shulker recovery ownership changed");
                 int pick=BotInventory.slot(ctx,s->BotInventory.pickaxe(s,false));
                 if(pick>=9){ctx.playerController().windowClick(ctx.player().inventoryMenu.containerId,pick,8,ContainerInput.SWAP,ctx.player());return pause();}

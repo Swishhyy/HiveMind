@@ -35,7 +35,6 @@ import hivemind.utils.pathing.MutableMoveResult;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.Vec3i;
-import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.Level;
@@ -107,7 +106,7 @@ public class MovementFall extends Movement {
         if(!isWater&&!bucketFall)bucketFall=willPlaceBucket();
         if(!isWater&&bucketFall){
             int waterSlot=ctx.player().getInventory().findSlotMatchingItem(STACK_BUCKET_WATER);
-            if((waterSlot<0||!Inventory.isHotbarSlot(waterSlot)&&!HiveMind.settings().allowInventory.value||ctx.world().dimension()==Level.NETHER)&&ctx.player().onGround())return state.setStatus(MovementStatus.UNREACHABLE);
+            if((waterSlot<0||ctx.world().dimension()==Level.NETHER)&&ctx.player().onGround())return state.setStatus(MovementStatus.UNREACHABLE);
             if(hivemind instanceof HiveMind bot)bot.getClutch().plan(dest);
         }
         if (targetRotation != null) {
