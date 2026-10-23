@@ -21,6 +21,9 @@ fi
     src/test/java/hivemind/utils/bot/TakeoffChecks.java \
     src/main/java/hivemind/utils/bot/PortableSupplyPolicy.java \
     src/main/java/hivemind/utils/bot/StockBoxTrip.java \
+    src/main/java/hivemind/utils/bot/EquipmentPolicy.java \
+    src/main/java/hivemind/utils/bot/StorageAccessPolicy.java \
+    src/main/java/hivemind/utils/bot/EmergencySupplies.java \
     src/main/java/hivemind/utils/bot/PortableBoxStore.java \
     src/main/java/hivemind/utils/social/ClutchPolicy.java \
     src/test/java/hivemind/utils/bot/CombatSupplyChecks.java \

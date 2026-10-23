@@ -33,6 +33,7 @@ import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.ItemStack;
+import hivemind.utils.bot.EquipmentLoadout;
 import net.minecraft.world.item.context.BlockPlaceContext;
 import net.minecraft.world.item.context.UseOnContext;
 import net.minecraft.world.level.block.Block;
@@ -48,6 +49,7 @@ import java.util.function.Predicate;
 
 public final class InventoryBehavior extends Behavior implements Helper {
 
+    private int gearCooldown;
     int ticksSinceLastInventoryMove;
     int[] lastTickRequestedMove; // not everything asks every tick, so remember the request while coming to a halt
 
@@ -64,7 +66,7 @@ public final class InventoryBehavior extends Behavior implements Helper {
             return;
         }
         if (hivemind.getMineProcess().isCleaningWaste() || hivemind.getDepositProcess().isActive()
-                || hivemind.getSurvivalProcess().isActive() || hivemind.getConflictProcess().isActive()
+                || hivemind.getSurvivalProcess().isActive()&&!hivemind.getSurvivalProcess().isWaiting() || hivemind.getConflictProcess().isActive()
                 || hivemind.getCompanionProcess().isActive() || hivemind.getWorkstationProcess().isActive()
                 || hivemind.getRepairProcess().isActive() || hivemind.getShulkerProcess().isActive() || hivemind.getClutch().active()) {
             // Cleanup and storage confirmation track exact source slots; don't swap those slots underneath them.
@@ -74,6 +76,8 @@ public final class InventoryBehavior extends Behavior implements Helper {
             // we have a crafting table or a chest or something open
             return;
         }
+        if(gearCooldown>0)gearCooldown--;
+        else if(EquipmentLoadout.equipOne(hivemind)){gearCooldown=10;return;}
         ticksSinceLastInventoryMove++;
         if (firstValidThrowaway() >= 9) { // aka there are none on the hotbar, but there are some in main inventory
             requestSwapWithHotBar(firstValidThrowaway(), 8);

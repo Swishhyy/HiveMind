@@ -24,6 +24,7 @@ import hivemind.api.process.IHiveMindProcess;
 import hivemind.process.ElytraProcess;
 import hivemind.process.elytra.ElytraBehavior;
 import hivemind.utils.bot.FlightPolicy;
+import hivemind.utils.bot.EquipmentLoadout;
 import hivemind.utils.bot.TakeoffState;
 import hivemind.utils.bot.AerialSurvey;
 import hivemind.utils.bot.FlightPolicy.Mode;
@@ -195,8 +196,8 @@ public final class FlightBehavior extends Behavior {
     private boolean equipWings(Mode requested){
         int minimum=FlightPolicy.durability(requested,HiveMind.settings().elytraMinimumDurability.value);
         if(wingDurability(ctx.player().getItemBySlot(EquipmentSlot.CHEST))>=minimum)return true;
-        if(!HiveMind.settings().allowInventory.value||ctx.minecraft().gameMode==null)return false;
-        for(int i=0;i<36;i++)if(wingDurability(ctx.player().getInventory().getItem(i))>=minimum){
+        if(!HiveMind.settings().allowInventory.value||ctx.minecraft().gameMode==null||EquipmentLoadout.bound(ctx.player().getItemBySlot(EquipmentSlot.CHEST)))return false;
+        for(int i=0;i<36;i++)if(wingDurability(ctx.player().getInventory().getItem(i))>=minimum&&!EquipmentLoadout.bound(ctx.player().getInventory().getItem(i))){
             ItemStack previous=ctx.player().getItemBySlot(EquipmentSlot.CHEST).copy();exchangeChest(i);
             if(wingDurability(ctx.player().getItemBySlot(EquipmentSlot.CHEST))<minimum)return false;
             if(!previous.isEmpty()&&!previous.is(Items.ELYTRA)){armor=previous;armorSlot=i;}return true;
@@ -204,6 +205,7 @@ public final class FlightBehavior extends Behavior {
         return false;
     }
     private void restoreArmor(){
+        if(HiveMind.settings().botUseElytra.value&&!hivemind.getStalkProcess().committedCombat()&&!hivemind.getConflictProcess().isActive())return;
         if(armorSlot<0||!ctx.player().onGround()||ctx.player().isFallFlying()||ctx.player().containerMenu!=ctx.player().inventoryMenu
                 ||!ctx.player().inventoryMenu.getCarried().isEmpty()||ctx.minecraft().gameMode==null)return;
         if(ctx.player().getItemBySlot(EquipmentSlot.CHEST).is(Items.ELYTRA)&&ItemStack.isSameItemSameComponents(ctx.player().getInventory().getItem(armorSlot),armor))exchangeChest(armorSlot);

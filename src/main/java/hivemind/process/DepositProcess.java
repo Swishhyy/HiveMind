@@ -40,6 +40,9 @@ import hivemind.utils.mining.MiningRouteAccess;
 import hivemind.utils.mining.MiningWasteCleanup;
 import hivemind.utils.mining.WorldRoutes;
 import hivemind.utils.bot.StockBoxTrip;
+import hivemind.utils.bot.StorageAccessPolicy;
+import hivemind.utils.bot.EmergencySupplies;
+import hivemind.utils.bot.BotBaseAccess;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.component.DataComponents;
@@ -77,6 +80,7 @@ public final class DepositProcess extends HiveMindProcessHelper {
     private BlockPos returnTo;
     private boolean depositAll;
     private boolean resupply;
+    private boolean survivalSupply;
     private boolean fetch;
     private boolean fetchVariants;
     private Map<String,Integer> fetchTargets = Map.of();
@@ -108,7 +112,7 @@ public final class DepositProcess extends HiveMindProcessHelper {
     }
 
     public static boolean supports(Block block) {
-        return block == Blocks.CHEST || block == Blocks.TRAPPED_CHEST || block == Blocks.BARREL
+        return block == Blocks.CHEST || block == Blocks.TRAPPED_CHEST || block == Blocks.BARREL || block == Blocks.ENDER_CHEST
                 || block instanceof CopperChestBlock;
     }
 
@@ -154,7 +158,7 @@ public final class DepositProcess extends HiveMindProcessHelper {
         logDirect("Returning to storage #" + storageId + (all ? " (empty main inventory)" : " (keep supplies)"));
     }
 
-    public boolean isResupplying() { return resupply && !fetch && isActive(); }
+    public boolean isResupplying() { return survivalSupply && isActive(); }
     public String lastFetchError() { return lastFetchError; }
     public String lastDepositError() { return lastDepositError; }
     public void startFetch(Map<String,Integer> targets){startFetch(targets,false);}
@@ -169,7 +173,7 @@ public final class DepositProcess extends HiveMindProcessHelper {
         if(hivemind.getShulkerProcess().requestItems(targets,variants)){
             tripRoot=MiningRouteAccess.root(ctx);fetchTargets=Map.copyOf(targets);fetch=resupply=true;lastFetchError=null;transition(Stage.PORTABLE);return;
         }
-        MiningRouteAccess.deposits(ctx); BlockPos feet=ctx.playerFeet();
+        BotBaseAccess.discoverEnderChests(ctx);MiningRouteAccess.deposits(ctx); BlockPos feet=ctx.playerFeet();
         remainingChests.clear();remainingChests.addAll(MiningRouteAccess.store(ctx).orderedDeposits(MiningRouteAccess.dimension(ctx),feet.getX(),feet.getY(),feet.getZ(),HiveMind.settings().mineTravelBetweenDimensions.value));
         remainingChests.removeIf(storage->storage.rule().kind()==StorageRule.Kind.DISABLED);
         if(remainingChests.isEmpty())throw new IllegalStateException("No registered storage is reachable");
@@ -179,25 +183,10 @@ public final class DepositProcess extends HiveMindProcessHelper {
     }
 
     public void startResupply() {
-        if (isActive()) throw new IllegalStateException("Finish the current storage trip before resupplying");
-        boolean food = BotInventory.needsFood(ctx);
-        boolean blocks = BotInventory.needsBlocks(ctx) && hivemind.getMineProcess().isActive();
-        boolean pick = hivemind.getMineProcess().isActive() && BotInventory.slot(ctx,
-                stack -> BotInventory.pickaxe(stack, hivemind.getMineProcess().targetsAncientDebris())) < 0;
-        if (ctx.player().containerMenu != ctx.player().inventoryMenu) throw new IllegalStateException("Close the current container before resupplying");
-        MiningRouteAccess.deposits(ctx);
-        BlockPos feet = ctx.playerFeet();
-        remainingChests.clear();
-        remainingChests.addAll(MiningRouteAccess.store(ctx).orderedDeposits(MiningRouteAccess.dimension(ctx),
-                feet.getX(), feet.getY(), feet.getZ(), HiveMind.settings().mineTravelBetweenDimensions.value));
-        remainingChests.removeIf(storage -> storage.rule().kind() == StorageRule.Kind.DISABLED || storage.rule().kind() == StorageRule.Kind.ORES);
-        if (remainingChests.isEmpty()) throw new IllegalStateException("No reachable supplies chest; register a chest with storage rule <id> supplies");
-        tripRoot = MiningRouteAccess.root(ctx); returnDimension = MiningRouteAccess.dimension(ctx);
-        returnTo = ctx.playerFeet().immutable();
-        depositAll = false; resupply = true; fetch = false; product = null; wantFood = food; wantBlocks = blocks; wantPickaxe = pick;
-        movedItems = 0; refusedSlots.clear();
-        if (!chooseNextStorage()) { onLostControl(); throw new IllegalStateException("No supplies storage is available"); }
-        logDirect("Resupplying from storage #" + storageId);
+        boolean mining=hivemind.getMineProcess().isActive(),debris=hivemind.getMineProcess().targetsAncientDebris();
+        Map<String,Integer> targets=EmergencySupplies.targets(BotInventory.needsFood(ctx),HiveMind.settings().botMinimumFood.value,HiveMind.settings().botRestockFood.value,mining,BotInventory.needsBlocks(ctx),HiveMind.settings().botMinimumBlocks.value,HiveMind.settings().botRestockBlocks.value,BotInventory.slot(ctx,s->BotInventory.pickaxe(s,debris))<0,debris);
+        if(targets.isEmpty())throw new IllegalStateException("No emergency supplies are missing");
+        startFetch(targets,true);survivalSupply=true;
     }
 
     public void startFinalDeposit() {
@@ -238,10 +227,10 @@ public final class DepositProcess extends HiveMindProcessHelper {
         if(stage==Stage.PORTABLE){
             if(hivemind.getShulkerProcess().isActive())return new PathingCommand(null,PathingCommandType.DEFER);
             Map<String,Integer> remaining=Map.copyOf(fetchTargets);
-            boolean complete=remaining.entrySet().stream().allMatch(entry->fetchCount(entry.getKey())>=fetchGoal(entry.getKey(),entry.getValue()));boolean variants=fetchVariants;
+            boolean complete=remaining.entrySet().stream().allMatch(entry->fetchCount(entry.getKey())>=fetchGoal(entry.getKey(),entry.getValue()));boolean variants=fetchVariants,emergency=survivalSupply;
             onLostControl();
             if(complete)return new PathingCommand(null,PathingCommandType.CANCEL_AND_SET_GOAL);
-            startFetch(remaining,variants);return new PathingCommand(null,PathingCommandType.DEFER);
+            try{startFetch(remaining,variants);survivalSupply=emergency;}catch(IllegalStateException error){fetch=resupply=true;survivalSupply=emergency;return fail(error.getMessage());}return new PathingCommand(null,PathingCommandType.DEFER);
         }
         if (calcFailed) {
             return stage == Stage.RETURN ? fail("no usable route to the mining site") : tryNextStorage("storage #" + storageId + " is unreachable");
@@ -259,10 +248,6 @@ public final class DepositProcess extends HiveMindProcessHelper {
         if (stage != Stage.RETURN && HiveMind.settings().mineAvoidSculk.value
                 && hivemind.getSculkProcess().snapshot().contains(chest.getX(), chest.getY(), chest.getZ()))
             return tryNextStorage("storage #" + storageId + " is inside a known sculk hazard zone");
-        if (stage != Stage.RETURN && ctx.world().hasChunkAt(chest)
-                && !supports(ctx.world().getBlockState(chest).getBlock())) {
-            return tryNextStorage("storage #" + storageId + " is missing or was replaced");
-        }
         if (stage == Stage.TRAVEL) {
             GoalGetToBlock goal = new GoalGetToBlock(chest);
             if (goal.isInGoal(ctx.playerFeet()) && isSafeToCancel) {
@@ -286,6 +271,10 @@ public final class DepositProcess extends HiveMindProcessHelper {
         hivemind.getInputOverrideHandler().clearAllKeys();
         ctx.playerController().resetBlockRemoving();
         if (stage == Stage.OPEN) {
+            if(!ctx.world().hasChunkAt(chest))return stageTicks>40?tryNextStorage("Storage chunk was not received at "+depositDimension+" "+chest.toShortString()):pause();
+            var block=ctx.world().getBlockState(chest).getBlock();
+            if(!supports(block))return stageTicks>40?tryNextStorage("Expected storage at "+depositDimension+" "+chest.toShortString()+"; found "+BuiltInRegistries.BLOCK.getKey(block)):pause();
+            if(!StorageAccessPolicy.permits(block==Blocks.ENDER_CHEST,resupply,HiveMind.settings().botUseEnderChests.value))return tryNextStorage("Ender chests are private withdrawal-only stock; enable botUseEnderChests for resupply");
             return openChest();
         }
         return transfer();
@@ -398,6 +387,7 @@ public final class DepositProcess extends HiveMindProcessHelper {
     }
 
     private PathingCommand finishTransfer() {
+        if(fetch&&!fetchComplete())return fail("Requested supplies were not found or could not be transferred from the accessible containers");
         closeOwnedMenu();
         if(stockBoxes.borrowed()>0)logDirect("Unpacked "+stockBoxes.borrowed()+" storage shulkers; "+(fetchComplete()?"requested reserves filled":"some requested supplies are still unavailable"));
         else logDirect((resupply ? "Restocked " : "Deposited ") + movedItems + " items");
@@ -450,7 +440,7 @@ public final class DepositProcess extends HiveMindProcessHelper {
         if(slot<0&&fetch&&fetchVariants&&!fetchComplete()){
             for(int i=0;i<storageSlots;i++)if(!refusedSlots.contains(i)&&openedMenu.slots.get(i).mayPickup(ctx.player())&&usefulStockBox(openedMenu.slots.get(i).getItem())){slot=i;break;}
             if(slot>=0){
-                if(!HiveMind.settings().botUseShulkers.value||!HiveMind.settings().allowInventory.value||!HiveMind.settings().allowPlace.value||!HiveMind.settings().allowBreak.value)return fail("Useful shulkers are in storage; enable botUseShulkers, allowInventory, allowPlace and allowBreak to unpack them");
+                if(!HiveMind.settings().botUseShulkers.value||!HiveMind.settings().allowInventory.value||!HiveMind.settings().allowPlace.value||!HiveMind.settings().allowBreak.value)return fail("Cannot unpack storage shulkers; disabled settings: "+hivemind.getShulkerProcess().disabledSettings());
                 if(hivemind.getShulkerProcess().hasPendingRecovery())return fail("Recover the outstanding portable shulker before taking another box from storage");
                 pendingBoxEmptySlots=emptyInventorySlots();
                 if(!stockBoxes.canBorrow(pendingBoxEmptySlots))return fail(stockBoxes.borrowed()>=8?"Eight storage boxes were tried this trip; refill again after checking stock":"Free at least two main-inventory slots before collecting a storage shulker");
@@ -514,7 +504,7 @@ public final class DepositProcess extends HiveMindProcessHelper {
     }
 
     private PathingCommand fail(String reason) {
-        if (fetch) { onLostControl(); lastFetchError=reason; logDirect("Fetch stopped: "+reason); return new PathingCommand(null,PathingCommandType.CANCEL_AND_SET_GOAL); }
+        if (fetch) { boolean emergency=survivalSupply;onLostControl(); lastFetchError=reason;if(emergency)hivemind.getSurvivalProcess().supplyFailed(reason); logDirect("Fetch stopped: "+reason); return new PathingCommand(null,PathingCommandType.CANCEL_AND_SET_GOAL); }
         if (hivemind.getJobManager() != null) hivemind.getJobManager().fail("Deposit: " + reason);
         if (resupply && hivemind.getSurvivalProcess() != null) hivemind.getSurvivalProcess().supplyFailed(reason);
         if (!resupply && hivemind.getMineProcess() != null) {
@@ -605,7 +595,7 @@ public final class DepositProcess extends HiveMindProcessHelper {
         synchronizedMenuId = -1;
         openRequested = false;
         depositAll = false;
-        resupply = fetch = wantFood = wantBlocks = wantPickaxe = pendingWithdrawal = false;
+        survivalSupply = resupply = fetch = wantFood = wantBlocks = wantPickaxe = pendingWithdrawal = false;
         fetchTargets = Map.of(); fetchVariants=false; product = null;
         miningOutputs = null;
         tripRoot = null;
