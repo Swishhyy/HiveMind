@@ -26,6 +26,8 @@ Other flags: `--data <directory>`, `--bind <relay-address>`, `--port <relay-port
 
 The **Sessions** page can reconnect a bot, log it out for 60 seconds, or leave it offline until requested. The control connection remains up at Minecraft's menu and reconnects to the controller on client restart using its saved link. A client must have joined the server and connected to this controller once to establish that link.
 
+Client 0.1.1.1 uses Minecraft's normal Disconnect flow at the end of the game tick. Manual and combat logout return to the multiplayer server list with Minecraft still running; temporary logout can reconnect from that menu after its wait expires. Install the client update and restart Minecraft once to apply this fix. The standalone controller remains 0.1.1.0.
+
 - `#session logout` — stay offline until requested.
 - `#session logout 60` — log out temporarily and reconnect after the wait.
 - `#session reconnect` — connect to the last multiplayer server.

@@ -6,6 +6,8 @@ import hivemind.api.event.events.TickEvent;
 import hivemind.api.event.events.type.EventState;
 import hivemind.utils.bot.SessionRuntime;
 import net.minecraft.client.gui.screens.*;
+import net.minecraft.client.gui.screens.multiplayer.JoinMultiplayerScreen;
+import net.minecraft.client.multiplayer.ClientPacketListener;
 import net.minecraft.client.multiplayer.ServerData;
 import net.minecraft.client.multiplayer.resolver.ServerAddress;
 import net.minecraft.network.chat.Component;
@@ -13,6 +15,8 @@ public final class SessionBehavior extends Behavior {
     private float health=20;
     private boolean wasOnline;
     private long resumeAt;
+    private ClientPacketListener pendingDisconnect;
+    private Component disconnectReason;
     public SessionBehavior(HiveMind bot){super(bot);}
     @Override public void onTick(TickEvent event){
         if(event.getState()!=EventState.PRE||hivemind!=HiveMindAPI.getProvider().getPrimaryHiveMind())return;
@@ -34,15 +38,25 @@ public final class SessionBehavior extends Behavior {
         wasOnline=online;
         if(session.takeDisconnect()&&online){
             hivemind.getFlight().cancel();hivemind.getInputOverrideHandler().clearAllKeys();
-            if(ctx.world() instanceof net.minecraft.client.multiplayer.ClientLevel level)level.disconnect(Component.literal("[HiveMind] "+session.status()));return;
+            // Finish this tick with its world/player intact. Unload through the same flow as
+            // vanilla's Disconnect button at the tick boundary, keeping the game process alive.
+            pendingDisconnect=mc.getConnection();disconnectReason=Component.literal("[HiveMind] "+session.status());return;
         }
         boolean controlled=hivemind.getNetwork().controllerConnected();
-        if(!online&&session.shouldConnect(now,controlled)&&(mc.gui.screen()==null||mc.gui.screen() instanceof TitleScreen||mc.gui.screen() instanceof DisconnectedScreen)){
+        if(!online&&session.shouldConnect(now,controlled)&&(mc.gui.screen()==null||mc.gui.screen() instanceof TitleScreen||mc.gui.screen() instanceof DisconnectedScreen||mc.gui.screen() instanceof JoinMultiplayerScreen)){
             session.attempted(now,HiveMind.settings().botReconnectDelayMS.value);
             try{
                 var data=new ServerData(session.name(),session.server(),ServerData.Type.OTHER);
                 ConnectScreen.startConnecting(new TitleScreen(),mc,ServerAddress.parseString(session.server()),data,false,null);
             }catch(RuntimeException e){session.failed("Reconnect failed: "+e.getClass().getSimpleName());}
         }
+    }
+    @Override public void onPostTick(TickEvent event){
+        if(event.getState()!=EventState.POST||hivemind!=HiveMindAPI.getProvider().getPrimaryHiveMind())return;
+        var connection=pendingDisconnect;var reason=disconnectReason;
+        pendingDisconnect=null;disconnectReason=null;
+        // A pending logout belongs only to the session that requested it.
+        if(connection!=null&&ctx.minecraft().getConnection()==connection&&ctx.world()!=null)
+            ctx.minecraft().disconnectFromWorld(reason);
     }
 }
