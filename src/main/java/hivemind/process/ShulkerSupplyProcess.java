@@ -82,7 +82,7 @@ public final class ShulkerSupplyProcess extends HiveMindProcessHelper implements
     private List<Need> loadout(){
         List<Need> wanted=new ArrayList<>();
         var targets=hivemind.getOperations().currentKitTargets();
-        hivemind.utils.bot.ResupplyPolicy.missing(targets,ExpeditionLoadout.counts(ctx,targets.keySet())).forEach((key,target)->wanted.add(new Need(s->ExpeditionLoadout.matches(s,key),SupplyReserves.refillGoal(key,target),key,key)));
+        ResupplyPolicy.missing(targets,ExpeditionLoadout.counts(ctx,targets.keySet())).forEach((key,target)->wanted.add(new Need(s->ExpeditionLoadout.matches(s,key),SupplyReserves.refillGoal(key,target),key,key)));
         if(HiveMind.settings().allowWaterBucketFall.value&&ctx.world().dimension()!=net.minecraft.world.level.Level.NETHER)wanted.add(new Need(s->s.is(Items.WATER_BUCKET),1,"water bucket"));
         return wanted;
     }
