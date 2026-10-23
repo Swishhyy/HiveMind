@@ -1,7 +1,9 @@
-**HiveMind controller 0.1.0.10** — startup updates and independent component versions.
+**HiveMind bundle 0.1.0.11** — filled-shulker stock at bot bases.
 
-- The standalone controller checks its dedicated update channel before opening its relay/dashboard. New controller releases are downloaded, verified and installed by a separate helper, then relaunched with the original options and working directory. Includes both the standalone JAR and portable Windows executable.
-- Same-version controllers do not download or restart. Offline/failed checks start the installed version. Failed replacements retain the installed controller and relaunch once; backups and install journals stay beside the controller. Data, keys, settings and maps remain intact.
-- Windows packages now retain the Java launcher needed by the helper. Initial upgrade from 0.1.0.9 or older requires downloading this controller once. Startup updates replace the application JAR; future Java runtime/launcher changes require a fresh portable folder.
-- Bot, player and controller versions advance independently. The bot and player remain **0.1.0.9**, using their exact existing JARs, checksums and manifests. The controller is **0.1.0.10**. Existing bot/player filenames and updater URLs stay unchanged. Shared code changes require affected components to advance; unrelated releases reuse unchanged assets.
-- Validation includes real helper replacement, parent-exit waiting, backup, argument preservation, failed-install recovery, channel/identity checks, and Windows packaged-runtime tests. Network protocol remains 7.
+- **Bot/player clients 0.1.0.10** can now fetch a useful filled shulker from registered storage, confirm the withdrawal, unpack needed expedition supplies at a quiet grounded spot, and recover the box before continuing. Recovered boxes stay in inventory with any remaining contents.
+- Uses carried shulkers and loose chest supplies first. Colored/named boxes need no naming convention; their actual contents determine usefulness. Normal/trapped/copper chests and barrels retain their existing registration and interaction paths.
+- Requires two free main-inventory slots and shulker/inventory/placement/breaking permissions. Failures report blocked placement, missing inventory room, no confirmed supply progress or outstanding recovery. Stops additional withdrawals if a placed box still needs recovery; no items are discarded. Each trip takes at most eight storage shulkers.
+- Prevents background portable resupply from racing an active chest transaction. Reserve targets and interrupted tasks remain intact. Use `#bots all base resupply` after registering supply chests.
+- **Controller stays 0.1.0.10**, with its exact existing JAR, portable Windows archive and update manifest reused. No controller download/restart is needed. Protocol remains 7; existing bot/player update URLs and filename conventions remain unchanged.
+
+Automated inventory-policy/recovery tests and Fabric checks cover this release. Live multiplayer chest placement and server permissions still need an in-game test.

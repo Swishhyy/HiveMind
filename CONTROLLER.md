@@ -43,7 +43,7 @@ If a check/download fails or the internet is unavailable, the installed controll
 
 **One-time upgrade:** older controllers do not have this updater. Download/extract 0.1.0.10 once, retaining your existing data folder and startup options; subsequent controller updates happen on launch.
 
-Controller, bot and player versions are independent. This release is **controller 0.1.0.10**, **bot 0.1.0.9**, **player 0.1.0.9**. An unchanged component retains the exact published file, checksum and update manifest, so a bot-only release does not download/restart the controller. Shared runtime/network changes may require multiple components to update. Existing bot/player filenames and update-channel URLs remain unchanged.
+Controller, bot and player versions are independent. See each release’s component list for its individual versions. An unchanged component retains the exact published file, checksum and update manifest, so a bot-only release does not download/restart the controller. Shared runtime/network changes may require multiple components to update. Existing bot/player filenames and update-channel URLs remain unchanged.
 
 
 Each instance asks once on its first server join whether to enable automatic downloads from **Swishhyy/HiveMind GitHub Releases**, for Fabric 26.3 only. You can change it per client or across connected clients on **Updates**, or use:
@@ -123,3 +123,11 @@ Connect to the same controller/network, then use these on your manual player acc
 `base set [radius]` uses **your** feet, with a default radius of 16 (4–32). `chest add [rule]` and `chest remove` use **your** selected supported chest or barrel; copper variants are supported. Rules: any, ores, building, junk, supplies, disabled. Omitting the rule preserves an existing container's rule. Removals match location instead of each bot's storage ID. Both accept explicit `<dimension> <x> <y> <z>` coordinates; `base set` optionally takes a radius afterward. `base status/scan/clear/resupply` and `chest list [page]` also work. Clearing a base keeps its registered chests; remove those individually.
 
 Bot responses appear in your chat. Only fresh online autonomous bots are selected, and offline commands are not queued for later. Bots reject edits during an active supply trip. Loaded containers are checked immediately; unloaded locations are verified when a bot arrives. These commands configure the bots without enabling automation on your character. Update **both** the issuing player client and receiving bots to 0.1.0.9 or newer.
+
+### Supply chests containing filled shulkers
+
+Bot clients 0.1.0.10 and newer can refill expedition reserves from filled shulkers inside registered storage. From the connected player client, stand at your base and use `#bots all base set 24`. Look at each supply chest/barrel and use `#bots all chest add supplies`, then request `#bots all base resupply`. The bot first uses useful carried boxes and loose stock. When required supplies remain inside a stored shulker, it takes one useful box, waits for a safe grounded spot, places/opens it, takes the needed supplies, and breaks/recovers that box before checking stock again. The recovered box stays in the bot's inventory as portable stock, including remaining contents.
+
+This works with colored/named boxes containing compatible rockets, food, usable elytras and totems. No box naming scheme is required. Leave clear floor/lid space around storage and at least two free main-inventory slots on the bot. Enable `botUseShulkers`, `allowInventory`, `allowPlace` and `allowBreak`. Chest transfers must be confirmed before unpacking starts. A failed unpack, outstanding recovery or lack of inventory room stops additional box withdrawals and reports why. A trip is bounded to eight storage-box withdrawals. Existing reserve targets and interrupted work are preserved.
+
+Controller 0.1.0.10 is reused unchanged for this client update. Bot/player channels and filenames remain compatible; update the clients with `#update install` and restart Minecraft. Live placement/permissions still depend on the server.
