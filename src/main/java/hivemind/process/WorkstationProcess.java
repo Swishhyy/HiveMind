@@ -74,7 +74,7 @@ public final class WorkstationProcess extends HiveMindProcessHelper {
     private PathingCommand tick(boolean failed,boolean safe){
         if(ctx.player()==null||ctx.world()==null||!root.equals(MiningRouteAccess.root(ctx)))return fail("World changed during crafting");
         if(failed||System.currentTimeMillis()>deadline)return fail("Workstation route failed or timed out");
-        if(!MiningRouteAccess.dimension(ctx).equals(station.dimension())){hivemind.getPortalTravelProcess().start(station.dimension());return pause();}
+        if(!MiningRouteAccess.dimension(ctx).equals(station.dimension())){hivemind.getPortalTravelProcess().start(station.dimension(),MiningRouteAccess.position(station));return pause();}
         BlockPos pos=MiningRouteAccess.position(station);
         if(ctx.world().hasChunkAt(pos)&&!ctx.world().getBlockState(pos).is(action.method()==GatherPlanner.Method.SMELT?Blocks.FURNACE:Blocks.CRAFTING_TABLE))return fail("The registered workstation is missing or changed");
         if(stage==Stage.TRAVEL){var goal=new GoalGetToBlock(pos);if(!goal.isInGoal(ctx.playerFeet()))return new PathingCommand(goal,PathingCommandType.REVALIDATE_GOAL_AND_PATH);if(safe)transition(Stage.OPEN);return pause();}

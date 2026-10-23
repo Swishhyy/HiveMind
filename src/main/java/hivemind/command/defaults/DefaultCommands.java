@@ -73,6 +73,8 @@ public final class DefaultCommands {
                 new DepositCommand(hivemind),
                 new StorageCommand(hivemind),
                 new BotBaseCommand(hivemind),
+                new KitCommand(hivemind),
+                new WhyCommand(hivemind),
                 new PlayerBotsCommand(hivemind),
                 new StoragePointCommand(hivemind),
                 new TrustCommand(hivemind),

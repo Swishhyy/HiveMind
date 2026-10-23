@@ -25,6 +25,7 @@ public final class Controller implements AutoCloseable {
     private final ArrayBlockingQueue<WebControlAction> actions=new ArrayBlockingQueue<>(64);
     private final Map<UUID,Contact> contacts=new LinkedHashMap<>();
     private final Map<UUID,State> known=new LinkedHashMap<>();
+    private final Map<UUID,OperationsPackets.Snapshot> lastOperations=new LinkedHashMap<>();
     private final Map<UUID,ControlView.History> pending=new LinkedHashMap<>();
     private final Map<String,Receipt> receipts=new LinkedHashMap<>();
     private final Map<UUID,Long> synced=new HashMap<>();
@@ -45,6 +46,11 @@ public final class Controller implements AutoCloseable {
             String value=bots.getProperty(id);if(value.length()>100000)throw new IllegalStateException("Saved bot is oversized");
             Message message=NetworkProtocol.decode(Base64.getDecoder().decode(value));if(message instanceof State state&&state.reporter().toString().equals(id))known.put(state.reporter(),state);
         }
+        Properties oldOperations=AtomicProperties.read(this.root.resolve("controller-operations.properties"));
+        for(String id:oldOperations.stringPropertyNames())try{
+            Message message=NetworkProtocol.decode(Base64.getDecoder().decode(oldOperations.getProperty(id)));
+            if(message instanceof OperationsPackets.Snapshot snapshot&&snapshot.reporter().toString().equals(id))lastOperations.put(snapshot.reporter(),snapshot);
+        }catch(RuntimeException | java.io.IOException ignored){/* Historical display state is best effort. */}
         // Prior grants can exist in clients for four seconds, plus clock skew, after a controller restart.
         teamwork=new Teamwork(System.currentTimeMillis()+4000+NetworkProtocol.CLOCK_SKEW_MS);
         List<Message> history=new ArrayList<>(atlas.snapshot(System.currentTimeMillis()));history.addAll(terrain.snapshot(System.currentTimeMillis()));
@@ -86,6 +92,7 @@ public final class Controller implements AutoCloseable {
         }
         WebControlAction action;for(int i=0;i<8&&(action=actions.poll())!=null;i++)try{submit(action,now);}catch(RuntimeException e){remember(new Receipt(identity.id(),identity.name(),action.id(),identity.id(),false,Objects.toString(e.getMessage(),"Action rejected"),now));}
         List<State> live=wire.states();
+        for(var observation:wire.operations()){lastOperations.put(observation.reporter(),observation);while(lastOperations.size()>64)lastOperations.remove(lastOperations.keySet().iterator().next());}
         if(now-lastPlan>=500){
             Set<UUID> playing=live.stream().filter(state->Boolean.parseBoolean(state.session().getOrDefault("connected","true"))).map(State::reporter).collect(Collectors.toSet());
             wire.publish(teamwork.plan(identity,wire.peers().stream().filter(peer->playing.contains(peer.id())).toList(),now));lastPlan=now;
@@ -101,11 +108,11 @@ public final class Controller implements AutoCloseable {
             List<ControlView.History> history=new ArrayList<>();for(var request:pending.values())history.add(new ControlView.History(request.id(),request.description(),request.expected(),request.time(),receipts.values().stream().filter(receipt->receipt.id().equals(request.id())).toList()));Collections.reverse(history);
             String join="#network controller "+advertise+" "+wire.boundPort()+" "+key+" "+scope;
             web.controls(ControlView.withOperations(ControlView.json(identity,true,true,key,known.values().stream().sorted(Comparator.comparing(State::reporterName)).toList(),live.stream().map(State::reporter).collect(Collectors.toSet()),rules.settings(null),rules.trust(null),history,
-                Map.of("standalone","true","scope",scope,"joinCommand",join,"version",Main.VERSION)),wire.operations()));
+                Map.of("standalone","true","scope",scope,"joinCommand",join,"version",Main.VERSION)),lastOperations.values()));
             lastPage=now;
         }
         if(now-lastSave>=30000){save();lastSave=now;}
     }
-    private void save(){atlas.save();terrain.save();Properties p=new Properties();try{for(State state:known.values())p.setProperty(state.reporter().toString(),Base64.getEncoder().encodeToString(NetworkProtocol.encode(state)));}catch(java.io.IOException e){throw new IllegalStateException(e);}AtomicProperties.write(root.resolve("controller-bots.properties"),p);}
+    private void save(){atlas.save();terrain.save();Properties p=new Properties(),observations=new Properties();try{for(State state:known.values())p.setProperty(state.reporter().toString(),Base64.getEncoder().encodeToString(NetworkProtocol.encode(state)));for(var snapshot:lastOperations.values())observations.setProperty(snapshot.reporter().toString(),Base64.getEncoder().encodeToString(NetworkProtocol.encode(snapshot)));}catch(java.io.IOException e){throw new IllegalStateException(e);}AtomicProperties.write(root.resolve("controller-bots.properties"),p);AtomicProperties.write(root.resolve("controller-operations.properties"),observations);}
     @Override public void close(){if(closed)return;closed=true;loop.shutdown();try{if(!loop.awaitTermination(5,TimeUnit.SECONDS))loop.shutdownNow();}catch(InterruptedException e){Thread.currentThread().interrupt();}try{save();}finally{wire.close();web.close();}}
 }

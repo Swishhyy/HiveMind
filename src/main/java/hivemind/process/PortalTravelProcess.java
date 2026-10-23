@@ -26,6 +26,7 @@ import hivemind.api.process.PathingCommandType;
 import hivemind.pathing.movement.CalculationContext;
 import hivemind.pathing.movement.MovementHelper;
 import hivemind.utils.HiveMindProcessHelper;
+import hivemind.utils.bot.PortalLinks;
 import hivemind.utils.mining.MiningRouteAccess;
 import hivemind.utils.mining.WorldRoutes;
 import net.minecraft.core.BlockPos;
@@ -55,13 +56,17 @@ public final class PortalTravelProcess extends HiveMindProcessHelper implements 
     public PortalTravelProcess(HiveMind hivemind) { super(hivemind); }
 
     public void start(String targetDimension) {
+        start(targetDimension, null);
+    }
+
+    public void start(String targetDimension, BlockPos targetPosition) {
         if (isActive()) throw new IllegalStateException("A portal trip is already running");
         String current = MiningRouteAccess.dimension(ctx);
         if (current.equals(targetDimension)) return;
         if (!WorldRoutes.connects(current, targetDimension)) {
             throw new IllegalStateException("Automatic portal travel supports the Overworld and Nether only");
         }
-        BlockPos known = knownEntrance();
+        BlockPos known = knownEntrance(targetDimension, targetPosition);
         if (known == null) {
             throw new IllegalStateException("No known Nether portal here. Look at an active portal and run portal set");
         }
@@ -82,10 +87,20 @@ public final class PortalTravelProcess extends HiveMindProcessHelper implements 
     }
 
     public BlockPos knownEntrance() {
-        WorldRoutes.Endpoint saved = MiningRouteAccess.store(ctx).portal(MiningRouteAccess.dimension(ctx));
-        if (saved != null) return MiningRouteAccess.position(saved);
+        return knownEntrance(null, null);
+    }
+
+    private BlockPos knownEntrance(String targetDimension, BlockPos targetPosition) {
+        if (targetDimension != null && targetPosition != null) {
+            WorldRoutes.Endpoint goal = new WorldRoutes.Endpoint(targetDimension, targetPosition.getX(), targetPosition.getY(), targetPosition.getZ());
+            WorldRoutes.Endpoint best = new PortalLinks(MiningRouteAccess.root(ctx)).best(MiningRouteAccess.dimension(ctx), targetDimension,
+                    MiningRouteAccess.endpoint(ctx, ctx.playerFeet()), goal);
+            if (best != null) return MiningRouteAccess.position(best);
+        }
         BlockPos nearby = nearbyPortal(6);
         if (nearby != null) return bottom(nearby);
+        WorldRoutes.Endpoint saved = MiningRouteAccess.store(ctx).portal(MiningRouteAccess.dimension(ctx));
+        if (saved != null) return MiningRouteAccess.position(saved);
         return ctx.worldData().getCachedWorld().getLocationsOf("nether_portal", 16,
                         ctx.playerFeet().getX(), ctx.playerFeet().getZ(), 2).stream()
                 .min(Comparator.comparingDouble(ctx.playerFeet()::distSqr)).map(this::bottom).orElse(null);
@@ -134,7 +149,10 @@ public final class PortalTravelProcess extends HiveMindProcessHelper implements 
                 // Arrival coordinates come from the actual server transfer, never from 8:1 coordinate guesses.
                 BlockPos arrived = nearbyPortal(6);
                 if (arrived == null) return ++arrivalTicks > 200 ? fail("the arrival portal could not be identified") : pause();
-                MiningRouteAccess.store(ctx).setPortal(MiningRouteAccess.endpoint(ctx, bottom(arrived)));
+                WorldRoutes.Endpoint actual = MiningRouteAccess.endpoint(ctx, bottom(arrived));
+                MiningRouteAccess.store(ctx).setPortal(actual);
+                new PortalLinks(worldRoot).record(new WorldRoutes.Endpoint(source, entrance.getX(), entrance.getY(), entrance.getZ()), actual);
+                hivemind.getOperations().journal().note("Portal", source + " " + entrance + " arrived " + destination + " " + bottom(arrived));
                 hivemind.getMineProcess().invalidateWorldTargets();
                 exit = safeExit();
                 if (exit == null) return fail("no safe exit beside the arrival portal");
@@ -235,6 +253,7 @@ public final class PortalTravelProcess extends HiveMindProcessHelper implements 
     }
 
     private PathingCommand fail(String reason) {
+        if (ctx.player() != null && ctx.world() != null) hivemind.getOperations().journal().note("Portal", reason);
         hivemind.getCompanionProcess().stopWithReason("Portal: " + reason);
         hivemind.getRepairProcess().stopWithReason("Portal: " + reason);
         hivemind.getWorkstationProcess().onLostControl();

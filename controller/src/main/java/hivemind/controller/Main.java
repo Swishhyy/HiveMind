@@ -9,10 +9,11 @@ public final class Main {
     private Main(){}
     private static String version(){var properties=new Properties();try(var in=Main.class.getResourceAsStream("/hivemind-controller.properties")){if(in!=null)properties.load(in);}catch(java.io.IOException ignored){}return properties.getProperty("version","0.1.0.0");}
     public static void main(String[] args)throws Exception{
+        if(args.length==2&&args[0].equals("--supervise")){ClientSupervisor.run(Path.of(args[1]));return;}
         Map<String,String> options=new HashMap<>();
         Set<String> allowed=Set.of("data","bind","port","web-bind","web-port","public-url","advertise","scope");
         for(int i=0;i<args.length;i++){
-            if(args[i].equals("--help")){System.out.println("HiveMind Controller "+VERSION+"\n--data <directory> --bind <relay-IP> --port <28766> --web-bind <127.0.0.1> --web-port <28767> --public-url <http(s)://host:port> --advertise <host-for-bots> --scope <server-label>\nRun one controller/data directory per Minecraft server. Defaults work on this computer.");return;}
+            if(args[i].equals("--help")){System.out.println("HiveMind Controller "+VERSION+"\n--data <directory> --bind <relay-IP> --port <28766> --web-bind <127.0.0.1> --web-port <28767> --public-url <http(s)://host:port> --advertise <host-for-bots> --scope <server-label>\n--supervise <profile.properties> starts a separately configured local Minecraft process and retries crashes.\nRun one controller/data directory per Minecraft server. Defaults work on this computer.");return;}
             if(!args[i].startsWith("--")||!allowed.contains(args[i].substring(2))||i+1==args.length)throw new IllegalArgumentException("Unknown/incomplete option; use --help");
             String key=args[i].substring(2);if(options.put(key,args[++i])!=null)throw new IllegalArgumentException("Duplicate option "+key);
         }

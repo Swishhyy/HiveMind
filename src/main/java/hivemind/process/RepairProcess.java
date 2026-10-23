@@ -81,7 +81,7 @@ public final class RepairProcess extends HiveMindProcessHelper {
             if(ctx.player()==null||ctx.world()==null||!root.equals(MiningRouteAccess.root(ctx)))return finish("Repair stopped: world changed",false);
             if(failed||System.currentTimeMillis()>deadline)return finish("Repair route failed or timed out",false);
             var target=returning?origin:station;
-            if(!MiningRouteAccess.dimension(ctx).equals(target.dimension())){hivemind.getPortalTravelProcess().start(target.dimension());return pause();}
+            if(!MiningRouteAccess.dimension(ctx).equals(target.dimension())){hivemind.getPortalTravelProcess().start(target.dimension(),MiningRouteAccess.position(target));return pause();}
             GoalNear goal=new GoalNear(MiningRouteAccess.position(target),2);
             if(!goal.isInGoal(ctx.playerFeet())&&(returning||!atStation||ctx.playerFeet().distSqr(MiningRouteAccess.position(target))>36))return new PathingCommand(goal,PathingCommandType.REVALIDATE_GOAL_AND_PATH);
             if(!safe)return pause();

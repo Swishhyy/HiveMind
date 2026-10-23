@@ -157,7 +157,7 @@ public final class CompanionProcess extends HiveMindProcessHelper implements IBe
         }catch(RuntimeException e){return fail(e.getMessage());}
     }
     private PathingCommand travel(WorldRoutes.Endpoint point,boolean failed,boolean safe,boolean finish){
-        if(!MiningRouteAccess.dimension(ctx).equals(point.dimension())){if(!hivemind.getPortalTravelProcess().isActive())hivemind.getPortalTravelProcess().start(point.dimension());return defer();}
+        if(!MiningRouteAccess.dimension(ctx).equals(point.dimension())){if(!hivemind.getPortalTravelProcess().isActive())hivemind.getPortalTravelProcess().start(point.dimension(),MiningRouteAccess.position(point));return defer();}
         if(failed)return fail("No usable route to "+point);
         GoalNear goal=new GoalNear(MiningRouteAccess.position(point),2);
         if(goal.isInGoal(ctx.playerFeet())&&safe){if(finish){notifyOwner(status+"; returned to the starting point");onLostControl();return new PathingCommand(null,PathingCommandType.CANCEL_AND_SET_GOAL);}return null;}

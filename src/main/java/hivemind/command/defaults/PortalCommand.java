@@ -25,6 +25,7 @@ import hivemind.api.command.exception.CommandInvalidStateException;
 import hivemind.api.command.helpers.TabCompleteHelper;
 import hivemind.utils.mining.MiningRouteAccess;
 import hivemind.utils.mining.WorldRoutes;
+import hivemind.utils.bot.PortalLinks;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.block.Blocks;
 
@@ -56,11 +57,14 @@ public final class PortalCommand extends Command {
                     break;
                 case "clear":
                     routes.clearPortal(MiningRouteAccess.dimension(ctx));
-                    logDirect("Forgot the saved mining portal in this dimension");
+                    new PortalLinks(MiningRouteAccess.root(ctx)).forgetDimension(MiningRouteAccess.dimension(ctx));
+                    logDirect("Forgot saved portal and observed links in this dimension");
                     break;
                 case "status":
                     logDirect("Overworld portal: " + routes.portal(WorldRoutes.OVERWORLD));
                     logDirect("Nether portal: " + routes.portal(WorldRoutes.NETHER));
+                    for(var link:new PortalLinks(MiningRouteAccess.root(ctx)).recent().stream().limit(8).toList())
+                        logDirect("Observed: "+link.from()+" -> "+link.to()+" ("+java.time.Instant.ofEpochMilli(link.seen())+")");
                     break;
                 default:
                     throw new IllegalStateException("Use portal set, status, or clear");
