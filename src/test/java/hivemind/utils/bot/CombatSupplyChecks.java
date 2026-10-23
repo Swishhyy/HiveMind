@@ -10,6 +10,17 @@ public final class CombatSupplyChecks {
     private static void check(boolean value,String why){if(!value)throw new AssertionError(why);}
     public static void main(String[] args)throws Exception{runAll();System.out.println("Combat/supply checks passed: recovery ownership, durable portable-box checkpoints, bounded chest-box unpacking, reserved pickup space and fast-fall clutch windows");}
     public static void runAll()throws Exception{
+        check(!StorageAccessPolicy.permits(true,false,true),"Private ender inventory must never receive deposits, including deposit all");
+        check(StorageAccessPolicy.permits(true,true,true)&&!StorageAccessPolicy.permits(true,true,false),"Ender stock withdrawal requires its own setting");
+        check(StorageAccessPolicy.permits(false,false,false)&&StorageAccessPolicy.permits(false,true,false),"Ordinary storage remains available with ender access disabled");
+        var emergency=EmergencySupplies.targets(true,8,32,false,true,16,64,true,false);
+        check(emergency.equals(Map.of("@food",32)),"Starving roamers request category food, not loose-only stock or unrelated mining tools");
+        check(EmergencySupplies.targets(true,8,32,true,true,16,64,true,true).equals(Map.of("@food",32,"@blocks",64,"@debris_pickaxe",1)),"Debris miners may restock boxed food/blocks and must use a suitable pickaxe");
+        check(EmergencySupplies.targets(false,8,32,false,false,16,64,false,false).isEmpty(),"Healthy clients need no emergency trip");
+        check(EquipmentPolicy.category("minecraft:netherite_helmet").equals("@armor_helmet")&&EquipmentPolicy.category("minecraft:elytra").isEmpty()&&EquipmentPolicy.category("minecraft:shield").isEmpty(),"Armor slots must not consume wings or shields as armor");
+        check(EquipmentPolicy.score("minecraft:diamond_helmet",300,363,4,false)>EquipmentPolicy.score("minecraft:iron_helmet",150,165,0,false),"Armor tiers and protection must influence selection");
+        check(EquipmentPolicy.score("minecraft:diamond_helmet",300,363,4,true)<0&&EquipmentPolicy.score("minecraft:netherite_boots",2,481,4,false)<0,"Binding-cursed and nearly broken candidates must not replace usable gear");
+        check(EquipmentPolicy.score("minecraft:diamond_chestplate",300,528,4,false)>EquipmentPolicy.score("minecraft:diamond_chestplate",300,528,0,false),"Useful enchantments break ties within a material tier");
         var boxes=new StockBoxTrip();
         check(!boxes.canBorrow(1)&&boxes.canBorrow(2),"Storage withdrawal needs room for the box and a loose-supply slot");
         boxes.confirmedWithdrawal(2);boxes.beginUnpack(Map.of("@rockets",0,"@elytra",1));

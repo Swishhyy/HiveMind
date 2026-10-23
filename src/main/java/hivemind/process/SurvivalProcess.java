@@ -49,6 +49,7 @@ public final class SurvivalProcess extends HiveMindProcessHelper implements IBeh
     @Override public boolean isActive() { return stage != Stage.IDLE; }
     @Override public boolean isTemporary() { return true; }
     @Override public double priority() { return -0.2; }
+    public boolean isWaiting(){return stage==Stage.WAIT;}
     public String status() { return stage + ": " + reason; }
     public boolean holdsUse() { return ownsUse && controlled(); }
     private boolean controlled() { return hivemind.getPathingControlManager().mostRecentInControl().orElse(null) == this; }
@@ -97,9 +98,9 @@ public final class SurvivalProcess extends HiveMindProcessHelper implements IBeh
     private void waitForHelp(String message) {
         stage = Stage.WAIT; reason = message;
         boolean watching = persistentCare();
-        stalkCareRetryAt = watching ? System.currentTimeMillis() + 30000 : 0;
+        stalkCareRetryAt = HiveMind.settings().botAutoResupply.value ? System.currentTimeMillis() + 30000 : 0;
         hivemind.getJobManager().fail(message);
-        logDirect("Survival paused: " + message + (watching ? ". Tracking order remains; checking care again in 30 seconds." : ". Use survival retry after fixing it."));
+        logDirect("Survival paused: " + message + (watching ? ". Tracking order remains; checking care again in 30 seconds." : ". Checking supplies again in 30 seconds while automatic resupply is enabled."));
     }
     @Override public PathingCommand onTick(boolean failed, boolean safe) {
         if (!HiveMind.settings().botSurvival.value || ctx.player() == null || !ctx.player().isAlive()) { onLostControl(); return null; }
@@ -109,7 +110,7 @@ public final class SurvivalProcess extends HiveMindProcessHelper implements IBeh
         if (!safe) return pause();
         hivemind.getInputOverrideHandler().clearAllKeys(); ctx.playerController().resetBlockRemoving();
         if (stage == Stage.WAIT) {
-            if (!persistentCare()
+            if (!HiveMind.settings().botAutoResupply.value
                     || stalkCareRetryAt == 0 || System.currentTimeMillis() < stalkCareRetryAt) return pause();
             stage = Stage.CARE; ticks = careTicks = 0; stalkCareRetryAt = 0;
         }

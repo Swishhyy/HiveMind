@@ -52,7 +52,7 @@ public final class NetworkSettings {
         number("Loadout","integer",3,4,"botExpeditionTotems");
         number("Loadout","integer",64,128,"botExpeditionFood");
         number("Loadout","integer",2,4,"botExpeditionElytras");
-        bool("Survival","botUseShulkers botEmergencyBucketClutch");
+        bool("Survival","botUseShulkers botUseEnderChests botAutoArmor botRestockArmor botEmergencyBucketClutch");
         bool("Autonomy","botAutoRespawn botPersistentTracking botPeriodicReports botReportAllTrusted botUseElytra botElytraCombatEscape botElytraPursuit botAerialSearch botEntityAwareness botRenderEntityESP botRenderMobESP");
         number("Autonomy","long",1000,30000,"botRespawnDelayMS");
         number("Autonomy","long",30000,3600000,"botReportIntervalMS");
@@ -63,7 +63,7 @@ public final class NetworkSettings {
         number("Autonomy","integer",16,128,"botFlightSurveyHeight");
         number("Autonomy","integer",64,2048,"botEntityAwarenessRange");
         number("Sharing","integer",32,512,"botTerrainViewRange");
-        bool("Movement", "allowBreak allowPlace allowSprint allowParkour allowWaterBucketFall");
+        bool("Movement", "allowInventory allowBreak allowPlace allowSprint allowParkour allowWaterBucketFall");
         number("Movement","integer",3,1024,"maxFallHeightBucket");
         number("Stalking","integer",0,10000,"stalkTerrainPenalty");
         bool("Mining", "mineAutoDeposit mineDiscardWaste mineTravelBetweenDimensions preferAvoidConstruction protectContainers mineAvoidSculk");

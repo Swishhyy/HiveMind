@@ -444,6 +444,9 @@ public final class Settings {
     public final Setting<Boolean> botKillAura = new Setting<>(true);
     public final Setting<Boolean> botAutoCrystal = new Setting<>(true);
     public final Setting<Boolean> botAutoTotem = new Setting<>(true);
+    public final Setting<Boolean> botAutoArmor = new Setting<>(true);
+    public final Setting<Boolean> botRestockArmor = new Setting<>(true);
+    public final Setting<Boolean> botUseEnderChests = new Setting<>(true);
     public final Setting<Boolean> botUseShulkers = new Setting<>(true);
     public final Setting<Boolean> botEmergencyBucketClutch = new Setting<>(true);
     public final Setting<Boolean> botAerialSearch = new Setting<>(true);
