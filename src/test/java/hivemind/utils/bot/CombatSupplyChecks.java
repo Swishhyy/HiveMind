@@ -8,8 +8,18 @@ import java.util.*;
 
 public final class CombatSupplyChecks {
     private static void check(boolean value,String why){if(!value)throw new AssertionError(why);}
-    public static void main(String[] args)throws Exception{runAll();System.out.println("Combat/supply checks passed: recovery ownership, durable portable-box checkpoints, reserved pickup space and fast-fall clutch windows");}
+    public static void main(String[] args)throws Exception{runAll();System.out.println("Combat/supply checks passed: recovery ownership, durable portable-box checkpoints, bounded chest-box unpacking, reserved pickup space and fast-fall clutch windows");}
     public static void runAll()throws Exception{
+        var boxes=new StockBoxTrip();
+        check(!boxes.canBorrow(1)&&boxes.canBorrow(2),"Storage withdrawal needs room for the box and a loose-supply slot");
+        boxes.confirmedWithdrawal(2);boxes.beginUnpack(Map.of("@rockets",0,"@elytra",1));
+        check(!boxes.canBorrow(10),"Do not borrow another box before current unpacking ends");
+        check(boxes.finishUnpack(Map.of("@rockets",64,"@elytra",1),false)==StockBoxTrip.Result.PROGRESS,"Only a loose inventory increase credits successful unpacking");
+        boxes.confirmedWithdrawal(2);boxes.beginUnpack(Map.of("@rockets",64));
+        check(boxes.finishUnpack(Map.of("@rockets",64),false)==StockBoxTrip.Result.NO_PROGRESS,"An emptied/refused box must stop repeated borrowing");
+        boxes.beginUnpack(Map.of("@rockets",64));check(boxes.finishUnpack(Map.of("@rockets",128),true)==StockBoxTrip.Result.RECOVERY_REQUIRED,"Getting supplies does not complete ownership until the box is recovered");
+        for(int i=boxes.borrowed();i<8;i++){boxes.confirmedWithdrawal(2);boxes.beginUnpack(Map.of("@food",i));check(boxes.finishUnpack(Map.of("@food",i+1),false)==StockBoxTrip.Result.PROGRESS,"Multiple category boxes can refill in sequence");}
+        check(!boxes.canBorrow(36),"A trip cannot drain unlimited boxes into its inventory");boxes.reset();check(boxes.canBorrow(2)&&boxes.borrowed()==0,"A new trip resets its bounded box budget");
         check(PortableSupplyPolicy.canWithdraw(64,0,2,64),"A free supply slot plus a reserved box slot can take a full stack");
         check(!PortableSupplyPolicy.canWithdraw(64,0,1,64),"The box's only recovery slot must not be consumed by supplies");
         check(PortableSupplyPolicy.canWithdraw(32,32,1,64),"Merging a whole stack preserves the last empty slot for the box");

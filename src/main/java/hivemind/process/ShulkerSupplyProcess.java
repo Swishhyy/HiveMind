@@ -106,6 +106,7 @@ public final class ShulkerSupplyProcess extends HiveMindProcessHelper implements
     }
     public String reserveStatus(){return "Rockets "+ExpeditionLoadout.count(ctx,"@rockets")+"/"+HiveMind.settings().botExpeditionRockets.value+", food "+ExpeditionLoadout.count(ctx,"@food")+"/"+HiveMind.settings().botExpeditionFood.value+", usable elytras "+ExpeditionLoadout.count(ctx,"@elytra")+"/"+HiveMind.settings().botExpeditionElytras.value+", totems "+ExpeditionLoadout.count(ctx,"@totems")+"/"+HiveMind.settings().botExpeditionTotems.value;}
     public boolean hasPortableReserves(){if(ctx.player()==null||!HiveMind.settings().botUseShulkers.value)return false;var wanted=ExpeditionLoadout.missing(ctx);if(wanted.isEmpty())return false;for(int slot=0;slot<36;slot++){var stack=ctx.player().getInventory().getItem(slot);if(!shulker(stack))continue;var contents=stack.get(DataComponents.CONTAINER);if(contents==null)continue;var items=net.minecraft.core.NonNullList.<ItemStack>withSize(27,ItemStack.EMPTY);contents.copyInto(items);if(items.stream().anyMatch(item->wanted.keySet().stream().anyMatch(key->ExpeditionLoadout.matches(item,key))))return true;}return false;}
+    public boolean hasPendingRecovery(){load();return store.box()!=null;}
     public boolean requestSupplies(){return ctx.player()!=null&&request(loadout());}
     private boolean request(List<Need> wanted){
         if(!allowed()||System.currentTimeMillis()<retryAt)return false;
@@ -249,7 +250,7 @@ public final class ShulkerSupplyProcess extends HiveMindProcessHelper implements
         if(event.getType()==TickEvent.Type.OUT||ctx.player()==null||ctx.world()==null||!ctx.player().isAlive()){onLostControl();return;}
         if(isActive()&&world!=ctx.world()){onLostControl();return;}
         if(isActive()&&hivemind.getConflictProcess().isActive()){closeMenu();hivemind.getInputOverrideHandler().setInputForceState(Input.CLICK_LEFT,false);if(confirmed)transition(Stage.BREAK);return;}
-        if(!isActive()&&allowed()&&BotWork.active(hivemind)&&System.currentTimeMillis()>=nextScan){nextScan=System.currentTimeMillis()+1000;requestSupplies();}
+        if(!isActive()&&allowed()&&!hivemind.getDepositProcess().isActive()&&BotWork.active(hivemind)&&System.currentTimeMillis()>=nextScan){nextScan=System.currentTimeMillis()+1000;requestSupplies();}
     }
     @Override public void onPlayerDeath(){onLostControl();}
     @Override public String displayName0(){return "Portable shulker "+stage;}

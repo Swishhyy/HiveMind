@@ -39,6 +39,7 @@ import hivemind.utils.mining.DepositPolicy;
 import hivemind.utils.mining.MiningRouteAccess;
 import hivemind.utils.mining.MiningWasteCleanup;
 import hivemind.utils.mining.WorldRoutes;
+import hivemind.utils.bot.StockBoxTrip;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.component.DataComponents;
@@ -63,9 +64,12 @@ import java.nio.file.Path;
 
 /** A temporary mining interruption. It never drops items or transfers worn equipment. */
 public final class DepositProcess extends HiveMindProcessHelper {
-    private enum Stage { IDLE, PORTABLE, TRAVEL, OPEN, TRANSFER, RETURN }
+    private enum Stage { IDLE, PORTABLE, STOCK_BOX, TRAVEL, OPEN, TRANSFER, RETURN }
 
     private Stage stage = Stage.IDLE;
+    private final StockBoxTrip stockBoxes=new StockBoxTrip();
+    private boolean unpackStarted;
+    private int pendingBoxEmptySlots;
     private Path tripRoot;
     private String depositDimension;
     private String returnDimension;
@@ -161,7 +165,7 @@ public final class DepositProcess extends HiveMindProcessHelper {
         if (isActive()) throw new IllegalStateException("A storage trip is already active");
         if (targets.isEmpty() || targets.size()>128 || targets.values().stream().anyMatch(n->n<1||n>1000000)) throw new IllegalArgumentException("Invalid withdrawal request");
         if (ctx.player().containerMenu != ctx.player().inventoryMenu || !ctx.player().containerMenu.getCarried().isEmpty()) throw new IllegalStateException("Close containers and clear the cursor before fetching items");
-        fetchVariants=variants;
+        stockBoxes.reset();unpackStarted=false;fetchVariants=variants;
         if(hivemind.getShulkerProcess().requestItems(targets,variants)){
             tripRoot=MiningRouteAccess.root(ctx);fetchTargets=Map.copyOf(targets);fetch=resupply=true;lastFetchError=null;transition(Stage.PORTABLE);return;
         }
@@ -230,6 +234,7 @@ public final class DepositProcess extends HiveMindProcessHelper {
         if (ctx.player() == null || ctx.world() == null || !tripRoot.equals(MiningRouteAccess.root(ctx))) {
             return fail("the server or save changed");
         }
+        if(stage==Stage.STOCK_BOX)return unpackStockBox();
         if(stage==Stage.PORTABLE){
             if(hivemind.getShulkerProcess().isActive())return new PathingCommand(null,PathingCommandType.DEFER);
             Map<String,Integer> remaining=Map.copyOf(fetchTargets);
@@ -349,9 +354,14 @@ public final class DepositProcess extends HiveMindProcessHelper {
                     refusedSlots.add(pendingSlot); // A partial stack filled the remaining chest space.
                 }
             }
+            boolean borrowed=pendingWithdrawal&&fetchVariants&&ExpeditionLoadout.portable(pendingStack)&&transferred>0;
             pendingSlot = -1;
             pendingStack = null;
             pendingWithdrawal = false;
+            if(borrowed){
+                stockBoxes.confirmedWithdrawal(pendingBoxEmptySlots);closeOwnedMenu();openRequested=false;unpackStarted=false;
+                transition(Stage.STOCK_BOX);logDirect("Collected a storage shulker; waiting for a safe spot to unpack supplies");
+            }
             return pause();
         }
         if (resupply) return withdraw(storageSlots);
@@ -389,10 +399,35 @@ public final class DepositProcess extends HiveMindProcessHelper {
 
     private PathingCommand finishTransfer() {
         closeOwnedMenu();
-        logDirect((resupply ? "Restocked " : "Deposited ") + movedItems + " items");
+        if(stockBoxes.borrowed()>0)logDirect("Unpacked "+stockBoxes.borrowed()+" storage shulkers; "+(fetchComplete()?"requested reserves filled":"some requested supplies are still unavailable"));
+        else logDirect((resupply ? "Restocked " : "Deposited ") + movedItems + " items");
         if (returnTo != null && (resupply || hivemind.getMineProcess().isActive())) transition(Stage.RETURN);
         else onLostControl();
         return new PathingCommand(null, PathingCommandType.CANCEL_AND_SET_GOAL);
+    }
+
+    private Map<String,Integer> stockCounts(){Map<String,Integer> counts=new java.util.LinkedHashMap<>();fetchTargets.keySet().forEach(key->counts.put(key,fetchCount(key)));return counts;}
+    private boolean fetchComplete(){return fetchTargets.entrySet().stream().allMatch(e->fetchCount(e.getKey())>=fetchGoal(e.getKey(),e.getValue()));}
+    private int emptyInventorySlots(){int empty=0;for(int i=0;i<36;i++)if(ctx.player().getInventory().getItem(i).isEmpty())empty++;return empty;}
+    private boolean usefulStockBox(ItemStack stack){
+        if(!fetch||!fetchVariants||!ExpeditionLoadout.portable(stack))return false;
+        var contents=stack.get(DataComponents.CONTAINER);if(contents==null)return false;
+        var items=net.minecraft.core.NonNullList.<ItemStack>withSize(27,ItemStack.EMPTY);contents.copyInto(items);
+        return items.stream().anyMatch(item->needsSupply(item));
+    }
+    private PathingCommand unpackStockBox(){
+        if(hivemind.getShulkerProcess().isActive())return new PathingCommand(null,PathingCommandType.DEFER);
+        if(unpackStarted){
+            var result=stockBoxes.finishUnpack(stockCounts(),hivemind.getShulkerProcess().hasPendingRecovery());unpackStarted=false;
+            if(result==StockBoxTrip.Result.RECOVERY_REQUIRED)return fail("The storage shulker still needs recovery; its checkpoint is retained. No further boxes were taken");
+            if(result==StockBoxTrip.Result.NO_PROGRESS)return fail("Storage shulker yielded no confirmed supplies; the box was recovered. Check inventory space and server permissions");
+            if(fetchComplete())return finishTransfer();
+            openRequested=false;refusedSlots.clear();transition(Stage.TRAVEL);return pause();
+        }
+        if(++stageTicks>1200)return fail("Could not safely unpack the storage shulker; it remains in the inventory. Leave clear floor space and enable placement/breaking");
+        var before=stockCounts();
+        if(hivemind.getShulkerProcess().requestItems(fetchTargets,true)){stockBoxes.beginUnpack(before);unpackStarted=true;return new PathingCommand(null,PathingCommandType.DEFER);}
+        return pause();
     }
 
     private boolean needsSupply(ItemStack stack) {
@@ -412,6 +447,15 @@ public final class DepositProcess extends HiveMindProcessHelper {
         int slot = -1;
         for (int i = 0; i < storageSlots; i++) if (!refusedSlots.contains(i) && needsSupply(openedMenu.slots.get(i).getItem())
                 && openedMenu.slots.get(i).mayPickup(ctx.player())) { slot = i; break; }
+        if(slot<0&&fetch&&fetchVariants&&!fetchComplete()){
+            for(int i=0;i<storageSlots;i++)if(!refusedSlots.contains(i)&&openedMenu.slots.get(i).mayPickup(ctx.player())&&usefulStockBox(openedMenu.slots.get(i).getItem())){slot=i;break;}
+            if(slot>=0){
+                if(!HiveMind.settings().botUseShulkers.value||!HiveMind.settings().allowInventory.value||!HiveMind.settings().allowPlace.value||!HiveMind.settings().allowBreak.value)return fail("Useful shulkers are in storage; enable botUseShulkers, allowInventory, allowPlace and allowBreak to unpack them");
+                if(hivemind.getShulkerProcess().hasPendingRecovery())return fail("Recover the outstanding portable shulker before taking another box from storage");
+                pendingBoxEmptySlots=emptyInventorySlots();
+                if(!stockBoxes.canBorrow(pendingBoxEmptySlots))return fail(stockBoxes.borrowed()>=8?"Eight storage boxes were tried this trip; refill again after checking stock":"Free at least two main-inventory slots before collecting a storage shulker");
+            }
+        }
         if (slot < 0) {
             if (fetch) {
                 if (fetchTargets.entrySet().stream().allMatch(entry->fetchCount(entry.getKey())>=fetchGoal(entry.getKey(),entry.getValue())) || remainingChests.isEmpty()) return finishTransfer();
@@ -555,6 +599,7 @@ public final class DepositProcess extends HiveMindProcessHelper {
     public void onLostControl() {
         closeOwnedMenu();
         stage = Stage.IDLE;
+        stockBoxes.reset();unpackStarted=false;pendingBoxEmptySlots=0;
         pendingSlot = -1;
         pendingStack = null;
         synchronizedMenuId = -1;
