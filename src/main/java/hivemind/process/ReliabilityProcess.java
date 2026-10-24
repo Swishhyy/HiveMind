@@ -42,6 +42,7 @@ public final class ReliabilityProcess extends HiveMindProcessHelper implements I
     private boolean returnedForOutage;
     private boolean updateHold;
     public void updateHold(boolean held){updateHold=held;}
+    public boolean finishingInventory(){ensure();return updateHold||task!=null&&task.recall();}
     public boolean canResumeAfterRestart(){ensure();if(task==null||task.intent().isBlank())return true;String label=task.intent().replaceFirst("^#","").trim().split("\\s+",2)[0];return Set.of("mine","goto","path","follow","explore","gather","repair","recover","assist","deliver","escort","scout","stalk","kill","job").contains(label);}
     private long controllerLost;
     private long nextRestore;

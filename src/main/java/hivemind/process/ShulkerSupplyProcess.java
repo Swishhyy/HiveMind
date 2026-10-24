@@ -69,7 +69,7 @@ public final class ShulkerSupplyProcess extends HiveMindProcessHelper implements
     private int count(Predicate<ItemStack> filter){return BotInventory.count(ctx,filter);}
     private int count(Need need){return need.category()==null?count(need.matches()):ExpeditionLoadout.count(ctx,need.category());}
     private boolean allowed(){return !hivemind.getCompanionProcess().awaitingDeathInventory()
-            &&ctx.player()!=null&&ctx.world()!=null&&ctx.player().isAlive()&&!hivemind.getAutonomy().paused()&&ctx.minecraft().gameMode!=null;}
+            &&ctx.player()!=null&&ctx.world()!=null&&ctx.player().isAlive()&&(!hivemind.getAutonomy().paused()||hivemind.getReliability().finishingInventory()&&(isActive()||hasPendingRecovery()))&&ctx.minecraft().gameMode!=null;}
     public boolean safeForResupply(){return safeSite();}
     public boolean safeGrounded(){return rawSafeSite();}
     private boolean safeSite(){return quiet.ready(rawSafeSite(),System.currentTimeMillis());}

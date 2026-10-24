@@ -40,7 +40,7 @@ public final class OperationsProcess extends HiveMindProcessHelper implements IB
     public void cancelRecall(){recalling=false;recallBase=null;}
     public boolean requestRecall(){
         if(recalling)return true;if(ctx.player()==null||ctx.world()==null||hivemind.getShulkerProcess().isActive()||hivemind.getShulkerProcess().hasPendingRecovery()||hivemind.getDepositProcess().isActive()||hivemind.getWorkstationProcess().isActive())return false;
-        var base=bestBase();if(base==null)return false;recallBase=base.point();recalling=true;blocker="Returning to a known base on recall";next="Hold the original task at the base until resume";return true;
+        var base=bestBase();if(base==null){blocker="Recall waiting for a registered usable base";next="Register a base, or resume the retained task";blockerUntil=System.currentTimeMillis()+10000;return false;}recallBase=base.point();recalling=true;blocker="Returning to a known base on recall";next="Hold the original task at the base until resume";return true;
     }
     public boolean returnForOutage(){
         if(outageReturn)return true;if(supplying||waitingDelivery!=null||busy()||hivemind.getShulkerProcess().hasPendingRecovery())return false;
@@ -58,7 +58,7 @@ public final class OperationsProcess extends HiveMindProcessHelper implements IB
     @Override public boolean isActive(){return !hivemind.isPlayerClient()&&(recalling||outageReturn||waitingDelivery!=null||supplying||System.currentTimeMillis()<recoveryUntil);}
     public boolean walking(){return System.currentTimeMillis()<walkUntil;}
     public boolean transporting(){return recalling||baseTrip||outageReturn;}
-    public String blocker(){return waitingDelivery!=null||supplying||System.currentTimeMillis()<blockerUntil?blocker:"";}public String nextAction(){return waitingDelivery!=null||supplying||System.currentTimeMillis()<blockerUntil?next:"Continue current task";}public int recoveries(){return recoveries;}
+    public String blocker(){return recalling||outageReturn||waitingDelivery!=null||supplying||System.currentTimeMillis()<blockerUntil?blocker:"";}public String nextAction(){return recalling||outageReturn||waitingDelivery!=null||supplying||System.currentTimeMillis()<blockerUntil?next:"Continue current task";}public int recoveries(){return recoveries;}
     private String key(OperationsPackets.Obstacle p){return p.point().dimension()+":"+p.point().x()+":"+p.point().y()+":"+p.point().z();}
     public void accept(OperationsPackets.Obstacle p,long now){if(!p.valid(now)||p.until()<now)return;obstacles.values().removeIf(o->o.until()<now);if(obstacles.size()<128||obstacles.containsKey(key(p)))obstacles.put(key(p),p);}
     public Map<Long,Double> penalties(String dimension){Map<Long,Double> costs=new HashMap<>();long now=System.currentTimeMillis();for(var o:obstacles.values())if(o.until()>now&&o.point().dimension().equals(dimension))for(int x=-2;x<=2;x++)for(int y=-3;y<=3;y++)for(int z=-2;z<=2;z++)costs.put(BlockPos.asLong(o.point().x()+x,o.point().y()+y,o.point().z()+z),120D);return Map.copyOf(costs);}
