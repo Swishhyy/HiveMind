@@ -22,14 +22,16 @@ import java.util.*;
 
 /** Saved requests always reload paused. Inventory contents and paths are never fabricated on restart. */
 public final class JobStore {
-    public record Job(long id, int quantity, List<String> blocks, int deposited, UUID owner) {
+    public record Job(long id, int quantity, List<String> blocks, int deposited, UUID owner,UUID order,UUID requester) {
+        public Job(long id,int quantity,List<String> blocks,int deposited,UUID owner){this(id,quantity,blocks,deposited,owner,null,null);}
         public Job {
             if (id < 1 || quantity < 1 || quantity > 1000000 || blocks == null || blocks.isEmpty() || blocks.size() > 32
                     || blocks.stream().anyMatch(s -> !s.matches("[a-z0-9_.-]+:[a-z0-9_./-]+")) || deposited < 0)
                 throw new IllegalArgumentException("Invalid mining job");
             blocks = List.copyOf(blocks);
+            if((order==null)!=(requester==null))throw new IllegalArgumentException("Incomplete job order identity");
         }
-        public Job withDeposited(int amount) { return new Job(id, quantity, blocks, Math.max(0, amount), owner); }
+        public Job withDeposited(int amount) { return new Job(id, quantity, blocks, Math.max(0, amount), owner,order,requester); }
     }
     private final Path file;
     public JobStore(Path root) { file = root.resolve("bot-jobs.properties"); }
@@ -44,7 +46,7 @@ public final class JobStore {
             String owner = p.getProperty(prefix + "owner", "");
             Job job = new Job(Long.parseLong(p.getProperty(prefix + "id")), Integer.parseInt(p.getProperty(prefix + "quantity")),
                     List.of(p.getProperty(prefix + "blocks").split(",")), Integer.parseInt(p.getProperty(prefix + "deposited", "0")),
-                    owner.isBlank() ? null : UUID.fromString(owner));
+                    owner.isBlank() ? null : UUID.fromString(owner),p.containsKey(prefix+"order")?UUID.fromString(p.getProperty(prefix+"order")):null,p.containsKey(prefix+"requester")?UUID.fromString(p.getProperty(prefix+"requester")):null);
             if (!ids.add(job.id())) throw new IllegalStateException("Duplicate saved job ID");
             result.add(job);
         }
@@ -58,6 +60,7 @@ public final class JobStore {
             p.setProperty(prefix + "id", Long.toString(j.id())); p.setProperty(prefix + "quantity", Integer.toString(j.quantity()));
             p.setProperty(prefix + "blocks", String.join(",", j.blocks())); p.setProperty(prefix + "deposited", Integer.toString(j.deposited()));
             if (j.owner() != null) p.setProperty(prefix + "owner", j.owner().toString());
+            if(j.order()!=null){p.setProperty(prefix+"order",j.order().toString());p.setProperty(prefix+"requester",j.requester().toString());}
         }
         AtomicProperties.write(file, p);
     }

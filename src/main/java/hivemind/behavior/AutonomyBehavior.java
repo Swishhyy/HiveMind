@@ -55,7 +55,7 @@ public final class AutonomyBehavior extends Behavior {
     public void pause(boolean held){load();store.pause(held);var task=hivemind.getReliability().checkpoint();if(task!=null)task.hold(held);}
     public boolean paused(){load();return store.paused();}
     public void defer(String message,long delay){reason=message;nextTry=System.currentTimeMillis()+Math.max(1000,delay);}
-    public void complete(){clear();reason="Target death observed; order completed";}
+    public void complete(){hivemind.getReliability().completed("kill","Target death observed; hunt order completed");clear();reason="Target death observed; order completed";}
     public String status(){
         load();Order o=store.order();return (store.paused()?"Paused · ":"")+(o==null?reason:(o.hunt()?"Hunt order: ":"Watch order: ")+o.name()+" · "+reason);
     }
@@ -63,7 +63,7 @@ public final class AutonomyBehavior extends Behavior {
     public void replaceWork(){load();clear();hivemind.getFlight().cancel();}
     private boolean workCommand(String label,String first){
         if(label.equals("deposit")&&first.equals("point"))return false;
-        if(Set.of("status","list","history","sightings","report","supported").contains(first))return false;
+        if(Set.of("status","list","history","sightings","report","supported","resolve","handoff").contains(first))return false;
         if(label.equals("scout")&&Set.of("add","list","move","remove","pause","clear","status").contains(first))return false;
         if(label.equals("job"))return Set.of("resume","start").contains(first);
         return Set.of("scout","mine","follow","goto","path","explore","farm","build","gettoblock","deposit","deliver","escort","recover","gather","repair","elytra").contains(label);

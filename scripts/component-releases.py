@@ -15,7 +15,7 @@ def versions():
 def relevant(role,path):
     if path in ('LICENSE','COPYING','COPYING.LESSER'):return True
     if role=='controller':
-        return path.startswith(('controller/src/main/','src/main/java/hivemind/utils/network/','src/main/resources/assets/')) or path in ('src/main/java/hivemind/utils/bot/AtomicProperties.java','src/main/java/hivemind/utils/bot/StorageRule.java','src/main/java/hivemind/utils/bot/TrustedControl.java','src/main/java/hivemind/utils/mining/WorldRoutes.java')
+        return path.startswith(('controller/src/main/','src/main/java/hivemind/utils/network/','src/main/resources/assets/')) or path in ('src/main/java/hivemind/utils/update/UpdateManifest.java','src/main/java/hivemind/utils/update/UpdateInstaller.java','src/main/java/hivemind/utils/update/UpdateHealth.java','src/main/java/hivemind/utils/reliability/RegionRules.java','src/main/java/hivemind/utils/bot/AtomicProperties.java','src/main/java/hivemind/utils/bot/StorageRule.java','src/main/java/hivemind/utils/bot/TrustedControl.java','src/main/java/hivemind/utils/mining/WorldRoutes.java')
     return path.startswith(('src/api/','src/main/','src/launch/','fabric/','buildSrc/','gradle/')) or path in ('build.gradle','settings.gradle','gradlew','gradlew.bat')
 
 def fingerprint(role,ref):

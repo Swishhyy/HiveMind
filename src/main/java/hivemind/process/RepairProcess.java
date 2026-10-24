@@ -54,7 +54,7 @@ public final class RepairProcess extends HiveMindProcessHelper {
         int best=-1;double fraction=2;
         for(int i=0;i<36;i++){
             ItemStack stack=ctx.player().getInventory().getItem(i);
-            if(!mending(stack)||!BuiltInRegistries.ITEM.getKey(stack.getItem()).getPath().endsWith("_pickaxe"))continue;
+            if(!mending(stack))continue;
             int left=stack.getMaxDamage()-stack.getDamageValue();
             if(auto&&CompanionPolicy.repairComplete(left,stack.getMaxDamage(),HiveMind.settings().repairTargetPercent.value))continue;
             if(auto&&left>Math.max(HiveMind.settings().botToolReserve.value+16,HiveMind.settings().repairAtDurability.value))continue;
@@ -86,7 +86,7 @@ public final class RepairProcess extends HiveMindProcessHelper {
             if(!goal.isInGoal(ctx.playerFeet())&&(returning||!atStation||ctx.playerFeet().distSqr(MiningRouteAccess.position(target))>36))return new PathingCommand(goal,PathingCommandType.REVALIDATE_GOAL_AND_PATH);
             if(!safe)return pause();
             hivemind.getInputOverrideHandler().clearAllKeys();ctx.playerController().resetBlockRemoving();
-            if(returning)return finish("Pickaxe repaired; returned to work",true);
+            if(returning)return finish("Mending equipment repaired; returned to work",true);
             if(ctx.player().containerMenu!=ctx.player().inventoryMenu||!ctx.player().inventoryMenu.getCarried().isEmpty())return finish("Close the container before repair can continue",false);
             ItemStack tool=ctx.player().getInventory().getItem(slot);
             if(!sameTool(tool)){
@@ -108,7 +108,7 @@ public final class RepairProcess extends HiveMindProcessHelper {
             return pause();
         }catch(RuntimeException e){return finish("Repair stopped: "+e.getMessage(),false);}
     }
-    private PathingCommand finish(String message,boolean success){boolean auto=automatic;onLostControl();result=message;if(!success&&auto)cooldown=System.currentTimeMillis()+600000;logDirect(message);return new PathingCommand(null,PathingCommandType.CANCEL_AND_SET_GOAL);}
+    private PathingCommand finish(String message,boolean success){boolean auto=automatic;if(success){hivemind.getReliability().success("maintenance",message);hivemind.getReliability().completed("repair",message);}else hivemind.getReliability().failed("maintenance",message,lastDurability);onLostControl();result=message;if(!success&&auto)cooldown=System.currentTimeMillis()+600000;logDirect(message);return new PathingCommand(null,PathingCommandType.CANCEL_AND_SET_GOAL);}
     private boolean sameTool(ItemStack stack){return !stack.isEmpty()&&BuiltInRegistries.ITEM.getKey(stack.getItem()).toString().equals(item)&&stack.getEnchantments().keySet().stream().anyMatch(holder->holder.is(Enchantments.MENDING));}
     private PathingCommand pause(){return new PathingCommand(null,PathingCommandType.REQUEST_PAUSE);}
     @Override public void onLostControl(){active=returning=atStation=false;if(previousSlot>=0&&ctx.player()!=null){hivemind.getReliability().select(previousSlot);if(ctx.minecraft().gameMode!=null)ctx.playerController().syncHeldItem();}previousSlot=-1;root=null;station=origin=null;slot=-1;}

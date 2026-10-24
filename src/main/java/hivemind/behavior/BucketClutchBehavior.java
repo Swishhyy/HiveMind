@@ -22,6 +22,7 @@ import net.minecraft.world.phys.Vec3;
 
 /** Planned and unexpected bucket clutches share one owner and retry every reachable tick. */
 public final class BucketClutchBehavior extends Behavior {
+    public boolean imminent(){return active()||ctx.player()!=null&&ctx.world()!=null&&HiveMind.settings().botEmergencyBucketClutch.value&&!ctx.player().onGround()&&!ctx.player().isFallFlying()&&ctx.player().fallDistance>2.5&&ctx.player().getDeltaMovement().y<-.2&&ctx.player().getInventory().findSlotMatchingItem(new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.WATER_BUCKET))>=0&&ctx.world().dimension()!=net.minecraft.world.level.Level.NETHER;}
     private BlockPos planned,landing,placed;
     private long planAt,lastUse=Long.MIN_VALUE;
     private int previous=-1,wetTicks,pickupTicks;

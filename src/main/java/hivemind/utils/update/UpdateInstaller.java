@@ -35,15 +35,18 @@ public final class UpdateInstaller {
     public static void apply(Path plan,boolean waitForGame)throws Exception{
         Properties p=new Properties();try(InputStream in=Files.newInputStream(plan)){p.load(in);}
         Path instance=Path.of(p.getProperty("instance")).toRealPath(),mods=instance.resolve("mods").toRealPath(),updates=instance.resolve("hivemind/updates").toRealPath();
-        Path target=Path.of(p.getProperty("target")).toAbsolutePath().normalize(),staged=Path.of(p.getProperty("staged")).toRealPath();
+        Path target=Path.of(p.getProperty("target")).toAbsolutePath().normalize(),staged=Path.of(p.getProperty("staged")).toAbsolutePath().normalize();
         if(!target.getParent().equals(mods)||Files.isSymbolicLink(target)||!target.getFileName().toString().endsWith(".jar")||!staged.getParent().equals(updates)
-                ||!plan.toRealPath().getParent().equals(updates))throw new IOException("Update plan leaves this Minecraft instance");
+                ||Files.isSymbolicLink(staged)||!plan.toRealPath().getParent().equals(updates))throw new IOException("Update plan leaves this Minecraft instance");
         UpdateManifest expected=new UpdateManifest(p.getProperty("version"),p.getProperty("commit"),Long.parseLong(p.getProperty("size")),p.getProperty("sha256"),java.net.URI.create(p.getProperty("url")),p.getProperty("distribution","legacy"));
         long pid=Long.parseLong(p.getProperty("pid"));if(pid<1)throw new IOException("Invalid parent process");
         if(waitForGame){var parent=ProcessHandle.of(pid);if(parent.isPresent())parent.get().onExit().get(7,TimeUnit.DAYS);}
+        // A helper may die after the atomic replacement but before removing its plan.
+        if(Files.isRegularFile(target)&&digest(target).equals(expected.sha256())){verify(target,expected);Files.deleteIfExists(staged);Files.deleteIfExists(plan);return;}
         verify(staged,expected);compatible(distribution(target),expected.distribution());
         Path backups=updates.resolve("backups");Files.createDirectories(backups);Path backup=backups.resolve("hivemind-"+System.currentTimeMillis()+".jar");
         if(Files.exists(target))Files.copy(target,backup,StandardCopyOption.COPY_ATTRIBUTES);
+        UpdateHealth.installed(instance,target,backup,expected);
         Path replacement=mods.resolve(".hivemind-update-"+UUID.randomUUID()+".tmp");
         try{
             Files.copy(staged,replacement);verify(replacement,expected);

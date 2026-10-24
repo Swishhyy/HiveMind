@@ -70,7 +70,7 @@ public final class HiveMindPlayerController implements IPlayerController {
 
     @Override
     public void windowClick(int windowId, int slotId, int mouseButton, ContainerInput type, Player player) {
-        if(!bot.getReliability().beforeClick(windowId,slotId,type.toString()))return;
+        if(!bot.getReliability().beforeClick(windowId,slotId,mouseButton,type.toString()))return;
         mc.gameMode.handleContainerInput(windowId, slotId, mouseButton, type, player);
     }
 

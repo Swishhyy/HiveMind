@@ -116,10 +116,12 @@ public final class GetToBlockProcess extends HiveMindProcessHelper implements IG
             // we're there
             if (rightClickOnArrival(gettingTo.getBlock())) {
                 if (rightClick()) {
+                    hivemind.getReliability().completed("goto gettoblock","Requested block reached and arrival interaction completed");
                     onLostControl();
                     return new PathingCommand(null, PathingCommandType.CANCEL_AND_SET_GOAL);
                 }
             } else {
+                hivemind.getReliability().completed("goto gettoblock","Requested block reached");
                 onLostControl();
                 return new PathingCommand(null, PathingCommandType.CANCEL_AND_SET_GOAL);
             }

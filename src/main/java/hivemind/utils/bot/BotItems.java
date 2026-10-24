@@ -31,6 +31,8 @@ public final class BotItems {
     public static boolean ordinary(ItemStack stack){return !stack.isEmpty()&&stack.getComponentsPatch().isEmpty();}
     public static int count(IPlayerContext ctx,String id){return BotInventory.count(ctx,stack->id(stack).equals(id)&&ordinary(stack));}
     public static int slot(IPlayerContext ctx,String id){return BotInventory.slot(ctx,stack->id(stack).equals(id)&&ordinary(stack));}
+    public static int supplyCount(IPlayerContext ctx,String id){return BotInventory.count(ctx,stack->id(stack).equals(id)&&expeditionSupply(stack));}
+    public static int supplySlot(IPlayerContext ctx,String id){return BotInventory.slot(ctx,stack->id(stack).equals(id)&&expeditionSupply(stack));}
     public static Map<String,Integer> inventory(IPlayerContext ctx){Map<String,Integer> map=new HashMap<>();for(int i=0;i<36;i++){ItemStack stack=ctx.player().getInventory().getItem(i);if(ordinary(stack))map.merge(id(stack),stack.getCount(),Integer::sum);}return map;}
     public static int menuSlot(int inventorySlot,int totalSlots){int first=totalSlots-36;return first+(inventorySlot<9?27+inventorySlot:inventorySlot-9);}
 }

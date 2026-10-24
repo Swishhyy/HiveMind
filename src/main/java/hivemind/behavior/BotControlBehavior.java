@@ -107,6 +107,7 @@ public final class BotControlBehavior extends Behavior {
                 long[] id = new long[1];
                 hivemind.getJobManager().withOwner(player, () -> id[0] = hivemind.getJobManager().submit(quantity, blocks));
                 hivemind.getAutonomy().afterCommand(label,expanded.second().get(0).getValue().toLowerCase(Locale.ROOT));
+                hivemind.getReliability().command(command);
                 reply(player, "Queued mining job #" + id[0] + ": " + quantity + " " + String.join(" ", blocks));
                 return;
             } else {

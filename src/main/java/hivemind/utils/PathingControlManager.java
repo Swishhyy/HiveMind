@@ -210,7 +210,7 @@ public class PathingControlManager implements IPathingControlManager {
             IHiveMindProcess proc = iterator.next();
 
             PathingCommand exec;
-            var owner=ActionArbiter.owner(proc.getClass().getSimpleName());
+            var owner=hivemind.actionOwner(proc);
             try(var scope=hivemind.getActions().scope(owner.name(),owner.priority())){
                 exec = proc.onTick(Objects.equals(proc, inControlLastTick) && hivemind.getPathingBehavior().calcFailedLastTick(), hivemind.getPathingBehavior().isSafeToCancel());
             }

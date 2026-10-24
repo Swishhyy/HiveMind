@@ -22,7 +22,8 @@ public final class BotBaseAccess {
             }
         }return found;
     }
-    public static int scan(IPlayerContext ctx){var base=store(ctx).get();if(base==null||!base.point().dimension().equals(MiningRouteAccess.dimension(ctx)))return 0;var center=base.point();int radius=base.radius(),found=0;var routes=MiningRouteAccess.store(ctx);
+    public static int scan(IPlayerContext ctx){int found=0;for(var base:store(ctx).all().values())found+=scan(ctx,base);return found;}
+    private static int scan(IPlayerContext ctx,BotBaseStore.Base base){if(!base.point().dimension().equals(MiningRouteAccess.dimension(ctx)))return 0;var center=base.point();int radius=base.radius(),found=0;var routes=MiningRouteAccess.store(ctx);
         for(int x=Math.floorDiv(center.x()-radius,16);x<=Math.floorDiv(center.x()+radius,16);x++)for(int z=Math.floorDiv(center.z()-radius,16);z<=Math.floorDiv(center.z()+radius,16);z++){
             BlockPos sample=new BlockPos(x*16,center.y(),z*16);if(!ctx.world().hasChunkAt(sample))continue;
             for(BlockPos p:ctx.world().getChunk(x,z).getBlockEntities().keySet()){

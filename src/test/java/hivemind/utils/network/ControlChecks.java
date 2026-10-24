@@ -107,7 +107,9 @@ public final class ControlChecks {
             check(configured.size()==1&&configured.get(0) instanceof Execute edit&&edit.target().equals(B.id())&&edit.requester().equals(A.id())&&edit.command().equals(storageCommand),"Remote storage edits must preserve the bot target, pinned location and player receipt recipient");
             check(coordinator.handle(configure,List.of(B.id()),now).isEmpty(),"Storage setup requests must be deduplicated like other commands");
             check(coordinator.handle(command,List.of(A.id()),now).isEmpty(),"A repeated request ID cannot run a command twice");
-            check(coordinator.handle(request(who("Offline").id(),Action.COMMAND,"","stop",now),List.of(A.id()),now).get(0) instanceof Receipt receipt&&!receipt.success(),"Offline commands are reported as not run");
+            check(coordinator.handle(request(who("Offline").id(),Action.COMMAND,"","stop",now),List.of(A.id()),now).get(0) instanceof Receipt receipt&&receipt.success()&&receipt.message().contains("Saved"),"Offline stop saves a hold without claiming execution");
+            check(new ControlRules(root).settings(who("Offline").id()).get("botFleetHold").equals("true"),"An offline bot remains held when it reconnects");
+            check(coordinator.handle(request(who("Offline").id(),Action.COMMAND,"","mine 64 diamond_ore",now),List.of(A.id()),now).get(0) instanceof Receipt receipt&&!receipt.success(),"Offline work is rejected rather than replayed later");
             check(coordinator.handle(request(null,Action.COMMAND,"","network key new",now),List.of(A.id()),now).get(0) instanceof Receipt receipt&&!receipt.success(),"The quick-command transport cannot edit keys or execute arbitrary commands");
             Request future=request(who("FutureBot").id(),Action.SETTING,"stalkDistance","56",now);
             check(coordinator.handle(future,List.of(A.id()),now).get(0) instanceof Receipt receipt&&receipt.message().contains("waiting"),"Offline settings are saved without claiming they were applied");

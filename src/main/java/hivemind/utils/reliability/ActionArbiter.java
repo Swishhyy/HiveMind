@@ -6,7 +6,7 @@ import java.util.function.LongSupplier;
 
 /** Short, renewable action leases. Emergency owners can preempt; equal priorities cannot steal a lease. */
 public final class ActionArbiter {
-    public enum Channel { MOVEMENT, LOOK, HAND, INVENTORY, USE }
+    public enum Channel { MOVEMENT, LOOK, HAND, OFFHAND, INVENTORY, USE }
     public record Owner(String name, int priority) {
         public Owner { if(name==null||name.isBlank()||name.length()>80)throw new IllegalArgumentException("Invalid action owner"); }
     }
@@ -26,6 +26,7 @@ public final class ActionArbiter {
     public ActionArbiter(LongSupplier clock){this.clock=Objects.requireNonNull(clock);}
     public Scope scope(String name,int priority){return new Scope(new Owner(name,priority));}
     public Owner current(){return current.get();}
+    public void reserve(Owner owner,Channel... channels){try(var scope=scope(owner.name(),owner.priority())){allow(channels);}}
     public void manual(boolean value){manual=value;if(value)leases.clear();}
     public boolean allow(Channel... channels){
         Owner owner=current.get();

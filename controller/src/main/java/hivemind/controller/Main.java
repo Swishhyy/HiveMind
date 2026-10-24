@@ -9,6 +9,7 @@ public final class Main {
     private Main(){}
     private static String version(){var properties=new Properties();try(var in=Main.class.getResourceAsStream("/hivemind-controller.properties")){if(in!=null)properties.load(in);}catch(java.io.IOException ignored){}return properties.getProperty("version","0.1.0.0");}
     public static void main(String[] args)throws Exception{
+        if(java.util.Arrays.asList(args).contains("--retry-update")){ControllerUpdater.unpin();args=java.util.Arrays.stream(args).filter(a->!a.equals("--retry-update")).toArray(String[]::new);}
         if(args.length==2&&args[0].equals("--supervise")){ClientSupervisor.run(Path.of(args[1]));return;}
         Map<String,String> options=new HashMap<>();
         Set<String> allowed=Set.of("data","bind","port","web-bind","web-port","public-url","advertise","scope");

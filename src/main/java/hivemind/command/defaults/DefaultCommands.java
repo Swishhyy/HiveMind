@@ -76,6 +76,8 @@ public final class DefaultCommands {
                 new KitCommand(hivemind),
                 new WhyCommand(hivemind),
                 new RegionCommand(hivemind),
+                new DoctorCommand(hivemind),
+                new RecallCommand(hivemind),
                 new PlayerBotsCommand(hivemind),
                 new StoragePointCommand(hivemind),
                 new TrustCommand(hivemind),

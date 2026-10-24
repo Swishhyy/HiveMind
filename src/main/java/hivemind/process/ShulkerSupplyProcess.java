@@ -2,6 +2,7 @@
 package hivemind.process;
 
 import hivemind.HiveMind;
+import hivemind.utils.reliability.ActionArbiter;
 import hivemind.api.behavior.IBehavior;
 import hivemind.api.event.events.TickEvent;
 import hivemind.api.event.events.BlockChangeEvent;
@@ -97,7 +98,7 @@ public final class ShulkerSupplyProcess extends HiveMindProcessHelper implements
         if(wanted.isEmpty())return false;
         for(int slot=0;slot<36;slot++){
             var stack=ctx.player().getInventory().getItem(slot);if(!shulker(stack))continue;
-            var contents=stack.get(DataComponents.CONTAINER);if(contents==null)continue;
+            var contents=stack.get(DataComponents.CONTAINER);if(contents==null){if(hivemind.getReliability().manifest().shouldInspect(ReliabilityProcess.boxSignature(stack),System.currentTimeMillis()))return true;continue;}
             var items=net.minecraft.core.NonNullList.<ItemStack>withSize(27,ItemStack.EMPTY);contents.copyInto(items);
             if(items.stream().anyMatch(item->!item.isEmpty()&&wanted.stream().anyMatch(e->variants?ExpeditionLoadout.matches(item,e.getKey()):BotItems.ordinary(item)&&BotItems.id(item).equals(e.getKey()))))return true;
         }
@@ -137,7 +138,7 @@ public final class ShulkerSupplyProcess extends HiveMindProcessHelper implements
     private BlockPos placement(){
         BlockPos feet=ctx.playerFeet();
         for(int radius=2;radius<=3;radius++)for(int y=-1;y<=0;y++)for(int x=-radius;x<=radius;x++)for(int z=-radius;z<=radius;z++){
-            if(Math.max(Math.abs(x),Math.abs(z))!=radius)continue;BlockPos pos=feet.offset(x,y,z);var support=ctx.world().getBlockState(pos.below());
+            if(Math.max(Math.abs(x),Math.abs(z))!=radius)continue;BlockPos pos=feet.offset(x,y,z);if(!hivemind.getReliability().routes().available("shulker",MiningRouteAccess.endpoint(ctx,pos),System.currentTimeMillis()))continue;var support=ctx.world().getBlockState(pos.below());
             String supportId=BuiltInRegistries.BLOCK.getKey(support.getBlock()).getPath();
             if(!ctx.world().hasChunkAt(pos)||!ctx.world().getWorldBorder().isWithinBounds(pos)||!ctx.world().getBlockState(pos).isAir()||!ctx.world().getBlockState(pos.above()).isAir()
                     ||!support.isCollisionShapeFullBlock(ctx.world(),pos.below())||ConstructionPolicy.isContainer(BuiltInRegistries.BLOCK.getKey(support.getBlock()).getPath())
@@ -156,7 +157,8 @@ public final class ShulkerSupplyProcess extends HiveMindProcessHelper implements
             hivemind.getInputOverrideHandler().setInputForceState(Input.CLICK_LEFT,false);ctx.playerController().resetBlockRemoving();return pause();
         }
         if(!safe)return pause();
-        if(failed||++ticks>600)return fail("Could not complete portable resupply; recovery point retained");
+        if(!hivemind.getActions().allow(ActionArbiter.Channel.INVENTORY,ActionArbiter.Channel.HAND,ActionArbiter.Channel.LOOK,ActionArbiter.Channel.USE))return new PathingCommand(null,PathingCommandType.DEFER);
+        if(failed||++ticks>timeoutTicks(600))return fail("Could not complete portable resupply; recovery point retained");
         if(hivemind.getConflictProcess().isActive()||hivemind.getStalkProcess().committedCombat()){closeMenu();return new PathingCommand(null,PathingCommandType.DEFER);}
         if(box==null)return fail("Missing portable box position");
         if(!safeSite()){closeMenu();hivemind.getInputOverrideHandler().setInputForceState(Input.CLICK_LEFT,false);if(stage==Stage.TRANSFER||stage==Stage.OPEN){openRequested=false;transition(Stage.OPEN);}return pause();}
@@ -174,7 +176,7 @@ public final class ShulkerSupplyProcess extends HiveMindProcessHelper implements
             }
             case WAIT_PLACE -> {
                 if(placementConfirmed&&sameBlock()&&count(s->s.is(boxItem.getItem()))<beforeBoxes){confirmed=true;save(true);beforeBoxes=count(s->s.is(boxItem.getItem()));transition(Stage.OPEN);}
-                else if(ticks>60){if(ctx.world().getBlockState(box).isAir())store.save(null);return fail("Server did not confirm shulker placement");}
+                else if(ticks>timeoutTicks(60)){if(ctx.world().getBlockState(box).isAir())store.save(null);return fail("Server did not confirm shulker placement");}
             }
             case OPEN -> {
                 var current=ctx.player().containerMenu;
@@ -182,9 +184,9 @@ public final class ShulkerSupplyProcess extends HiveMindProcessHelper implements
                     if(!openRequested||!(current instanceof ShulkerBoxMenu))return fail("Unexpected container opened");
                     menu=current;
                     if(synchronizedMenu==current.containerId&&revision>openRevision){transition(Stage.TRANSFER);return pause();}
-                    if(ticks>100)return fail("No server contents for the shulker");return pause();
+                    if(ticks>timeoutTicks(100))return fail("No server contents for the shulker");return pause();
                 }
-                if(openRequested){if(ticks>60)return fail("Shulker could not be opened");return pause();}
+                if(openRequested){if(ticks>timeoutTicks(60))return fail("Shulker could not be opened");return pause();}
                 var aim=RotationUtils.reachable(ctx,box);if(aim.isEmpty())return fail("Shulker is out of reach");hivemind.getLookBehavior().updateTarget(aim.get(),true);
                 if(ctx.isLookingAt(box)){openRequested=true;openRevision=revision;ticks=0;ctx.playerController().processRightClickBlock(ctx.player(),ctx.world(),InteractionHand.MAIN_HAND,new BlockHitResult(Vec3.atCenterOf(box),Direction.UP,box,false));}
             }
@@ -212,7 +214,7 @@ public final class ShulkerSupplyProcess extends HiveMindProcessHelper implements
         if(menu==null||ctx.player().containerMenu!=menu||!(menu instanceof ShulkerBoxMenu)||menu.slots.size()!=63)return fail("Shulker menu changed during resupply");
         if(!menu.getCarried().isEmpty())return fail("Clear the inventory cursor before shulker resupply");
         if(pending>=0){
-            if(++waitTicks<5)return pause();
+            if(++waitTicks<hivemind.getReliability().health().interactionTicks())return pause();
             if(revision<=pendingRevision||synchronizedMenu!=menu.containerId){closeMenu();openRequested=false;transition(Stage.OPEN);return pause();}
             int remaining=count(needs.get(pending));if(remaining<=pendingCount)refused.add(pending);else moved+=remaining-pendingCount;
             pending=-1;return pause();
@@ -235,7 +237,7 @@ public final class ShulkerSupplyProcess extends HiveMindProcessHelper implements
     public boolean ownsForRecovery(BlockPos pos){return stage==Stage.BREAK&&confirmed&&box!=null&&box.equals(pos)&&world==ctx.world()&&sameBlock();}
     private void transition(Stage next){stage=next;ticks=0;}
     private PathingCommand pause(){return new PathingCommand(null,PathingCommandType.REQUEST_PAUSE);}
-    private PathingCommand fail(String reason){logDirect(reason+(box==null?"":" at "+box.toShortString()));if(ctx.player()!=null&&ctx.world()!=null)hivemind.getOperations().journal().note("Shulker failure",reason+(box==null?"":" at "+box.toShortString()));onLostControl();retryAt=System.currentTimeMillis()+60000;return new PathingCommand(null,PathingCommandType.CANCEL_AND_SET_GOAL);}
+    private PathingCommand fail(String reason){if(box!=null&&ctx.player()!=null&&ctx.world()!=null){hivemind.getReliability().routes().failed("shulker",MiningRouteAccess.endpoint(ctx,box),reason,System.currentTimeMillis());hivemind.getReliability().failed("shulker",reason,moved);}logDirect(reason+(box==null?"":" at "+box.toShortString()));if(ctx.player()!=null&&ctx.world()!=null)hivemind.getOperations().journal().note("Shulker failure",reason+(box==null?"":" at "+box.toShortString()));onLostControl();retryAt=System.currentTimeMillis()+60000;return new PathingCommand(null,PathingCommandType.CANCEL_AND_SET_GOAL);}
     private void closeMenu(){if(menu!=null&&ctx.player()!=null&&ctx.player().containerMenu==menu&&menu.getCarried().isEmpty())ctx.player().closeContainer();menu=null;}
     @Override public void onLostControl(){
         closeMenu();if(ctx.player()!=null){hivemind.getInputOverrideHandler().setInputForceState(Input.CLICK_LEFT,false);ctx.playerController().resetBlockRemoving();
@@ -251,4 +253,6 @@ public final class ShulkerSupplyProcess extends HiveMindProcessHelper implements
     }
     @Override public void onPlayerDeath(){onLostControl();}
     @Override public String displayName0(){return "Portable shulker "+stage;}
+    private int timeoutTicks(int normal){return (int)(hivemind.getReliability().health().timeout(normal*50L)/50);}
+
 }

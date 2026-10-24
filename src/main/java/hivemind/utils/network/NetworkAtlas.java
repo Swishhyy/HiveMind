@@ -137,7 +137,7 @@ public final class NetworkAtlas {
         for (Sighting sighting : sightings.stream().sorted(Comparator.comparingLong(Sighting::observedAt)).toList())
             latest.put(sighting.player() + ":" + sighting.point().dimension(), sighting);
         for (Sighting sighting : latest.values().stream().sorted(Comparator.comparingLong(Sighting::observedAt).reversed()).limit(512).toList())
-            values.add("{\"id\":" + quote(sighting.player().toString()) + ",\"name\":" + quote(sighting.playerName()) + ",\"source\":" + quote(sighting.reporterName()) + "," + point(sighting.point()) + ",\"t\":" + sighting.observedAt() + "}");
+            values.add("{\"id\":" + quote(sighting.player().toString()) + ",\"name\":" + quote(sighting.playerName()) + ",\"source\":" + quote(sighting.reporterName()) + "," + point(sighting.point()) + ",\"t\":" + sighting.observedAt() + ",\"ageMs\":"+Math.max(0,now-sighting.observedAt())+",\"confidence\":"+quote(now-sighting.observedAt()<15000?"recent visual location":"historical visual location")+"}");
         out.append(values).append("],\"hotspots\":["); values = new StringJoiner(",");
         for (Hotspot h : hotspots(now))
             values.add("{\"id\":" + quote(h.player().toString()) + ",\"name\":" + quote(h.name()) + ",\"d\":" + quote(h.dimension()) + ",\"x\":" + h.x() + ",\"y\":" + h.y() + ",\"z\":" + h.z()

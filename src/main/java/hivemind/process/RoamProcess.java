@@ -18,6 +18,7 @@
 package hivemind.process;
 
 import hivemind.HiveMind;
+import hivemind.utils.reliability.RegionRules;
 import hivemind.api.process.PathingCommand;
 import hivemind.api.process.PathingCommandType;
 import hivemind.api.pathing.goals.GoalXZ;
@@ -38,6 +39,7 @@ public final class RoamProcess extends HiveMindProcessHelper implements hivemind
     private Path root;
     private boolean held;
     private BlockPos destination;
+    private long regionCursor;
     private long deadline,retryAt;
     private SurveyRoute survey;
     private boolean airRoute;
@@ -79,6 +81,13 @@ public final class RoamProcess extends HiveMindProcessHelper implements hivemind
     }
     private BlockPos chooseSurvey(boolean aerial){
         long now=System.currentTimeMillis();blocked.values().removeIf(until->until<now);
+        var regions=hivemind.getReliability().regions().regions().stream().filter(r->r.kind()==RegionRules.Kind.EXPLORE&&r.center().dimension().equals(dimension)).toList();
+        int spacing=aerial?256:64;long cells=0;for(var r:regions){long side=2L*r.radius()/spacing+1;cells+=side*side;}
+        for(int attempt=0;attempt<64&&cells>0;attempt++){
+            long index=Math.floorMod(regionCursor++,cells);BlockPos point=null;
+            for(var r:regions){int side=2*r.radius()/spacing+1;long size=(long)side*side;if(index>=size){index-=size;continue;}point=new BlockPos(r.center().x()-r.radius()+(int)(index%side)*spacing,r.center().y(),r.center().z()-r.radius()+(int)(index/side)*spacing);break;}
+            if(point!=null&&!blocked.containsKey(point)&&ctx.world().getWorldBorder().isWithinBounds(point)&&!hivemind.getNetwork().team().roamOccupied(point)&&!hivemind.getNetwork().mapped(point)&&point.distSqr(ctx.playerFeet())>=48*48)return point;
+        }
         if(survey==null||aerial!=airRoute){airRoute=aerial;survey=new SurveyRoute(root,aerial?"roam-air-frontier":"roam-ground-frontier",MiningRouteAccess.endpoint(ctx,ctx.playerFeet()),
                 aerial?HiveMind.settings().botFlightSurveySpacing.value:64,hivemind.getNetwork().team().heading(Kind.ROAM,null));}
         BlockPos fallback=null;

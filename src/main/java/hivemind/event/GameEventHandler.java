@@ -66,7 +66,7 @@ public final class GameEventHandler implements IEventBus, Helper {
         } else {
             hivemind.bsi = null;
         }
-        hivemind.getActions().manual(hivemind.isPlayerClient());
+        if(event.getState()==EventState.PRE&&event.getType()==TickEvent.Type.IN)hivemind.planActions();else hivemind.getActions().manual(hivemind.isPlayerClient());
         enabledListeners().forEach(l -> dispatch(l, () -> l.onTick(event)));
     }
 
@@ -204,10 +204,10 @@ public final class GameEventHandler implements IEventBus, Helper {
     }
 
     private void dispatch(IGameEventListener listener,Runnable action){
-        var owner=ActionArbiter.owner(listener.getClass().getSimpleName());
+        var owner=hivemind.actionOwner(listener);
         if(listener instanceof hivemind.behavior.PathingBehavior){
             var process=hivemind.getPathingControlManager().mostRecentInControl().orElse(null);
-            if(process!=null)owner=ActionArbiter.owner(process.getClass().getSimpleName());
+            if(process!=null)owner=hivemind.actionOwner(process);
         }
         try(var scope=hivemind.getActions().scope(owner.name(),owner.priority())){action.run();}
     }

@@ -46,24 +46,24 @@ public final class TeamPackets {
         out.writeBoolean(point!=null);if(point!=null){text(out,point.dimension());out.writeInt(point.x());out.writeInt(point.y());out.writeInt(point.z());}
     }
     private static Endpoint point(DataInputStream in)throws IOException { return in.readBoolean()?new Endpoint(text(in,128),in.readInt(),in.readInt(),in.readInt()):null; }
-    private static void intent(DataOutputStream out,Intent p)throws IOException {
-        uuid(out,p.reporter());text(out,p.reporterName());out.writeByte(p.kind().ordinal());uuid(out,p.target());point(out,p.point());point(out,p.work());out.writeBoolean(p.explosive());out.writeBoolean(p.engaged());out.writeLong(p.observedAt());out.writeByte(p.supplies().size());for(var entry:p.supplies().entrySet()){text(out,entry.getKey());out.writeInt(entry.getValue());}
+    private static void intent(DataOutputStream out,Intent p,int protocol)throws IOException {
+        uuid(out,p.reporter());text(out,p.reporterName());out.writeByte(protocol<8&&p.kind()==Kind.STORAGE?Kind.IDLE.ordinal():p.kind().ordinal());uuid(out,p.target());point(out,p.point());point(out,p.work());out.writeBoolean(p.explosive());out.writeBoolean(p.engaged());out.writeLong(p.observedAt());if(protocol>=8){out.writeByte(p.supplies().size());for(var entry:p.supplies().entrySet()){text(out,entry.getKey());out.writeInt(entry.getValue());}}
     }
-    private static Intent intent(DataInputStream in)throws IOException {
+    private static Intent intent(DataInputStream in,int protocol)throws IOException {
         UUID id=uuid(in);String name=text(in,16);int kind=in.readUnsignedByte();if(kind>=Kind.values().length)throw new IOException("Invalid team work");
-        UUID target=uuid(in);Endpoint point=point(in),work=point(in);boolean explosive=in.readBoolean(),engaged=in.readBoolean();long time=in.readLong();int count=in.readUnsignedByte();if(count>16)throw new IOException("Too many reserved supplies");Map<String,Integer> stock=new LinkedHashMap<>();for(int i=0;i<count;i++){String key=text(in,100);if(stock.put(key,in.readInt())!=null)throw new IOException("Duplicate stock reservation");}return new Intent(id,name,Kind.values()[kind],target,point,work,explosive,engaged,time,stock);
+        UUID target=uuid(in);Endpoint point=point(in),work=point(in);boolean explosive=in.readBoolean(),engaged=in.readBoolean();long time=in.readLong();int count=protocol>=8?in.readUnsignedByte():0;if(count>16)throw new IOException("Too many reserved supplies");Map<String,Integer> stock=new LinkedHashMap<>();for(int i=0;i<count;i++){String key=text(in,100);if(stock.put(key,in.readInt())!=null)throw new IOException("Duplicate stock reservation");}return new Intent(id,name,Kind.values()[kind],target,point,work,explosive,engaged,time,stock);
     }
-    static void encode(DataOutputStream out,Packet packet)throws IOException {
-        if(packet instanceof Intent p)intent(out,p);
+    static void encode(DataOutputStream out,Packet packet,int protocol)throws IOException {
+        if(packet instanceof Intent p)intent(out,p,protocol);
         else if(packet instanceof Plan p){
-            people(out,p.members());out.writeByte(p.intents().size());for(Intent intent:p.intents())intent(out,intent);
+            people(out,p.members());out.writeByte(p.intents().size());for(Intent intent:p.intents())intent(out,intent,protocol);
             out.writeByte(p.leases().size());for(var entry:p.leases().entrySet()){uuid(out,entry.getKey());point(out,entry.getValue().point());out.writeLong(entry.getValue().until());}
         }
     }
-    static Packet decode(DataInputStream in,int type,UUID reporter,String name,long time)throws IOException {
-        if(type==9){Intent p=intent(in);if(!p.reporter().equals(reporter)||!p.reporterName().equals(name)||p.observedAt()!=time)throw new IOException("Team identity mismatch");return p;}
+    static Packet decode(DataInputStream in,int type,UUID reporter,String name,long time,int protocol)throws IOException {
+        if(type==9){Intent p=intent(in,protocol);if(!p.reporter().equals(reporter)||!p.reporterName().equals(name)||p.observedAt()!=time)throw new IOException("Team identity mismatch");return p;}
         Map<UUID,String> members=people(in,64,16);int size=in.readUnsignedByte();if(size>17)throw new IOException("Too many team intents");
-        List<Intent> intents=new ArrayList<>();for(int i=0;i<size;i++)intents.add(intent(in));
+        List<Intent> intents=new ArrayList<>();for(int i=0;i<size;i++)intents.add(intent(in,protocol));
         size=in.readUnsignedByte();if(size>64)throw new IOException("Too many mining leases");Map<UUID,Lease> leases=new LinkedHashMap<>();
         for(int i=0;i<size;i++){UUID id=uuid(in);if(id==null||leases.put(id,new Lease(point(in),in.readLong()))!=null)throw new IOException("Duplicate mining lease");}
         return new Plan(reporter,name,members,intents,leases,time);

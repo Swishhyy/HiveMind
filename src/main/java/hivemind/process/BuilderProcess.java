@@ -511,6 +511,7 @@ public final class BuilderProcess extends HiveMindProcessHelper implements IBuil
             numRepeats++;
             if (repeat.equals(new Vec3i(0, 0, 0)) || (max != -1 && numRepeats >= max)) {
                 logDirect("Done building");
+                hivemind.getReliability().completed("build","Build verification pass completed");
                 if (HiveMind.settings().notificationOnBuildFinished.value) {
                     logNotification("Done building", false);
                 }

@@ -56,18 +56,20 @@ public final class ControlPackets {
                          Map<String,String> settings,Map<UUID,Boolean> trust,long observedAt) implements Packet {
         public Policy {
             base(reporter,reporterName);Objects.requireNonNull(id);Objects.requireNonNull(requester);Objects.requireNonNull(target);
-            settings=stringMap(settings,128);
+            settings=stringMap(settings,160);
             if(version<0||trust.size()>128)throw new IllegalArgumentException("Invalid policy");
             trust.forEach((key,value)->{Objects.requireNonNull(key);Objects.requireNonNull(value);});
             trust=Map.copyOf(trust);
         }
     }
-    public record Receipt(UUID reporter,String reporterName,UUID id,UUID requester,boolean success,String message,long observedAt) implements Packet {
-        public Receipt { base(reporter,reporterName);Objects.requireNonNull(id);Objects.requireNonNull(requester);check(message,512); }
+    public enum Stage { ACCEPTED, STARTED, BLOCKED, COMPLETED, CANCELLED, APPLIED, FAILED }
+    public record Receipt(UUID reporter,String reporterName,UUID id,UUID requester,boolean success,String message,long observedAt,Stage stage) implements Packet {
+        public Receipt(UUID reporter,String name,UUID id,UUID requester,boolean success,String message,long time){this(reporter,name,id,requester,success,message,time,success?Stage.APPLIED:Stage.FAILED);}
+        public Receipt { base(reporter,reporterName);Objects.requireNonNull(id);Objects.requireNonNull(requester);Objects.requireNonNull(stage);check(message,512); }
     }
     public record Defaults(UUID reporter,String reporterName,long version,Map<String,String> settings,Map<UUID,Boolean> trust,long observedAt) implements Packet {
         public Defaults {
-            base(reporter,reporterName);settings=stringMap(settings,128);
+            base(reporter,reporterName);settings=stringMap(settings,160);
             if(version<0||trust.size()>128)throw new IllegalArgumentException("Invalid defaults");
             trust.forEach((key,value)->{Objects.requireNonNull(key);Objects.requireNonNull(value);});trust=Map.copyOf(trust);
         }
@@ -104,31 +106,38 @@ public final class ControlPackets {
         Map<UUID,String> map=new LinkedHashMap<>();for(int i=0;i<count;i++){UUID id=uuid(in);if(id==null||map.put(id,text(in,length))!=null)throw new IOException("Invalid player map");}return map;
     }
     public static void encode(DataOutputStream out,Packet packet)throws IOException {
+        encode(out,packet,NetworkProtocol.VERSION);
+    }
+    public static void encode(DataOutputStream out,Packet packet,int protocol)throws IOException {
         out.writeLong(packet.observedAt());
-        if(packet instanceof OperationsPackets.Snapshot||packet instanceof OperationsPackets.Obstacle||packet instanceof OperationsPackets.Ping)OperationsPackets.encode(out,packet);
-        else if(packet instanceof TeamPackets.Intent||packet instanceof TeamPackets.Plan){TeamPackets.encode(out,packet);}
+        if(packet instanceof OperationsPackets.Snapshot||packet instanceof OperationsPackets.Obstacle||packet instanceof OperationsPackets.Ping)OperationsPackets.encode(out,packet,protocol);
+        else if(packet instanceof TeamPackets.Intent||packet instanceof TeamPackets.Plan){TeamPackets.encode(out,packet,protocol);}
         else if(packet instanceof Contact p){uuid(out,p.player());text(out,p.playerName());text(out,p.point().dimension());out.writeInt(p.point().x());out.writeInt(p.point().y());out.writeInt(p.point().z());}
         else if(packet instanceof State p){
             text(out,p.status());out.writeFloat(p.health());out.writeByte(p.food());
             text(out,p.point().dimension());out.writeInt(p.point().x());out.writeInt(p.point().y());out.writeInt(p.point().z());
-            people(out,p.trusted());strings(out,p.settings());people(out,p.players());out.writeLong(p.policyVersion());strings(out,p.update());strings(out,p.session());
+            people(out,p.trusted());strings(out,protocol>=8?p.settings():legacy(p.settings()));people(out,p.players());out.writeLong(p.policyVersion());strings(out,p.update());strings(out,p.session());
         }else if(packet instanceof Request p){uuid(out,p.id());uuid(out,p.target());out.writeByte(p.action().ordinal());text(out,p.key());text(out,p.value());}
         else if(packet instanceof Execute p){uuid(out,p.id());uuid(out,p.requester());uuid(out,p.target());text(out,p.command());}
         else if(packet instanceof Policy p){
-            uuid(out,p.id());uuid(out,p.requester());uuid(out,p.target());out.writeLong(p.version());strings(out,p.settings());
+            uuid(out,p.id());uuid(out,p.requester());uuid(out,p.target());out.writeLong(p.version());strings(out,protocol>=8?p.settings():legacy(p.settings()));
             out.writeShort(p.trust().size());for(var entry:p.trust().entrySet()){uuid(out,entry.getKey());out.writeBoolean(entry.getValue());}
-        }else if(packet instanceof Receipt p){uuid(out,p.id());uuid(out,p.requester());out.writeBoolean(p.success());text(out,p.message());}
+        }else if(packet instanceof Receipt p){uuid(out,p.id());uuid(out,p.requester());out.writeBoolean(p.success());text(out,p.message());if(protocol>=8)out.writeByte(p.stage().ordinal());}
         else if(packet instanceof Defaults p){
-            out.writeLong(p.version());strings(out,p.settings());out.writeShort(p.trust().size());
+            out.writeLong(p.version());strings(out,protocol>=8?p.settings():legacy(p.settings()));out.writeShort(p.trust().size());
             for(var entry:p.trust().entrySet()){uuid(out,entry.getKey());out.writeBoolean(entry.getValue());}
         }
     }
     public static Packet decode(DataInputStream in,int type,UUID reporter,String name)throws IOException {
+        return decode(in,type,reporter,name,NetworkProtocol.VERSION);
+    }
+    private static Map<String,String> legacy(Map<String,String> values){Map<String,String> result=new LinkedHashMap<>();values.forEach((key,value)->{if(NetworkSettings.legacySupported(key)&&result.size()<128)result.put(key,value);});return result;}
+    public static Packet decode(DataInputStream in,int type,UUID reporter,String name,int protocol)throws IOException {
         long time=in.readLong();
         return switch(type){
-            case 15,16,17 -> OperationsPackets.decode(in,type,reporter,name,time);
+            case 15,16,17 -> OperationsPackets.decode(in,type,reporter,name,time,protocol);
             case 14 -> new Contact(reporter,name,uuid(in),text(in,16),new Endpoint(text(in,128),in.readInt(),in.readInt(),in.readInt()),time);
-            case 9,10 -> TeamPackets.decode(in,type,reporter,name,time);
+            case 9,10 -> TeamPackets.decode(in,type,reporter,name,time,protocol);
             case 3 -> new State(reporter,name,text(in,512),in.readFloat(),in.readUnsignedByte(),new Endpoint(text(in,128),in.readInt(),in.readInt(),in.readInt()),people(in,128,64),strings(in),people(in,256,16),in.readLong(),time,strings(in),strings(in));
             case 4 -> {UUID id=uuid(in),target=uuid(in);int action=in.readUnsignedByte();if(action>=Action.values().length)throw new IOException("Unknown control action");yield new Request(reporter,name,id,target,Action.values()[action],text(in,128),text(in,512),time);}
             case 5 -> new Execute(reporter,name,uuid(in),uuid(in),uuid(in),text(in,220),time);
@@ -138,7 +147,7 @@ public final class ControlPackets {
                 Map<UUID,Boolean> trust=new LinkedHashMap<>();for(int i=0;i<count;i++){UUID player=uuid(in);if(player==null||trust.put(player,in.readBoolean())!=null)throw new IOException("Duplicate trust change");}
                 yield new Policy(reporter,name,id,requester,target,version,settings,trust,time);
             }
-            case 7 -> new Receipt(reporter,name,uuid(in),uuid(in),in.readBoolean(),text(in,512),time);
+            case 7 -> {UUID id=uuid(in),requester=uuid(in);boolean success=in.readBoolean();String message=text(in,512);int stage=protocol>=8?in.readUnsignedByte():(success?Stage.APPLIED.ordinal():Stage.FAILED.ordinal());if(stage>=Stage.values().length)throw new IOException("Invalid order stage");yield new Receipt(reporter,name,id,requester,success,message,time,Stage.values()[stage]);}
             case 8 -> {
                 long version=in.readLong();Map<String,String> settings=strings(in);int count=in.readUnsignedShort();
                 if(count>128)throw new IOException("Too many trust defaults");

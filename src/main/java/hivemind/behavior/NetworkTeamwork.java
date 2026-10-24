@@ -44,7 +44,7 @@ public final class NetworkTeamwork {
     NetworkTeamwork(NetworkBehavior parent,HiveMind bot){this.parent=parent;this.bot=bot;}
     public boolean enabled(){return parent.transport()!=null;}
     public boolean storageAccess(hivemind.utils.mining.WorldRoutes.Endpoint point,Map<String,Integer> targets){
-        if(!enabled())return true;long now=System.currentTimeMillis();storageRenewed=now;
+        if(!enabled()||!parent.transport().isHost()&&parent.transport().protocol()<8)return true;long now=System.currentTimeMillis();storageRenewed=now;
         if(!Objects.equals(storageClaim,point)){storageClaim=point;nextSend=0;}
         storageTargets=targets.entrySet().stream().limit(16).collect(java.util.stream.Collectors.toUnmodifiableMap(Map.Entry::getKey,Map.Entry::getValue));
         if(!ready()||plan==null)return false;Lease lease=plan.leases().get(parent.localIdentity().id());return lease!=null&&lease.until()>now&&lease.point().equals(point);

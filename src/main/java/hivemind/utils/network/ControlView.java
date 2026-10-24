@@ -23,7 +23,7 @@ public final class ControlView {
         for(var spec:NetworkSettings.all())list.add("{\"name\":"+quote(spec.name())+",\"group\":"+quote(spec.group())+",\"type\":"+quote(spec.type())+",\"min\":"+spec.min()+",\"max\":"+spec.max()+",\"choices\":["+spec.choices().stream().map(NetworkAtlas::quote).reduce((a,b)->a+","+b).orElse("")+"]}");
         out.append(list).append("],\"defaults\":").append(strings(defaults)).append(",\"trustDefaults\":{");StringJoiner trustList=new StringJoiner(",");trust.forEach((id,add)->trustList.add(quote(id.toString())+":"+add));
         out.append(trustList).append("},\"actions\":[");list=new StringJoiner(",");
-        for(History request:history){StringJoiner replies=new StringJoiner(",");for(Receipt receipt:request.results())replies.add("{\"bot\":"+quote(receipt.reporter().toString())+",\"name\":"+quote(receipt.reporterName())+",\"ok\":"+receipt.success()+",\"message\":"+quote(receipt.message())+"}");
+        for(History request:history){StringJoiner replies=new StringJoiner(",");for(Receipt receipt:request.results())replies.add("{\"bot\":"+quote(receipt.reporter().toString())+",\"name\":"+quote(receipt.reporterName())+",\"ok\":"+receipt.success()+",\"stage\":"+quote(receipt.stage().name().toLowerCase(Locale.ROOT))+",\"message\":"+quote(receipt.message())+"}");
             list.add("{\"id\":"+quote(request.id().toString())+",\"description\":"+quote(request.description())+",\"t\":"+request.time()+",\"expected\":["+request.expected().stream().map(id->quote(id.toString())).reduce((a,b)->a+","+b).orElse("")+"],\"results\":["+replies+"]}");}
         return out.append(list).append("]}").toString();
     }

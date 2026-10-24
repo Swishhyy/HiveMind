@@ -195,6 +195,7 @@ public class HiveMind implements IHiveMind {
         this.registerBehavior(this.operations);
         this.registerBehavior(this.combat);
         this.registerBehavior(this.clutch);
+        this.registerBehavior(new MaintenanceBehavior(this));
         this.registerBehavior(new UpdateBehavior(this));
         this.registerBehavior(new SessionBehavior(this));
     }
@@ -205,6 +206,20 @@ public class HiveMind implements IHiveMind {
 
     public hivemind.utils.reliability.ActionArbiter getActions(){return actions;}
     public ReliabilityProcess getReliability(){return reliability;}
+    public hivemind.utils.reliability.ActionArbiter.Owner actionOwner(Object actor){
+        if(actor==stalkProcess&&stalkProcess.committedCombat())return new hivemind.utils.reliability.ActionArbiter.Owner("combat",90);
+        if((actor==flight||actor==elytraProcess)&&flight!=null&&flight.escaping())return new hivemind.utils.reliability.ActionArbiter.Owner("flight",95);
+        return hivemind.utils.reliability.ActionArbiter.owner(actor.getClass().getSimpleName());
+    }
+    /** Reserve known active work before earlier listeners can change its slots or inputs. */
+    public void planActions(){
+        actions.manual(isPlayerClient());if(isPlayerClient()||playerContext.player()==null)return;
+        var player=playerContext.player();
+        if(clutch.imminent()){actions.reserve(new hivemind.utils.reliability.ActionArbiter.Owner("fall rescue",100),hivemind.utils.reliability.ActionArbiter.Channel.values());return;}
+        if(flight.flying()){var owner=actionOwner(flight);actions.reserve(owner,hivemind.utils.reliability.ActionArbiter.Channel.MOVEMENT,hivemind.utils.reliability.ActionArbiter.Channel.LOOK,hivemind.utils.reliability.ActionArbiter.Channel.HAND,hivemind.utils.reliability.ActionArbiter.Channel.USE);return;}
+        Object actor=conflictProcess.isActive()||stalkProcess.committedCombat()?combat:survivalProcess.isActive()&&!survivalProcess.isWaiting()?survivalProcess:shulkerProcess.isActive()?shulkerProcess:depositProcess.isActive()?depositProcess:null;
+        if(actor!=null)actions.reserve(actionOwner(actor),hivemind.utils.reliability.ActionArbiter.Channel.values());
+    }
 
     public <T extends IBehavior> T registerBehavior(Function<HiveMind, T> constructor) {
         final T behavior = constructor.apply(this);

@@ -73,7 +73,7 @@ public final class ControlRules {
         checkSize(next,null);AtomicProperties.write(file,next);values=next;version=revision;
     }
     private void checkSize(Properties properties,UUID target){
-        if(settings(properties,target).size()>128||trust(properties,target).size()>128)throw new IllegalArgumentException("A bot policy may contain at most 128 settings/trusted-player changes");
+        if(settings(properties,target).size()>160||trust(properties,target).size()>128)throw new IllegalArgumentException("A bot policy may contain at most 160 settings and 128 trusted-player changes");
     }
     public Map<String,String> settings(UUID target){return settings(values,target);}
     private Map<String,String> settings(Properties properties,UUID target){
@@ -97,6 +97,8 @@ public final class ControlRules {
         if(command==null)throw new IllegalArgumentException("Use a supported bot command, such as stop, pause, resume, mine, deposit, stalk, kill, escort, gather, repair or job");
         return command;
     }
+    public static boolean workCommand(String command){String[] words=command.trim().replaceFirst("^#","").split("\\s+");String label=words[0].toLowerCase(Locale.ROOT),first=words.length>1?words[1].toLowerCase(Locale.ROOT):"";if(Set.of("stop","status","list","history","sightings","report","point","add","remove","set","reset","pause","clear","handoff","resolve").contains(first))return false;return Set.of("recall","mine","goto","path","follow","explore","farm","build","gettoblock","deposit","deliver","escort","recover","gather","repair","elytra","stalk","kill","scout","assist").contains(label)||label.equals("roam")&&first.equals("on")||label.equals("job")&&Set.of("start","resume").contains(first);}
+    public static boolean mutatesTask(String command){String[] words=command.trim().replaceFirst("^#","").split("\\s+",3);String label=words[0].toLowerCase(Locale.ROOT),first=words.length>1?words[1].toLowerCase(Locale.ROOT):"";return workCommand(command)||Set.of("stop","cancel","pause","resume","forcecancel","c","p","r").contains(label)||Set.of("job","scout","stalk","kill","deliver","escort","repair","gather").contains(label)&&Set.of("stop","pause","resume","clear","cancel","remove","move").contains(first);}
     public static final class Coordinator {
         private final ControlRules rules;
         private final Identity host;
@@ -112,9 +114,10 @@ public final class ControlRules {
                 if(request.action()==Action.COMMAND){
                     String command=command(request.value());
                     String label=command.split(" ",2)[0].toLowerCase(Locale.ROOT);
-                    Boolean held=Set.of("stop","cancel","pause","forcecancel").contains(label)?Boolean.TRUE:Set.of("resume","roam").contains(label)?Boolean.FALSE:null;
-                    if(held!=null)rules.change(new Request(request.reporter(),request.reporterName(),request.id(),request.target(),Action.SETTING,"botFleetHold",held.toString(),now));
-                    if(request.target()!=null&&!online.contains(request.target()))throw new IllegalArgumentException("Bot is offline; command was not run");
+                    if(request.target()!=null&&!online.contains(request.target())&&!Set.of("stop","cancel","pause","forcecancel","resume","recall").contains(label))throw new IllegalArgumentException("Bot is offline; command was not run");
+                    Boolean held=Set.of("stop","cancel","pause","forcecancel").contains(label)?Boolean.TRUE:label.equals("resume")||workCommand(command)?Boolean.FALSE:null;
+                    if(held!=null){rules.change(new Request(request.reporter(),request.reporterName(),request.id(),request.target(),Action.SETTING,"botFleetHold",held.toString(),now));rules.change(new Request(request.reporter(),request.reporterName(),request.id(),request.target(),Action.SETTING,"botFleetRecall",Boolean.toString(label.equals("recall")),now));rules.change(new Request(request.reporter(),request.reporterName(),request.id(),request.target(),Action.SETTING,"botFleetControlRevision",""+rules.version(),now));}
+                    if(request.target()!=null&&!online.contains(request.target())){if(held!=null)return List.of(new Receipt(host.id(),host.name(),request.id(),request.reporter(),true,"Saved hold policy; applies when this bot reconnects. Work commands must be sent while online.",now));throw new IllegalArgumentException("Bot is offline; command was not run");}
                     return List.of(new Execute(host.id(),host.name(),request.id(),request.reporter(),request.target(),command,rules.nextCommandTime(now)));
                 }
                 rules.change(request);

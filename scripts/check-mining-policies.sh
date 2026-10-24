@@ -82,6 +82,8 @@ fi
     src/main/java/hivemind/utils/network/ClientNetworkKey.java \
     src/main/java/hivemind/utils/network/ControlPackets.java \
     src/main/java/hivemind/utils/network/CommandLedger.java \
+    src/main/java/hivemind/utils/network/OrderLifecycle.java \
+    src/main/java/hivemind/utils/network/ReceiptJournal.java \
     src/main/java/hivemind/utils/network/TeamPackets.java \
     src/main/java/hivemind/utils/network/Teamwork.java \
     src/main/java/hivemind/utils/network/RoamPolicy.java \

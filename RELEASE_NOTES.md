@@ -1,10 +1,15 @@
-**HiveMind 0.1.1.2 — stable roam flights and carried supplies first**
+**HiveMind 0.1.2.0 — coordinated recovery and long-running fleets**
 
-- Missing spare armor/wings and ordinary kit top-ups no longer order a landing immediately after takeoff. Carried refuel landings use nearly depleted loose consumables; the next departure waits for a critical carried refill.
-- Count useful items inside carried shulkers when choosing supplies. Use those boxes first, including when they cover only part of the request, before deciding whether external storage is needed.
-- Wait for a quiet grounded placement/opening opportunity instead of treating a delayed box-open attempt as absent stock. Preserve box recovery and stop on an unconfirmed/no-progress refill.
-- Roaming does not return solely for optional armor or an extra backup wing. Automatic mining/combat reserve bands and a ten-minute unchanged-shortage cooldown reduce repeated storage trips. `#kit now` still requests the full configured loadout.
+- One action owner coordinates movement, looking, hands, inventory and item use. Emergency survival/combat can preempt storage and equipment work without competing clicks.
+- Keep the original task through combat, supply trips, portals, disconnects and restarts. Confirm inventory and task results from actual server observations. Unconfirmed delivery drops are retained for inspection instead of being sent twice.
+- Count known carried shulker contents, safely inspect unknown boxes, reserve shared storage, rank healthy bases, request spare supplies from idle teammates, and perform bounded maintenance using registered stations and carried ingredients.
+- Budget longer trips, share committed flight phases across tasks, keep launch/landing/portal failure memory, adapt waits to observed server latency, and regroup after repeated deaths.
+- Ordered, durable command acknowledgements distinguish accepted, started, blocked, completed and cancelled work. Fleet pause and `#recall` survive reconnects; recall returns to a known base and holds the original job until `#resume`.
+- Add protected, dangerous, exploration, building and storage regions from commands or the map. Distinguish fresh ESP hints, firsthand observations and historical sightings. Bound terrain/entity work per tick.
+- A local supervisor detects frozen bot ticks as well as crashes. Staged fleet updates grant one restart at a time, verify a healthy canary, and pause on failures. Updated clients and the controller retain verified previous builds and hold failed releases after rollback.
+- Protocol 8 negotiates with protocol 7 clients/controllers. New coordination features activate between capable peers; player clients remain manual. Bot filenames and existing component update channels stay compatible.
+- `#doctor status/export/retry` explains current recovery and exports an allowlisted support bundle. A read-only soak monitor records fleet metrics without network keys or launcher information.
 
-Bot and player clients advance to **0.1.1.2**. The controller remains **0.1.1.0** and reuses its existing release files and update manifest. Install the client update and restart Minecraft once to apply the fixes.
+Bot, player and controller each advance to **0.1.2.0** because all three components changed. Their versions remain independent for future releases. Older clients need one normal restart to load the new supervisor/update capabilities. Player clients continue installing after manual closure.
 
-Validation covers reserve planning through launch consumption, helpful and partial carried boxes, optional gear, genuine shortages and retry timing. CI also builds against Minecraft 26.3 and runs the controller, policy and Gradle checks. Live flight and server inventory interactions still require gameplay verification.
+Validation includes policy/controller/network/packaging/updater regressions, old/new encrypted interoperability, Minecraft 26.3 compilation, and a **simulated** eight-hour policy soak (576,000 ticks, 5,939 combat preemptions, eight checkpoint reloads). Live flight, inventory permissions and overnight server operation still require gameplay testing; the included monitor supports that verification.
