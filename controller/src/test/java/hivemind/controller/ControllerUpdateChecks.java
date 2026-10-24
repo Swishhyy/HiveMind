@@ -58,7 +58,7 @@ public final class ControllerUpdateChecks {
             // A verified download can still fail at runtime: restore the previous build and hold that release.
             Files.write(jar,original);Files.write(updates.resolve("download.jar"),data);Files.delete(marker);
             var boot=List.of(ControllerUpdater.javaExecutable().toString(),"-cp",System.getProperty("java.class.path"),ControllerUpdateChecks.class.getName(),"--boot-check",jar.toString(),ControllerUpdater.digest(jar),marker.toString());
-            saved.setProperty("target",jar.toString());saved.setProperty("argc",""+boot.size());for(int i=0;i<boot.size();i++)saved.setProperty("arg."+i,boot.get(i));Files.write(plan,properties(saved));
+            saved.setProperty("target",jar.toRealPath().toString());saved.setProperty("argc",""+boot.size());for(int i=0;i<boot.size();i++)saved.setProperty("arg."+i,boot.get(i));Files.write(plan,properties(saved));
             var brokenBoot=new ProcessBuilder(commands.get(0)).inheritIO().start();check(brokenBoot.waitFor(30,TimeUnit.SECONDS)&&brokenBoot.exitValue()==0,"Failed new boot did not roll back");
             deadline=System.nanoTime()+TimeUnit.SECONDS.toNanos(10);while(!Files.exists(marker)&&System.nanoTime()<deadline)Thread.sleep(25);
             check(Files.exists(marker)&&Files.readString(marker).equals("restored")&&Arrays.equals(original,Files.readAllBytes(jar)),"Previous controller did not actually relaunch after startup failure");
