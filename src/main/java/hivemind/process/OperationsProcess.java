@@ -21,6 +21,8 @@ public final class OperationsProcess extends HiveMindProcessHelper implements IB
     private final Map<String,OperationsPackets.Obstacle> obstacles=new ConcurrentHashMap<>();
     private BlockPos sidestep;
     private long recoveryUntil,walkUntil,nextSupply,supplyDeadline;
+    private long groundRecoveryStarted;
+    private BlockPos groundRecoveryOrigin;
     private boolean supplying,baseTrip,returningFromBase,supplyPortableOnly;
     private hivemind.utils.mining.WorldRoutes.Endpoint baseDestination,supplyOrigin;
     private long blockerUntil;
@@ -39,11 +41,11 @@ public final class OperationsProcess extends HiveMindProcessHelper implements IB
     public boolean recalling(){return recalling;}
     public void cancelRecall(){recalling=false;recallBase=null;}
     public boolean requestRecall(){
-        if(recalling)return true;if(ctx.player()==null||ctx.world()==null||hivemind.getShulkerProcess().isActive()||hivemind.getShulkerProcess().hasPendingRecovery()||hivemind.getDepositProcess().isActive()||hivemind.getWorkstationProcess().isActive())return false;
+        if(recalling)return true;if(ctx.player()==null||ctx.world()==null||hivemind.getShulkerProcess().isActive()||hivemind.getShulkerProcess().blocksTravel()||hivemind.getDepositProcess().isActive()||hivemind.getWorkstationProcess().isActive())return false;
         var base=bestBase();if(base==null){blocker="Recall waiting for a registered usable base";next="Register a base, or resume the retained task";blockerUntil=System.currentTimeMillis()+10000;return false;}recallBase=base.point();recalling=true;blocker="Returning to a known base on recall";next="Hold the original task at the base until resume";return true;
     }
     public boolean returnForOutage(){
-        if(outageReturn)return true;if(supplying||waitingDelivery!=null||busy()||hivemind.getShulkerProcess().hasPendingRecovery())return false;
+        if(outageReturn)return true;if(supplying||waitingDelivery!=null||busy()||hivemind.getShulkerProcess().blocksTravel())return false;
         var base=bestBase();if(base==null)return false;
         if(hivemind.getFlight().flying()){if(hivemind.getElytraProcess() instanceof ElytraProcess flight)flight.requestLanding();return false;}
         if(!ctx.player().onGround())return false;outageBase=base.point();outageReturn=true;blocker="Controller disconnected; returning to a known base";next="Hold at the base until the controller reconnects";return true;
@@ -56,7 +58,7 @@ public final class OperationsProcess extends HiveMindProcessHelper implements IB
     @Override public boolean isTemporary(){return true;}
     @Override public double priority(){return .3;}
     @Override public boolean isActive(){return !hivemind.isPlayerClient()&&(recalling||outageReturn||waitingDelivery!=null||supplying||System.currentTimeMillis()<recoveryUntil);}
-    public boolean walking(){return System.currentTimeMillis()<walkUntil;}
+    public boolean walking(){long now=System.currentTimeMillis();if(walkUntil==0)return false;double distance=groundRecoveryOrigin==null||ctx.player()==null?0:Math.hypot((double)ctx.playerFeet().getX()-groundRecoveryOrigin.getX(),(double)ctx.playerFeet().getZ()-groundRecoveryOrigin.getZ());if(!RecoveryPolicy.groundOnly(now,groundRecoveryStarted,walkUntil,distance)){walkUntil=0;groundRecoveryOrigin=null;return false;}return true;}
     public boolean transporting(){return recalling||baseTrip||outageReturn;}
     public String blocker(){return recalling||outageReturn||waitingDelivery!=null||supplying||System.currentTimeMillis()<blockerUntil?blocker:"";}public String nextAction(){return recalling||outageReturn||waitingDelivery!=null||supplying||System.currentTimeMillis()<blockerUntil?next:"Continue current task";}public int recoveries(){return recoveries;}
     private String key(OperationsPackets.Obstacle p){return p.point().dimension()+":"+p.point().x()+":"+p.point().y()+":"+p.point().z();}
@@ -146,7 +148,7 @@ public final class OperationsProcess extends HiveMindProcessHelper implements IB
         var targets=flightRefillTargets();
         if(!hivemind.getShulkerProcess().hasPortableItems(targets,true))return true;
         if(busy()||hivemind.getDepositProcess().isActive())return false;
-        if(stockRetry.ready(targets,ExpeditionLoadout.counts(ctx,targets.keySet()),System.currentTimeMillis()).isEmpty())return false;
+        if(stockRetry.ready(targets,ExpeditionLoadout.counts(ctx,targets.keySet()),System.currentTimeMillis()).isEmpty())return true;
         try{beginRestock(targets,true);}catch(RuntimeException error){abortBase("Carried flight refill: "+error.getMessage());}return false;
     }
     private void ensureScope(){var here=MiningRouteAccess.root(ctx);if(serverRoot==null){serverRoot=here;return;}if(!serverRoot.equals(here)){serverRoot=here;loadoutAccount=null;kits=null;journal=null;stockRetry.clear();obstacles.clear();onLostControl();nextSupply=0;walkUntil=0;blockerUntil=0;}}
@@ -196,19 +198,22 @@ public final class OperationsProcess extends HiveMindProcessHelper implements IB
     @Override public void onTick(TickEvent event){
         if(event.getState()!=EventState.PRE||event.getType()!=TickEvent.Type.IN||ctx.player()==null||!ctx.player().isAlive())return;
         long now=System.currentTimeMillis();ensureScope();
-        if(hivemind.getAutonomy().paused()||!BotWork.active(hivemind)||busy()){progress.sample("",0,0,false,now);return;}
+        if(hivemind.getReliability().holding()||hivemind.getAutonomy().paused()||!BotWork.active(hivemind)||busy()){progress.sample("",0,0,false,now);return;}
         if(!supplying&&!hivemind.getDepositProcess().isActive()&&!hivemind.getFlight().flying()){
             BlockPos destination=hivemind.getScoutProcess().destination();if(destination==null)destination=hivemind.getRoamProcess().destination();if(destination==null&&hivemind.getStalkProcess().isActive())destination=hivemind.getStalkProcess().teamPoint();
             if(destination==null&&(hivemind.getStalkProcess().hunting()||hivemind.getMineProcess().isActive()))destination=ctx.playerFeet();
             if(destination!=null&&!prepareTrip(destination))return;
         }
         if(supplying||hivemind.getDepositProcess().isActive()||now<recoveryUntil||!HiveMind.settings().botStuckRecovery.value)return;
-        var goal=hivemind.getPathingBehavior().getGoal();boolean moving=(hivemind.getPathingBehavior().isPathing()||hivemind.getFlight().flying())&&goal!=null&&!goal.isInGoal(ctx.playerFeet());
+        var goal=hivemind.getPathingBehavior().getGoal();
+        boolean paused=hivemind.getPathingControlManager().mostRecentCommand().map(command->command.commandType==PathingCommandType.REQUEST_PAUSE||command.commandType==PathingCommandType.SET_GOAL_AND_PAUSE).orElse(false);
+        boolean journey=hivemind.getRoamProcess().destination()!=null||hivemind.getScoutProcess().isActive()||hivemind.getCustomGoalProcess().travelling();
+        boolean moving=RecoveryPolicy.navigationPending(hivemind.getReliability().holding(),paused,hivemind.getFlight().flying(),journey,hivemind.getPathingBehavior().isPathing(),goal!=null,goal!=null&&goal.isInGoal(ctx.playerFeet()));
         RecoveryPolicy.Action action=progress.sample(goal==null?"":goal.toString(),ctx.player().getX(),ctx.player().getZ(),moving,now);if(action==RecoveryPolicy.Action.NONE)return;
         recoveries++;BlockPos failed=ctx.playerFeet().immutable();var who=hivemind.getNetwork().localIdentity();var obstacle=new OperationsPackets.Obstacle(who.id(),who.name(),MiningRouteAccess.endpoint(ctx,failed),"Repeated navigation failure",now+120000,now);accept(obstacle,now);hivemind.getNetwork().publishOperation(obstacle);
         hivemind.getFlight().cancel();hivemind.getPathingBehavior().secretInternalSegmentCancel();hivemind.getInputOverrideHandler().clearAllKeys();
         sidestep=null;if(action!=RecoveryPolicy.Action.REPATH){for(int n=0;n<8;n++){double angle=(recoveries+n)*Math.PI/4;BlockPos p=failed.offset((int)Math.round(Math.cos(angle)*5),0,(int)Math.round(Math.sin(angle)*5));if(ctx.world().hasChunkAt(p)&&ctx.world().getWorldBorder().isWithinBounds(p)&&ctx.world().getBlockState(p).getCollisionShape(ctx.world(),p).isEmpty()&&ctx.world().getBlockState(p.above()).getCollisionShape(ctx.world(),p.above()).isEmpty()&&!ctx.world().getBlockState(p.below()).getCollisionShape(ctx.world(),p.below()).isEmpty()){sidestep=p;break;}}}
-        if(action==RecoveryPolicy.Action.WALK)walkUntil=now+120000;recoveryUntil=now+(sidestep==null?1000:5000);blockerUntil=now+15000;blocker="Navigation stalled: "+action.name().toLowerCase(Locale.ROOT);next=action==RecoveryPolicy.Action.WALK?"Walk away from failed launch area before retrying flight":sidestep==null?"Calculate a fresh route":"Take a short detour, then resume";journal().note("Navigation",blocker+" at "+failed+"; "+next);
+        if(action==RecoveryPolicy.Action.WALK){walkUntil=now+20000;groundRecoveryStarted=now;groundRecoveryOrigin=failed;}recoveryUntil=now+(sidestep==null?1000:5000);blockerUntil=now+15000;blocker="Navigation stalled: "+action.name().toLowerCase(Locale.ROOT);next=action==RecoveryPolicy.Action.WALK?"Walk away from failed launch area before retrying flight":sidestep==null?"Calculate a fresh route":"Take a short detour, then resume";journal().note("Navigation",blocker+" at "+failed+"; "+next);
     }
     @Override public void onLostControl(){recalling=false;recallBase=null;outageReturn=false;outageBase=null;waitingDelivery=null;baseTrip=returningFromBase=supplyPortableOnly=false;baseDestination=supplyOrigin=null;supplying=false;recoveryUntil=0;sidestep=null;supplyBefore=Map.of();}
     @Override public String displayName0(){return blocker;}

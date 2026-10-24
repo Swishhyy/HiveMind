@@ -89,6 +89,8 @@ public final class CustomGoalProcess extends HiveMindProcessHelper implements IC
         return this.mostRecentGoal;
     }
 
+    public boolean travelling(){return state==State.PATH_REQUESTED||state==State.EXECUTING;}
+
     @Override
     public boolean isActive() {
         return this.state != State.NONE;

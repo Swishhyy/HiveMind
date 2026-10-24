@@ -143,7 +143,7 @@ public final class ReliabilityProcess extends HiveMindProcessHelper implements I
         List<TaskCheckpoint.Interruption> stack=new ArrayList<>();
         if(hivemind.getConflictProcess().isActive())stack.add(new TaskCheckpoint.Interruption("combat","Threat response","Threat cleared and equipment checked",now));
         if(hivemind.getSurvivalProcess().isActive())stack.add(new TaskCheckpoint.Interruption("survival",hivemind.getSurvivalProcess().status(),"Health, food and equipment ready",now));
-        if(hivemind.getShulkerProcess().isActive()||hivemind.getShulkerProcess().hasPendingRecovery())stack.add(new TaskCheckpoint.Interruption("portable supplies","Restocking or recovering a placed box","Box recovered and actual supplies checked",now));
+        if(hivemind.getShulkerProcess().blocksTravel())stack.add(new TaskCheckpoint.Interruption("portable supplies","Restocking or recovering a placed box","Box recovered and actual supplies checked",now));
         if(hivemind.getDepositProcess().isActive())stack.add(new TaskCheckpoint.Interruption("storage","Storage trip","Confirmed transfer and return to task",now));
         if(hivemind.getPortalTravelProcess().isActive())stack.add(new TaskCheckpoint.Interruption("portal","Dimension transfer","Expected dimension and exit observed",now));
         if(now<deathHold)stack.add(new TaskCheckpoint.Interruption("death recovery","Repeated deaths in one area","Regroup cooldown or explicit resume",now));
@@ -165,7 +165,7 @@ public final class ReliabilityProcess extends HiveMindProcessHelper implements I
     private void restore(long now){
         if(task.intent().isBlank()||task.held()||holding()||now<nextRestore||!ctx.player().isAlive()||hivemind.getAutonomy().paused()||hivemind.getCompanionProcess().awaitingDeathInventory()||hivemind.getJobManager().hasQueuedJobs()||hivemind.getAutonomy().order()!=null)return;
         if(BotWork.foreground(hivemind)||hivemind.getFlight().flying()){resumeBlocker="";return;}
-        if(inventoryNeedsReconcile||ctx.minecraft().gui.screen()!=null||ctx.player().containerMenu!=ctx.player().inventoryMenu||!ctx.player().inventoryMenu.getCarried().isEmpty()||hivemind.getShulkerProcess().hasPendingRecovery()){resumeBlocker="Waiting for inventory reconciliation or placed-box recovery";nextRestore=now+2000;return;}
+        if(inventoryNeedsReconcile||ctx.minecraft().gui.screen()!=null||ctx.player().containerMenu!=ctx.player().inventoryMenu||!ctx.player().inventoryMenu.getCarried().isEmpty()||hivemind.getShulkerProcess().blocksTravel()){resumeBlocker="Waiting for inventory reconciliation or placed-box recovery";nextRestore=now+2000;return;}
         String command=task.resume(),label=command.trim().replaceFirst("^#","").split("\\s+",2)[0];
         if(!Set.of("mine","goto","follow","explore","gather","repair","recover","assist","deliver","escort","scout").contains(label)){resumeBlocker="Saved intent retained; its task prerequisites must be restored before resuming";nextRestore=now+10000;return;}
         try{

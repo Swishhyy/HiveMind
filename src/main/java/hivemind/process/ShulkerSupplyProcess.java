@@ -105,6 +105,8 @@ public final class ShulkerSupplyProcess extends HiveMindProcessHelper implements
         return false;
     }
     public boolean hasPendingRecovery(){load();return store.box()!=null;}
+    public boolean blocksTravel(){load();var pending=store.box();return PortableSupplyPolicy.blocksTravel(isActive(),pending!=null,pending!=null&&pending.point().dimension().equals(MiningRouteAccess.dimension(ctx)),pending==null?Double.POSITIVE_INFINITY:MiningRouteAccess.position(pending.point()).distSqr(ctx.playerFeet()),pending!=null&&ctx.world().hasChunkAt(MiningRouteAccess.position(pending.point())),pending!=null&&System.currentTimeMillis()>=retryAt&&hivemind.getReliability().routes().available("shulker",pending.point(),System.currentTimeMillis()));}
+
     public boolean requestSupplies(){return ctx.player()!=null&&request(loadout());}
     private boolean request(List<Need> wanted){
         if(!allowed()||System.currentTimeMillis()<retryAt)return false;
