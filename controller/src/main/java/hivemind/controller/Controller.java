@@ -22,6 +22,7 @@ public final class Controller implements AutoCloseable {
     private final ControlRules.Coordinator coordinator;
     private final Teamwork teamwork;
     private final SessionDecisions sessions=new SessionDecisions();
+    private final RollingUpdates rollout;
     private final ArrayBlockingQueue<WebControlAction> actions=new ArrayBlockingQueue<>(64);
     private final Map<UUID,Contact> contacts=new LinkedHashMap<>();
     private final Map<UUID,State> known=new LinkedHashMap<>();
@@ -33,8 +34,10 @@ public final class Controller implements AutoCloseable {
     private long lastPlan,lastPage,lastSave,lastDefaults;
     private volatile String error="";
     private volatile boolean closed;
+    private boolean healthMarked;
     public Controller(Path root,String bind,int port,String webBind,int webPort,URI publicUrl,String advertise,String scope)throws Exception{
         this.root=root.toAbsolutePath().normalize();Files.createDirectories(this.root);this.scope=scope;this.advertise=advertise;
+        rollout=new RollingUpdates(this.root);
         if(!scope.matches("[A-Za-z0-9_.:-]{1,128}")||!advertise.matches("[A-Za-z0-9_.:%-]{1,253}"))throw new IllegalArgumentException("Use a simple scope and host name or IP");
         Path config=this.root.resolve("controller.properties");Properties p=AtomicProperties.read(config);
         p.putIfAbsent("id",UUID.randomUUID().toString());p.putIfAbsent("key",NetworkProtocol.newKey());p.putIfAbsent("webToken",NetworkProtocol.newKey());AtomicProperties.write(config,p);
@@ -61,13 +64,23 @@ public final class Controller implements AutoCloseable {
         loop.scheduleWithFixedDelay(()->{try{tick(System.currentTimeMillis());}catch(Exception e){error=e.getClass().getSimpleName()+": "+Objects.toString(e.getMessage(),"Controller error");System.err.println(error);}},0,100,TimeUnit.MILLISECONDS);
     }
     public String url(){return web.url();}public int port(){return wire.boundPort();}public Identity identity(){return identity;}public String key(){return key;}
-    private void remember(Receipt receipt){receipts.put(receipt.id()+":"+receipt.reporter(),receipt);while(receipts.size()>256)receipts.remove(receipts.keySet().iterator().next());}
+    private void remember(Receipt receipt){Receipt previous=receipts.get(receipt.id()+":"+receipt.reporter());if(previous!=null&&(receipt.observedAt()<previous.observedAt()||Set.of(Stage.COMPLETED,Stage.CANCELLED,Stage.FAILED).contains(previous.stage())&&!Set.of(Stage.COMPLETED,Stage.CANCELLED,Stage.FAILED).contains(receipt.stage())))return;receipts.put(receipt.id()+":"+receipt.reporter(),receipt);while(receipts.size()>2048)receipts.remove(receipts.keySet().iterator().next());}
     private void dispatch(Request request,long now){
-        List<UUID> online=wire.states().stream().filter(state->!hivemind.utils.network.ClientRole.player(state.session())).map(State::reporter).toList();
+        boolean updates=request.action()==Action.COMMAND&&request.value().replaceFirst("^#","").startsWith("update");
+        List<UUID> online=wire.states().stream().filter(state->updates||!hivemind.utils.network.ClientRole.player(state.session())).map(State::reporter).toList();
         for(Packet packet:coordinator.handle(request,online,now)){if(packet instanceof Receipt receipt)remember(receipt);wire.publish(packet);}
     }
     private void submit(WebControlAction action,long now){
         String key=action.key();
+        if(action.action()==Action.COMMAND&&action.target()==null&&(action.value().replaceFirst("^#","").startsWith("update rollout")||action.value().replaceFirst("^#","").equals("update install"))){
+            pending.put(action.id(),new ControlView.History(action.id(),"Fleet update rollout",List.of(identity.id()),now,List.of()));while(pending.size()>32)pending.remove(pending.keySet().iterator().next());
+            String command=action.value().replaceFirst("^#","").trim();
+            if(command.equals("update rollout")||command.equals("update install"))rollout.start(wire.states(),wire.operations(),now);
+            else if(command.equals("update rollout pause"))rollout.pause("Paused by operator",now);
+            else if(command.equals("update rollout resume"))rollout.resume(now);
+            else if(!command.equals("update rollout status"))throw new IllegalArgumentException("Use update rollout [status|pause|resume]");
+            remember(new Receipt(identity.id(),identity.name(),action.id(),identity.id(),true,rollout.status(),now));return;
+        }
         if(action.action()==Action.TRUST){
             try{key=UUID.fromString(key).toString();}catch(IllegalArgumentException e){
                 String name=key;Set<UUID> matches=wire.states().stream().flatMap(state->state.players().entrySet().stream()).filter(entry->entry.getValue().equalsIgnoreCase(name)).map(Map.Entry::getKey).collect(Collectors.toSet());
@@ -82,6 +95,7 @@ public final class Controller implements AutoCloseable {
     }
     private void tick(long now){
         if(closed)return;
+        if(!healthMarked&&wire.boundPort()>0){ControllerUpdater.healthy();healthMarked=true;}
         for(Message message:wire.drain(256)){
             if(message instanceof Contact c){contacts.values().removeIf(p->!p.valid(now));if(contacts.size()<512||contacts.containsKey(c.player()))contacts.put(c.player(),c);}
             else if(message instanceof State state){known.put(state.reporter(),state);while(known.size()>64)known.remove(known.keySet().iterator().next());}
@@ -92,6 +106,11 @@ public final class Controller implements AutoCloseable {
         }
         WebControlAction action;for(int i=0;i<8&&(action=actions.poll())!=null;i++)try{submit(action,now);}catch(RuntimeException e){remember(new Receipt(identity.id(),identity.name(),action.id(),identity.id(),false,Objects.toString(e.getMessage(),"Action rejected"),now));}
         List<State> live=wire.states();
+        if(Set.of(RollingUpdates.Phase.IDLE,RollingUpdates.Phase.COMPLETE).contains(rollout.phase())){
+            var automatic=live.stream().filter(s->!ClientRole.player(s.session())&&Boolean.parseBoolean(s.session().getOrDefault("connected","true"))&&Boolean.parseBoolean(s.update().getOrDefault("automatic","false"))).toList();
+            if(automatic.stream().anyMatch(s->Boolean.parseBoolean(s.update().getOrDefault("restart","false"))&&!s.update().getOrDefault("available","").equals(s.update().getOrDefault("version",""))))rollout.start(automatic,wire.operations(),now);
+        }
+        RollingUpdates.Command maintenance=rollout.tick(live,now);if(maintenance!=null){UUID id=UUID.randomUUID();pending.put(id,new ControlView.History(id,"Rollout: #"+maintenance.command(),List.of(maintenance.target()),now,List.of()));while(pending.size()>32)pending.remove(pending.keySet().iterator().next());dispatch(new Request(identity.id(),identity.name(),id,maintenance.target(),Action.COMMAND,"",maintenance.command(),now),now);}
         for(var observation:wire.operations()){lastOperations.put(observation.reporter(),observation);while(lastOperations.size()>64)lastOperations.remove(lastOperations.keySet().iterator().next());}
         if(now-lastPlan>=500){
             Set<UUID> playing=live.stream().filter(state->Boolean.parseBoolean(state.session().getOrDefault("connected","true"))).map(State::reporter).collect(Collectors.toSet());
@@ -108,7 +127,7 @@ public final class Controller implements AutoCloseable {
             List<ControlView.History> history=new ArrayList<>();for(var request:pending.values())history.add(new ControlView.History(request.id(),request.description(),request.expected(),request.time(),receipts.values().stream().filter(receipt->receipt.id().equals(request.id())).toList()));Collections.reverse(history);
             String join="#network controller "+advertise+" "+wire.boundPort()+" "+key+" "+scope;
             web.controls(ControlView.withOperations(ControlView.json(identity,true,true,key,known.values().stream().sorted(Comparator.comparing(State::reporterName)).toList(),live.stream().map(State::reporter).collect(Collectors.toSet()),rules.settings(null),rules.trust(null),history,
-                Map.of("standalone","true","scope",scope,"joinCommand",join,"version",Main.VERSION)),lastOperations.values()));
+                Map.of("standalone","true","scope",scope,"joinCommand",join,"version",Main.VERSION,"rollout",rollout.status())),lastOperations.values()));
             lastPage=now;
         }
         if(now-lastSave>=30000){save();lastSave=now;}

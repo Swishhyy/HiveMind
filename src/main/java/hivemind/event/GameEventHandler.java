@@ -34,6 +34,7 @@ import net.minecraft.world.level.chunk.LevelChunk;
 
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
+import hivemind.utils.reliability.ActionArbiter;
 
 /**
  * @author Brady
@@ -65,17 +66,18 @@ public final class GameEventHandler implements IEventBus, Helper {
         } else {
             hivemind.bsi = null;
         }
-        enabledListeners().forEach(l -> l.onTick(event));
+        if(event.getState()==EventState.PRE&&event.getType()==TickEvent.Type.IN)hivemind.planActions();else hivemind.getActions().manual(hivemind.isPlayerClient());
+        enabledListeners().forEach(l -> dispatch(l, () -> l.onTick(event)));
     }
 
     @Override
     public void onPostTick(TickEvent event) {
-        enabledListeners().forEach(l -> l.onPostTick(event));
+        enabledListeners().forEach(l -> dispatch(l, () -> l.onPostTick(event)));
     }
 
     @Override
     public final void onPlayerUpdate(PlayerUpdateEvent event) {
-        enabledListeners().forEach(l -> l.onPlayerUpdate(event));
+        enabledListeners().forEach(l -> dispatch(l, () -> l.onPlayerUpdate(event)));
     }
 
     @Override
@@ -199,6 +201,15 @@ public final class GameEventHandler implements IEventBus, Helper {
         return listeners.stream().filter(l -> !hivemind.isPlayerClient()
             || l instanceof hivemind.behavior.NetworkBehavior || l instanceof hivemind.behavior.EntityAwareness
             || l instanceof hivemind.behavior.LookBehavior || l instanceof hivemind.behavior.UpdateBehavior);
+    }
+
+    private void dispatch(IGameEventListener listener,Runnable action){
+        var owner=hivemind.actionOwner(listener);
+        if(listener instanceof hivemind.behavior.PathingBehavior){
+            var process=hivemind.getPathingControlManager().mostRecentInControl().orElse(null);
+            if(process!=null)owner=hivemind.actionOwner(process);
+        }
+        try(var scope=hivemind.getActions().scope(owner.name(),owner.priority())){action.run();}
     }
 
     @Override

@@ -4,7 +4,7 @@ The controller runs without Minecraft and owns the network relay, coordination, 
 
 ## Start
 
-Windows: download `hivemind-controller-0.1.0.10-windows-x64.zip`, extract the **whole folder**, and run `HiveMindController.exe`. Its Java runtime is included; keep the neighboring folders beside the executable. The console prints a clickable dashboard address containing its access token. Open it, go to **Settings**, and copy the **Bot connection command** into each client's chat once while joined to the intended server.
+Windows: download `hivemind-controller-0.1.2.0-windows-x64.zip`, extract the **whole folder**, and run `HiveMindController.exe`. Its Java runtime is included; keep the neighboring folders beside the executable. The console prints a clickable dashboard address containing its access token. Open it, go to **Settings**, and copy the **Bot connection command** into each client's chat once while joined to the intended server.
 
 Linux, macOS or a server with Java 17+: `java -jar hivemind-controller.jar`. The same dashboard and connection command work there. Minecraft clients still require Java 25 and Fabric 26.3.
 
@@ -75,7 +75,7 @@ Each instance asks once on its first server join whether to enable automatic dow
 #update auto off
 ```
 
-Updates verify size, SHA-256, mod identity, Minecraft version and build commit. A separate helper waits for that game process to exit, backs up the existing mod in `hivemind/updates/backups`, then replaces it for the next launch. It never replaces the running jar or forces Minecraft to close. The standalone controller is a separate download; replacing its files requires stopping it. Its durable data directory can be reused.
+Updates verify size, SHA-256, mod identity, Minecraft version and build commit. A separate helper waits for that game process to exit, backs up the existing mod in `hivemind/updates/backups`, then replaces it for the next launch. Player clients install after you close Minecraft. Supervised bot clients can request a safe restart after a controller grant; immediate session/combat logout still only disconnects from the server. The controller checks its own channel before opening on launch. Its durable data directory can be reused.
 
 ## Building and checks
 
@@ -164,3 +164,29 @@ Storage positions are checked after arrival with a brief loading grace period. I
 Use **Survival** settings for the armor/ender options. Breaking, placing, inventory movement and shulker use have no disable switches. Controller and both client editions are 0.1.0.12 in bundle 0.1.0.13; update the controller too because its settings catalogue and saved-policy migration have changed. Restart the standalone controller to install its update, and use `#update install` plus a Minecraft restart for clients. Player clients remain manual.
 
 Old capability switches are removed from chat settings, config forms and the dashboard. Existing global and individual controller policies migrate automatically while preserving other settings and trust. Bots still choose when an action is useful, wait for suitable shulker placement and recover their own boxes before borrowing another. Manual player clients remain manual.
+
+
+## Reliability, supervision and fleet updates (0.1.2.0)
+
+`#pause` holds work, `#recall` returns to a known base and holds the original task, and `#resume` continues it. Fleet directives persist for reconnecting bots. Offline ordinary work is rejected. A recall waits for safe box/container recovery and retains its destination through reconnects. Without a usable base it reports the blocker and retains the request.
+
+The local supervisor accepts these optional profile values:
+
+```properties
+watchdogSeconds=120
+startupGraceSeconds=300
+maxRestarts=5
+automaticUpdateRestart=true
+```
+
+The heartbeat belongs to that configured child process or its descendant. Startup grace avoids treating a slow launch as a freeze; deliberately held clients suppress automatic recovery. Old client builds without tick heartbeats retain crash-only supervision. Restart backoff is capped at five minutes, and five consecutive failed launches stop recovery. A healthy ten-minute run resets the crash count. A normal deliberate exit stops supervision; a safe authorized update exit restarts after the installer finishes.
+
+On **Updates**, Start fleet rollout selects current autonomous bots, pins the candidate version, and grants the canary first. Each bot must reconnect with that version and stay healthy for sixty seconds before another receives a restart grant. Failures pause the queue; controller restart also pauses an unfinished rollout for review. Pause/resume buttons manage it. `#update install` for all targets uses this rollout; individual targets update separately. Player clients are excluded from automatic fleet restarts. Their updater still downloads the player artifact and installs after manual closure.
+
+A bot requires this local supervisor, restart permission, a resumable task, quiet grounded space and clear inventory state before it exits for an update. It finishes placed-box/container work first. After three failed launches without a healthy new build, the next attempt restores the previous verified JAR and compatible configuration snapshot, preserving the original mod filename. The failed release is pinned; inspect the failure before `#update unpin`. Controller startup likewise restores its verified previous JAR after a failed new startup and pins that version; `--retry-update` clears its pin. These are recovery paths, not a guarantee that every gameplay regression can be detected automatically.
+
+Protocol 8 negotiates with protocol 7 in both directions. Legacy peers retain baseline commands and observations. New regions, detailed receipt stages, stock reservations and safe restart grants need updated peers. Bot/player/controller versions advance independently according to the source that changed.
+
+Commands → Action responses distinguishes acknowledgement from completion. The current owners, task checkpoint, interruptions, shulker manifests and failure strategy appear in bot details and `#doctor status`; `#doctor export` writes a support ZIP under the bot instance's `hivemind/diagnostics`. Reports exclude keys, credentials and chat.
+
+For an unattended trial, use `python3 scripts/soak-monitor.py 'http://127.0.0.1:28767/#VIEW_TOKEN' --hours 8 --output soak-results`. For shell-history privacy set `HIVEMIND_VIEW_TOKEN` and omit the URL fragment. It reads `/api/control` only and records selected health, stale/offline reports, recovery/transfer counters and terminal receipts. Missing receipts are never counted as completed work. The automated eight-hour simulation tests policies, not a live Minecraft server.

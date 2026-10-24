@@ -77,6 +77,7 @@ public final class BotNetwork implements AutoCloseable {
     public List<Identity> peers() { return peers.values().stream().map(peer -> peer.channel.remote()).sorted(Comparator.comparing(Identity::name)).toList(); }
     public long connectionEpoch(){return connectionEpoch;}
     public boolean connected() { return !peers.isEmpty(); }
+    public int protocol(){return peers.values().stream().mapToInt(p->p.channel.protocol()).min().orElse(NetworkProtocol.VERSION);}
     public String status() {
         if (closed) return "Network off";
         String state = host ? boundPort == 0 ? "Starting network host" : "Hosting on " + address + ":" + boundPort : connected() ? "Connected to " + address + ":" + port : "Connecting to " + address + ":" + port;

@@ -93,8 +93,9 @@ public final class PortalTravelProcess extends HiveMindProcessHelper implements 
     private BlockPos knownEntrance(String targetDimension, BlockPos targetPosition) {
         if (targetDimension != null && targetPosition != null) {
             WorldRoutes.Endpoint goal = new WorldRoutes.Endpoint(targetDimension, targetPosition.getX(), targetPosition.getY(), targetPosition.getZ());
-            WorldRoutes.Endpoint best = new PortalLinks(MiningRouteAccess.root(ctx)).best(MiningRouteAccess.dimension(ctx), targetDimension,
-                    MiningRouteAccess.endpoint(ctx, ctx.playerFeet()), goal);
+            var here=MiningRouteAccess.endpoint(ctx,ctx.playerFeet());long now=System.currentTimeMillis();
+            WorldRoutes.Endpoint best = new PortalLinks(MiningRouteAccess.root(ctx)).recent().stream().filter(link->link.from().dimension().equals(here.dimension())&&link.to().dimension().equals(targetDimension))
+                    .min(java.util.Comparator.comparingDouble(link->Math.hypot((double)here.x()-link.from().x(),(double)here.z()-link.from().z())+Math.hypot((double)goal.x()-link.to().x(),(double)goal.z()-link.to().z())+hivemind.getReliability().routes().penalty("portal",link.from(),now))).map(PortalLinks.Link::from).orElse(null);
             if (best != null) return MiningRouteAccess.position(best);
         }
         BlockPos nearby = nearbyPortal(6);
@@ -152,6 +153,8 @@ public final class PortalTravelProcess extends HiveMindProcessHelper implements 
                 WorldRoutes.Endpoint actual = MiningRouteAccess.endpoint(ctx, bottom(arrived));
                 MiningRouteAccess.store(ctx).setPortal(actual);
                 new PortalLinks(worldRoot).record(new WorldRoutes.Endpoint(source, entrance.getX(), entrance.getY(), entrance.getZ()), actual);
+                hivemind.getReliability().routes().success("portal",new WorldRoutes.Endpoint(source,entrance.getX(),entrance.getY(),entrance.getZ()),System.currentTimeMillis());
+                hivemind.getReliability().success("portal","Expected dimension and portal exit confirmed: "+actual);
                 hivemind.getOperations().journal().note("Portal", source + " " + entrance + " arrived " + destination + " " + bottom(arrived));
                 hivemind.getMineProcess().invalidateWorldTargets();
                 exit = safeExit();
@@ -253,6 +256,7 @@ public final class PortalTravelProcess extends HiveMindProcessHelper implements 
     }
 
     private PathingCommand fail(String reason) {
+        if(entrance!=null&&source!=null&&ctx.player()!=null&&ctx.world()!=null)hivemind.getReliability().routes().failed("portal",new WorldRoutes.Endpoint(source,entrance.getX(),entrance.getY(),entrance.getZ()),reason,System.currentTimeMillis());
         if (ctx.player() != null && ctx.world() != null) hivemind.getOperations().journal().note("Portal", reason);
         hivemind.getCompanionProcess().stopWithReason("Portal: " + reason);
         hivemind.getRepairProcess().stopWithReason("Portal: " + reason);

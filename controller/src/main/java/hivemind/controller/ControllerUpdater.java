@@ -65,6 +65,7 @@ public final class ControllerUpdater {
         if(ControllerUpdateManifest.compare(manifest.version(),version)<=0){System.out.println("Controller "+version+" is up to date");return false;}
         target=target.toRealPath();Path updates=target.getParent().resolve(".hivemind-controller-updates");Files.createDirectories(updates);
         if(Files.isSymbolicLink(updates))throw new IOException("Update directory must not be a symlink");
+        Path pin=updates.resolve("pinned-release.properties");if(Files.isRegularFile(pin)&&manifest.version().equals(readPlan(pin).getProperty("version"))){System.out.println("Controller release "+manifest.version()+" is held after a failed startup; running "+version);return false;}
         try(var channel=FileChannel.open(updates.resolve("update.lock"),StandardOpenOption.CREATE,StandardOpenOption.WRITE);var lock=channel.tryLock()){
             if(lock==null)throw new IOException("Another controller updater is running");
             Path plan=updates.resolve("install.properties");
@@ -86,6 +87,16 @@ public final class ControllerUpdater {
         }
     }
     static Properties readPlan(Path plan)throws IOException {Properties p=new Properties();try(var in=Files.newInputStream(plan)){p.load(in);}return p;}
+    static void healthy(){
+        try{Path jar=installedJar();if(!Files.isRegularFile(jar)||!jar.toString().endsWith(".jar"))return;Path updates=jar.getParent().resolve(".hivemind-controller-updates");Files.createDirectories(updates);Properties p=new Properties();p.setProperty("version",Main.VERSION);p.setProperty("pid",""+ProcessHandle.current().pid());p.setProperty("time",""+System.currentTimeMillis());writeState(updates.resolve("healthy.properties"),p);}catch(Exception error){System.err.println("Controller health marker unavailable: "+error.getMessage());}
+    }
+    static void unpin()throws Exception{Path jar=installedJar();Files.deleteIfExists(jar.getParent().resolve(".hivemind-controller-updates/pinned-release.properties"));}
+    private static void writeState(Path file,Properties p)throws IOException{Files.createDirectories(file.getParent());Path temp=Files.createTempFile(file.getParent(),"controller-state-",".tmp");try{try(var out=Files.newOutputStream(temp)){p.store(out,"HiveMind controller recovery");}move(temp,file);}finally{Files.deleteIfExists(temp);}}
+    static void rollback(Path updates,Path target,String previousSha,String nextSha,String version)throws IOException{
+        Path backup=updates.resolve("previous.jar");if(!updates.getParent().equals(target.getParent())||Files.isSymbolicLink(target)||!digest(backup).equals(previousSha)||!digest(target).equals(nextSha))throw new IOException("Controller rollback identity could not be verified");
+        Path temp=target.resolveSibling(".hivemind-controller-rollback.tmp");try{Files.copy(backup,temp,StandardCopyOption.REPLACE_EXISTING);if(!digest(temp).equals(previousSha))throw new IOException("Controller rollback copy failed verification");move(temp,target);}finally{Files.deleteIfExists(temp);}
+        Properties p=new Properties();p.setProperty("version",version);p.setProperty("reason","Updated controller did not become healthy");writeState(updates.resolve("pinned-release.properties"),p);
+    }
     static void replace(Path plan)throws Exception {
         var p=readPlan(plan);var manifest=ControllerUpdateManifest.read(propertiesBytes(p));Path updates=plan.toRealPath().getParent();
         Path target=Path.of(p.getProperty("target")).toAbsolutePath().normalize(),staged=Path.of(p.getProperty("staged")).toRealPath();
@@ -111,9 +122,20 @@ public final class ControllerUpdater {
             long deadline=System.nanoTime()+TimeUnit.SECONDS.toNanos(60);
             while(true){var lock=channel.tryLock();if(lock!=null){lock.close();break;}if(System.nanoTime()>=deadline)throw new IOException("Controller did not exit before update timeout");Thread.sleep(100);}
         }
-        try{replace(plan);}catch(Exception e){System.err.println("Controller update failed; retaining installed version: "+e);Files.deleteIfExists(plan);}
+        Path target=Path.of(p.getProperty("target")).toAbsolutePath().normalize(),updates=plan.toRealPath().getParent();String previousSha=digest(target);boolean installed=false;
+        Path pin=updates.resolve("pinned-release.properties");
+        if(Files.isRegularFile(pin)&&p.getProperty("version").equals(readPlan(pin).getProperty("version"))&&!previousSha.equals(p.getProperty("sha256"))){System.err.println("Keeping the previous controller; this release is held after a failed startup");Files.deleteIfExists(plan);}
+        else try{replace(plan);installed=true;}catch(Exception e){System.err.println("Controller update failed; retaining installed version: "+e);Files.deleteIfExists(plan);}
         // No shell: quoted paths, spaces, tokens and custom server flags remain separate arguments.
         var restart=new ProcessBuilder(plannedCommand(p)).directory(Path.of(p.getProperty("cwd")).toFile()).inheritIO();
-        restart.environment().put("HIVEMIND_CONTROLLER_UPDATED",p.getProperty("version"));restart.start();
+        restart.environment().put("HIVEMIND_CONTROLLER_UPDATED",p.getProperty("version"));Process child=restart.start();if(!installed)return;
+        long deadline=System.nanoTime()+TimeUnit.SECONDS.toNanos(90);boolean good=false;
+        while(System.nanoTime()<deadline){
+            Path health=updates.resolve("healthy.properties");if(Files.isRegularFile(health)){Properties state=readPlan(health);if(p.getProperty("version").equals(state.getProperty("version"))&&Long.toString(child.pid()).equals(state.getProperty("pid"))){good=true;break;}}
+            if(child.waitFor(1,TimeUnit.SECONDS)){good=child.exitValue()==0;break;}
+        }
+        if(good)return;
+        if(child.isAlive()){child.destroy();if(!child.waitFor(5,TimeUnit.SECONDS))child.destroyForcibly().waitFor(5,TimeUnit.SECONDS);}
+        rollback(updates,target,previousSha,p.getProperty("sha256"),p.getProperty("version"));System.err.println("Updated controller failed startup; previous verified controller restored and failed release held.");restart.start();
     }
 }

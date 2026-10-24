@@ -30,7 +30,8 @@ import java.util.*;
 
 /** Bounded, mutually authenticated, encrypted observations and explicitly routed client control. */
 public final class NetworkProtocol {
-    private static final int MAGIC = 0x484d4e44, VERSION = 7, MAX_FRAME = 65536;
+    public static final int VERSION = 8;
+    private static final int MAGIC = 0x484d4e44, MAX_FRAME = 65536;
     private static final SecureRandom RANDOM = new SecureRandom();
     public static final long MAX_AGE_MS = 600000, HISTORY_MS = 30L * 86400000, CLOCK_SKEW_MS = 10000;
     public sealed interface Message permits Sighting, Exploration, ControlPackets.Packet, TerrainPackets.Tile, TerrainPackets.Site, TerrainPackets.Marker {
@@ -100,11 +101,14 @@ public final class NetworkProtocol {
     private static void uuid(DataOutputStream out, UUID value) throws IOException { out.writeLong(value.getMostSignificantBits()); out.writeLong(value.getLeastSignificantBits()); }
     private static UUID uuid(DataInputStream in) throws IOException { return new UUID(in.readLong(), in.readLong()); }
     public static byte[] encode(Message message) throws IOException {
+        return encode(message,VERSION);
+    }
+    public static byte[] encode(Message message,int protocol) throws IOException {
         ByteArrayOutputStream bytes = new ByteArrayOutputStream(); DataOutputStream body = new DataOutputStream(bytes);
         body.writeByte(message == null ? 0 : message instanceof Sighting ? 1 : message instanceof Exploration ? 2 : message instanceof TerrainPackets.Tile?11:message instanceof TerrainPackets.Site?12:message instanceof TerrainPackets.Marker?13:ControlPackets.type((ControlPackets.Packet)message));
         if (message != null) {
             uuid(body, message.reporter()); text(body, message.reporterName());
-            if(message instanceof ControlPackets.Packet packet)ControlPackets.encode(body,packet);
+            if(message instanceof ControlPackets.Packet packet)ControlPackets.encode(body,packet,protocol);
             else if(message instanceof TerrainPackets.Tile||message instanceof TerrainPackets.Site||message instanceof TerrainPackets.Marker){body.writeLong(message.observedAt());TerrainPackets.encode(body,message);}
             else{
                 if (message instanceof Sighting sighting) { uuid(body, sighting.player()); text(body, sighting.playerName()); }
@@ -115,6 +119,9 @@ public final class NetworkProtocol {
         byte[] encoded=bytes.toByteArray();if(encoded.length>MAX_FRAME-16)throw new IOException("Control packet exceeds frame limit");return encoded;
     }
     public static Message decode(byte[] bytes) throws IOException {
+        return decode(bytes,VERSION);
+    }
+    public static Message decode(byte[] bytes,int protocol) throws IOException {
         if (bytes.length > MAX_FRAME) throw new IOException("Oversized network message");
         try {
             DataInputStream body = new DataInputStream(new ByteArrayInputStream(bytes)); int type = body.readUnsignedByte(); Message result = null;
@@ -124,7 +131,7 @@ public final class NetworkProtocol {
                 Endpoint point = new Endpoint(text(body, 128), body.readInt(), body.readInt(), body.readInt()); long time = body.readLong();
                 result = type == 1 ? new Sighting(reporter, reporterName, player, playerName, point, time) : new Exploration(reporter, reporterName, point, time);
             } else if(type>=11&&type<=13){UUID reporter=uuid(body);String name=text(body,16);result=TerrainPackets.decode(body,type,reporter,name,body.readLong());
-            } else if(type>=14&&type<=17||type>=3&&type<=10)result=ControlPackets.decode(body,type,uuid(body),text(body,16));
+            } else if(type>=14&&type<=17||type>=3&&type<=10)result=ControlPackets.decode(body,type,uuid(body),text(body,16),protocol);
             else if (type != 0) throw new IOException("Unknown network message");
             if (body.available() != 0) throw new IOException("Trailing network data");
             return result;
@@ -137,9 +144,10 @@ public final class NetworkProtocol {
     private static Identity identity(DataInputStream in) throws IOException {
         String scope = text(in, 64); UUID id = uuid(in); return new Identity(id, text(in, 16), scope);
     }
-    private static void header(DataOutputStream out) throws IOException { out.writeInt(MAGIC); out.writeInt(VERSION); }
-    private static void header(DataInputStream in) throws IOException {
-        if (in.readInt() != MAGIC || in.readInt() != VERSION) throw new IOException("Incompatible bot network version");
+    private static final byte[] CAPABILITY="HIVEMND8".getBytes(StandardCharsets.US_ASCII);
+    private static void header(DataOutputStream out,int version) throws IOException { out.writeInt(MAGIC); out.writeInt(version); }
+    private static int header(DataInputStream in) throws IOException {
+        if(in.readInt()!=MAGIC)throw new IOException("Not a HiveMind controller");int remote=in.readInt();if(remote<7||remote>VERSION)throw new IOException("Incompatible HiveMind network protocol: local "+VERSION+", remote "+remote+". Update the affected components.");return remote;
     }
     private static void checkPeer(Identity local, Identity remote) throws IOException {
         if (!local.scope().equals(remote.scope())) throw new IOException("Bots are connected to different Minecraft servers/scopes");
@@ -149,24 +157,26 @@ public final class NetworkProtocol {
         try {
             DataInputStream in = new DataInputStream(input); DataOutputStream out = new DataOutputStream(output);
             byte[] serverNonce = nonce(), key = key(secret), host = identity(local);
-            header(out); out.write(serverNonce); out.flush();
-            header(in); byte[] clientNonce = bytes(in, 32); Identity remote = identity(in); byte[] client = identity(remote);
+            // The initial header remains readable by protocol 7. The authenticated nonce advertises the upgrade.
+            System.arraycopy(CAPABILITY,0,serverNonce,0,CAPABILITY.length);header(out,7); out.write(serverNonce); out.flush();
+            int protocol=header(in); byte[] clientNonce = bytes(in, 32); Identity remote = identity(in); byte[] client = identity(remote);
             byte[] proof = bytes(in, 32);
             if (!MessageDigest.isEqual(proof, mac(key, "client", serverNonce, clientNonce, client))) throw new IOException("Network key rejected");
             checkPeer(local, remote);
             out.write(host); out.write(mac(key, "server", serverNonce, clientNonce, client, host)); out.flush();
-            return new Channel(in, out, remote, mac(key, "client-write", serverNonce, clientNonce, client, host), mac(key, "server-write", serverNonce, clientNonce, client, host));
+            return new Channel(in, out, remote, mac(key, "client-write", serverNonce, clientNonce, client, host), mac(key, "server-write", serverNonce, clientNonce, client, host),protocol);
         } catch (GeneralSecurityException | IllegalArgumentException e) { throw new IOException("Network authentication failed", e); }
     }
     public static Channel connect(InputStream input, OutputStream output, Identity local, String secret) throws IOException {
         try {
             DataInputStream in = new DataInputStream(input); DataOutputStream out = new DataOutputStream(output);
-            header(in); byte[] serverNonce = bytes(in, 32), clientNonce = nonce(), key = key(secret), client = identity(local);
-            header(out); out.write(clientNonce); out.write(client); out.write(mac(key, "client", serverNonce, clientNonce, client)); out.flush();
+            int offered=header(in); byte[] serverNonce = bytes(in, 32), clientNonce = nonce(), key = key(secret), client = identity(local);
+            int protocol=offered>=8||Arrays.equals(CAPABILITY,Arrays.copyOf(serverNonce,CAPABILITY.length))?8:7;
+            header(out,protocol); out.write(clientNonce); out.write(client); out.write(mac(key, "client", serverNonce, clientNonce, client)); out.flush();
             Identity remote = identity(in); byte[] host = identity(remote), proof = bytes(in, 32);
             if (!MessageDigest.isEqual(proof, mac(key, "server", serverNonce, clientNonce, client, host))) throw new IOException("Host network key rejected");
             checkPeer(local, remote);
-            return new Channel(in, out, remote, mac(key, "server-write", serverNonce, clientNonce, client, host), mac(key, "client-write", serverNonce, clientNonce, client, host));
+            return new Channel(in, out, remote, mac(key, "server-write", serverNonce, clientNonce, client, host), mac(key, "client-write", serverNonce, clientNonce, client, host),protocol);
         } catch (GeneralSecurityException | IllegalArgumentException e) { throw new IOException("Network authentication failed", e); }
     }
     /** Separate reader/writer threads; directional session keys and implicit counters reject replay and reflection. */
@@ -175,20 +185,23 @@ public final class NetworkProtocol {
         private final DataOutputStream out;
         private final byte[] readKey, writeKey;
         private final Identity remote;
+        private final int protocol;
         private long readSequence, writeSequence;
-        private Channel(DataInputStream in, DataOutputStream out, Identity remote, byte[] readKey, byte[] writeKey) {
+        private Channel(DataInputStream in, DataOutputStream out, Identity remote, byte[] readKey, byte[] writeKey,int protocol) {
             this.in = in; this.out = out; this.remote = remote; this.readKey = readKey; this.writeKey = writeKey;
+            this.protocol=protocol;
         }
         public Identity remote() { return remote; }
+        public int protocol(){return protocol;}
         private byte[] crypt(int mode, byte[] key, long sequence, byte[] data) throws GeneralSecurityException {
             if (sequence < 0) throw new GeneralSecurityException("Network sequence exhausted");
             Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
-            cipher.init(mode, new SecretKeySpec(key, "AES"), new GCMParameterSpec(128, ByteBuffer.allocate(12).putInt(VERSION).putLong(sequence).array()));
+            cipher.init(mode, new SecretKeySpec(key, "AES"), new GCMParameterSpec(128, ByteBuffer.allocate(12).putInt(protocol).putLong(sequence).array()));
             return cipher.doFinal(data);
         }
         public synchronized void write(Message message) throws IOException {
             try {
-                byte[] encrypted = crypt(Cipher.ENCRYPT_MODE, writeKey, writeSequence++, encode(message));
+                byte[] encrypted = crypt(Cipher.ENCRYPT_MODE, writeKey, writeSequence++, encode(message,protocol));
                 out.writeInt(encrypted.length); out.write(encrypted); out.flush();
             } catch (GeneralSecurityException e) { throw new IOException("Cannot encrypt network frame", e); }
         }
@@ -197,7 +210,7 @@ public final class NetworkProtocol {
             int length = in.readInt();
             if (length < 17 || length > MAX_FRAME) throw new IOException("Invalid network frame length");
             try {
-                return decode(crypt(Cipher.DECRYPT_MODE, readKey, readSequence++, bytes(in, length)));
+                return decode(crypt(Cipher.DECRYPT_MODE, readKey, readSequence++, bytes(in, length)),protocol);
             } catch (GeneralSecurityException | IllegalArgumentException e) { throw new IOException("Invalid encrypted network frame", e); }
         }
     }

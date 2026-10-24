@@ -22,6 +22,7 @@ import net.minecraft.world.phys.Vec3;
 
 /** Planned and unexpected bucket clutches share one owner and retry every reachable tick. */
 public final class BucketClutchBehavior extends Behavior {
+    public boolean imminent(){return active()||ctx.player()!=null&&ctx.world()!=null&&HiveMind.settings().botEmergencyBucketClutch.value&&!ctx.player().onGround()&&!ctx.player().isFallFlying()&&ctx.player().fallDistance>2.5&&ctx.player().getDeltaMovement().y<-.2&&ctx.player().getInventory().findSlotMatchingItem(new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.WATER_BUCKET))>=0&&ctx.world().dimension()!=net.minecraft.world.level.Level.NETHER;}
     private BlockPos planned,landing,placed;
     private long planAt,lastUse=Long.MIN_VALUE;
     private int previous=-1,wetTicks,pickupTicks;
@@ -65,10 +66,10 @@ public final class BucketClutchBehavior extends Behavior {
             if(destination<0)destination=8;
             ctx.playerController().windowClick(ctx.player().inventoryMenu.containerId,source,destination,ContainerInput.SWAP,ctx.player());source=destination;
         }
-        ctx.player().getInventory().setSelectedSlot(source);ctx.playerController().syncHeldItem();return ctx.player().getMainHandItem().is(item);
+        hivemind.getReliability().select(source);ctx.playerController().syncHeldItem();return ctx.player().getMainHandItem().is(item);
     }
     private void finish(){
-        if(previous>=0&&ctx.player()!=null&&ctx.minecraft().gameMode!=null){ctx.player().getInventory().setSelectedSlot(previous);ctx.playerController().syncHeldItem();}
+        if(previous>=0&&ctx.player()!=null&&ctx.minecraft().gameMode!=null){hivemind.getReliability().select(previous);ctx.playerController().syncHeldItem();}
         previous=-1;landing=placed=planned=null;attempted=false;wetTicks=pickupTicks=0;
     }
     @Override public void onTick(TickEvent event){

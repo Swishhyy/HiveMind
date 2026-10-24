@@ -107,6 +107,7 @@ public final class BotControlBehavior extends Behavior {
                 long[] id = new long[1];
                 hivemind.getJobManager().withOwner(player, () -> id[0] = hivemind.getJobManager().submit(quantity, blocks));
                 hivemind.getAutonomy().afterCommand(label,expanded.second().get(0).getValue().toLowerCase(Locale.ROOT));
+                hivemind.getReliability().command(command);
                 reply(player, "Queued mining job #" + id[0] + ": " + quantity + " " + String.join(" ", blocks));
                 return;
             } else {
@@ -116,6 +117,7 @@ public final class BotControlBehavior extends Behavior {
                     try {String first=expanded.second().isEmpty()?"":expanded.second().get(0).getValue().toLowerCase(Locale.ROOT);hivemind.getAutonomy().beforeCommand(label,first);target.execute(label, args);hivemind.getAutonomy().afterCommand(label,first);} catch (Exception e) { throw new IllegalArgumentException(e.getMessage(), e); }
                 });
             }
+            hivemind.getReliability().command(command);
             reply(player, "Accepted #" + command + "; " + hivemind.getAutonomy().status());
         } catch (Exception e) { reply(player, "Command failed: " + e.getMessage()); }
     }

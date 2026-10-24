@@ -41,8 +41,10 @@ import net.minecraft.world.phys.BlockHitResult;
 public final class HiveMindPlayerController implements IPlayerController {
 
     private final Minecraft mc;
+    private final hivemind.HiveMind bot;
 
-    public HiveMindPlayerController(Minecraft mc) {
+    public HiveMindPlayerController(hivemind.HiveMind bot,Minecraft mc) {
+        this.bot=bot;
         this.mc = mc;
     }
 
@@ -68,6 +70,7 @@ public final class HiveMindPlayerController implements IPlayerController {
 
     @Override
     public void windowClick(int windowId, int slotId, int mouseButton, ContainerInput type, Player player) {
+        if(!bot.getReliability().beforeClick(windowId,slotId,mouseButton,type.toString()))return;
         mc.gameMode.handleContainerInput(windowId, slotId, mouseButton, type, player);
     }
 
@@ -78,17 +81,20 @@ public final class HiveMindPlayerController implements IPlayerController {
 
     @Override
     public InteractionResult processRightClickBlock(LocalPlayer player, Level world, InteractionHand hand, BlockHitResult result) {
+        if(!bot.getActions().allow(hivemind.utils.reliability.ActionArbiter.Channel.USE,hivemind.utils.reliability.ActionArbiter.Channel.HAND))return InteractionResult.PASS;
         // primaryplayercontroller is always in a ClientWorld so this is ok
         return mc.gameMode.useItemOn(player, hand, result);
     }
 
     @Override
     public InteractionResult processRightClick(LocalPlayer player, Level world, InteractionHand hand) {
+        if(!bot.getActions().allow(hivemind.utils.reliability.ActionArbiter.Channel.USE,hivemind.utils.reliability.ActionArbiter.Channel.HAND))return InteractionResult.PASS;
         return mc.gameMode.useItem(player, hand);
     }
 
     @Override
     public boolean clickBlock(BlockPos loc, Direction face) {
+        if(!bot.getActions().allow(hivemind.utils.reliability.ActionArbiter.Channel.USE))return false;
         return mc.gameMode.startDestroyBlock(loc, face);
     }
 

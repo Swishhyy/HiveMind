@@ -249,7 +249,7 @@ public final class ConflictProcess extends HiveMindProcessHelper implements IBeh
         if(!safe||ctx.minecraft().gameMode==null)return new PathingCommand(null,PathingCommandType.REQUEST_PAUSE);
         hivemind.getInputOverrideHandler().clearAllKeys();ctx.playerController().resetBlockRemoving();
         if(previousSlot<0)previousSlot=ctx.player().getInventory().getSelectedSlot();
-        ctx.player().getInventory().setSelectedSlot(weapon);ctx.playerController().syncHeldItem();
+        hivemind.getReliability().select(weapon);ctx.playerController().syncHeldItem();
         if(MeleeCombat.aim(ctx,hivemind,target)&&ctx.player().getAttackStrengthScale(0)>=.95f){
             stopShieldUse();
             hivemind.getCombat().melee(target);
@@ -274,11 +274,11 @@ public final class ConflictProcess extends HiveMindProcessHelper implements IBeh
         if (weapon < 0 || ctx.minecraft().gameMode == null) return false;
         hivemind.getInputOverrideHandler().clearAllKeys(); ctx.playerController().resetBlockRemoving();
         if (previousSlot < 0) previousSlot = ctx.player().getInventory().getSelectedSlot();
-        ctx.player().getInventory().setSelectedSlot(weapon); ctx.playerController().syncHeldItem();
+        hivemind.getReliability().select(weapon); ctx.playerController().syncHeldItem();
         boolean aimed=MeleeCombat.aim(ctx,hivemind,(LivingEntity)target);
         if (aimed && ctx.player().getAttackStrengthScale(0) >= 0.95f) {
             stopShieldUse();
-            ctx.player().getInventory().setSelectedSlot(weapon); ctx.playerController().syncHeldItem();
+            hivemind.getReliability().select(weapon); ctx.playerController().syncHeldItem();
             if (!hivemind.getNetwork().team().clearStrike(target)) return false;
             hivemind.getCombat().melee((LivingEntity)target);
         } else if (ctx.player().getOffhandItem().is(Items.SHIELD)) {
@@ -316,7 +316,7 @@ public final class ConflictProcess extends HiveMindProcessHelper implements IBeh
     private void releaseShield() {
         stopShieldUse();
         if (ctx.player() != null) {
-            if (previousSlot >= 0) { ctx.player().getInventory().setSelectedSlot(previousSlot); if (ctx.minecraft().gameMode != null) ctx.playerController().syncHeldItem(); }
+            if (previousSlot >= 0) { hivemind.getReliability().select(previousSlot); if (ctx.minecraft().gameMode != null) ctx.playerController().syncHeldItem(); }
         }
         previousSlot = -1;
     }

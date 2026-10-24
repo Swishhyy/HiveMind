@@ -91,6 +91,7 @@ public final class ExploreProcess extends HiveMindProcessHelper implements IExpl
         IChunkFilter filter = calcFilter();
         if (!HiveMind.settings().disableCompletionCheck.value && filter.countRemain() == 0) {
             logDirect("Explored all chunks");
+            hivemind.getReliability().completed("explore","All requested chunks are present in the exploration cache");
             if (HiveMind.settings().notificationOnExploreFinished.value) {
                 logNotification("Explored all chunks", false);
             }

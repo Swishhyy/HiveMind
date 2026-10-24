@@ -128,6 +128,7 @@ public final class NetworkBehavior extends Behavior {
     public List<Identity> peers() { return network == null ? List.of() : network.peers(); }
     public BotNetwork transport(){return network;}
     public void publishOperation(ControlPackets.Packet packet){if(network!=null)network.publish(packet);}
+    public void publishReceipt(ControlPackets.Receipt receipt){if(controls!=null)controls.record(receipt);else if(ctx.player()!=null&&ctx.world()!=null)new ReceiptJournal(MiningRouteAccess.root(ctx),ctx.player().getUUID()).put(receipt);if(network!=null)network.publish(receipt);}
     public void requestAssistance(String mode,String item,String quantity){
         ensure();if(network==null||!network.connected())throw new IllegalStateException("Connect this client to the bot network first");
         var point=MiningRouteAccess.endpoint(ctx,ctx.playerFeet());long now=System.currentTimeMillis();UUID target=AssistancePolicy.choose(network.states().stream().filter(s->!s.reporter().equals(localIdentity().id())).toList(),network.operations(),point,now);
@@ -137,6 +138,16 @@ public final class NetworkBehavior extends Behavior {
     public String botCommandList(){ensure();if(network==null||!network.connected())throw new IllegalStateException("Connect this client to the bot network first");return controls.botCommandList();}
     public String requestBotCommand(String selector,String command){ensure();if(network==null||!network.connected())throw new IllegalStateException("Connect this client to the bot network first");return controls.requestBotCommand(selector,command);}
     public boolean controllerConnected(){return network!=null&&!network.isHost()&&network.connected();}
+    public boolean expectsController(){return config!=null?config.options().mode()==NetworkConfig.Mode.JOIN:java.nio.file.Files.isRegularFile(resumeFile);}
+    public UUID requestSupplyDelivery(String item,int quantity){
+        ensure();if(network==null||!network.connected())throw new IllegalStateException("Controller disconnected");long now=System.currentTimeMillis();var point=MiningRouteAccess.endpoint(ctx,ctx.playerFeet());
+        UUID provider=AssistancePolicy.supply(network.states().stream().filter(s->!s.reporter().equals(localIdentity().id())).toList(),network.operations(),point,item,quantity,now),id=UUID.randomUUID();
+        String command="#assist bring "+ctx.player().getGameProfile().name()+" "+point.dimension()+" "+point.x()+" "+point.y()+" "+point.z()+" "+item+" "+quantity;
+        if(!controls.enqueue(new WebControlAction(id,provider,ControlPackets.Action.COMMAND,"",command,now)))throw new IllegalStateException("Fleet command queue is busy");return id;
+    }
+    public ControlPackets.Receipt controlResult(UUID id){return controls==null?null:controls.result(id);}
+    public boolean autonomousPeer(UUID id){return network!=null&&network.states().stream().anyMatch(s->s.reporter().equals(id)&&s.valid(System.currentTimeMillis())&&!ClientRole.player(s.session()));}
+    public String deliveryFood(){return network==null?"":network.operations().stream().filter(p->p.valid(System.currentTimeMillis())).map(p->p.details().getOrDefault("foodItem","")).filter(s->!s.isBlank()).findFirst().orElse("");}
     private void saveLink(){
         if(config==null||root==null||rememberedIdentity==null||config.options().mode()!=NetworkConfig.Mode.JOIN)return;
         Properties p=new Properties();p.setProperty("root",root.toAbsolutePath().toString());p.setProperty("id",rememberedIdentity.id().toString());p.setProperty("name",rememberedIdentity.name());p.setProperty("scope",rememberedIdentity.scope());

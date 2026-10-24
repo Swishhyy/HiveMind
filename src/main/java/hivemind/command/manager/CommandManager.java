@@ -146,9 +146,11 @@ public class CommandManager implements ICommandManager {
             try {
                 if(hivemind.isPlayerClient()&&!ClientRole.localAllowed(label.toLowerCase(Locale.ROOT)))throw new CommandInvalidStateException("Player mode: use #client bot to enable automation");
                 String first=args.hasAny()?args.peekString().toLowerCase(Locale.ROOT):"";
+                String original=label+" "+args.rawRest();
                 hivemind.getAutonomy().beforeCommand(label,first);
                 this.command.execute(this.label, this.args);
                 hivemind.getAutonomy().afterCommand(label,first);
+                hivemind.getReliability().command(original);
             } catch (Throwable t) {
                 // Create a handleable exception, wrap if needed
                 ICommandException exception = t instanceof ICommandException

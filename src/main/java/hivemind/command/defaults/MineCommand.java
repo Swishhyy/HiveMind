@@ -18,6 +18,7 @@
 package hivemind.command.defaults;
 
 import hivemind.api.HiveMindAPI;
+import hivemind.HiveMind;
 import hivemind.api.IHiveMind;
 import hivemind.api.command.Command;
 import hivemind.api.command.argument.IArgConsumer;
@@ -45,6 +46,7 @@ public class MineCommand extends Command {
         while (args.hasAny()) {
             boms.add(consumeTarget(args));
         }
+        if(quantity>0){var bot=(HiveMind)hivemind;if(!bot.getJobManager().runningJobs())hivemind.getPathingBehavior().cancelEverything();long id=bot.getJobManager().submit(quantity,boms.stream().map(b->net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(b.getBlock()).toString()).toList());logDirect("Queued mining job #"+id);return;}
         hivemind.getPathingBehavior().cancelEverything();
         HiveMindAPI.getProvider().getWorldScanner().repack(ctx);
         logDirect(String.format("Mining %s", boms.toString()));

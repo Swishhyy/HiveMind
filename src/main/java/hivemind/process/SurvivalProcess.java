@@ -161,7 +161,7 @@ public final class SurvivalProcess extends HiveMindProcessHelper implements IBeh
         if (slot < 0) return;
         if (slot >= 9) { moveToHotbar(slot, 6); return; }
         if (previousSlot < 0) previousSlot = ctx.player().getInventory().getSelectedSlot();
-        ctx.player().getInventory().setSelectedSlot(slot); ctx.playerController().syncHeldItem();
+        hivemind.getReliability().select(slot); ctx.playerController().syncHeldItem();
         hivemind.getLookBehavior().updateTarget(new Rotation(ctx.player().getYRot(), -70), true);
         ownsUse = true;
         if (!ctx.player().isUsingItem()) ctx.playerController().processRightClick(ctx.player(), ctx.world(), InteractionHand.MAIN_HAND);
@@ -170,7 +170,7 @@ public final class SurvivalProcess extends HiveMindProcessHelper implements IBeh
         boolean release = ownsUse; ownsUse = false;
         if (ctx.player() != null) {
             if (release && ctx.player().isUsingItem() && ctx.minecraft().gameMode != null) ctx.minecraft().gameMode.releaseUsingItem(ctx.player());
-            if (previousSlot >= 0) { ctx.player().getInventory().setSelectedSlot(previousSlot); if (ctx.minecraft().gameMode != null) ctx.playerController().syncHeldItem(); }
+            if (previousSlot >= 0) { hivemind.getReliability().select(previousSlot); if (ctx.minecraft().gameMode != null) ctx.playerController().syncHeldItem(); }
         }
         previousSlot = -1;
     }

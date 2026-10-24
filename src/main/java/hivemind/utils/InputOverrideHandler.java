@@ -18,6 +18,7 @@
 package hivemind.utils;
 
 import hivemind.HiveMind;
+import hivemind.utils.reliability.ActionArbiter;
 import hivemind.api.HiveMindAPI;
 import hivemind.api.event.events.TickEvent;
 import hivemind.api.utils.IInputOverrideHandler;
@@ -42,6 +43,7 @@ public final class InputOverrideHandler extends Behavior implements IInputOverri
      * Maps inputs to whether or not we are forcing their state down.
      */
     private final Map<Input, Boolean> inputForceStateMap = new HashMap<>();
+    private final Map<Input, ActionArbiter.Owner> inputOwners = new HashMap<>();
 
     private final BlockBreakHelper blockBreakHelper;
     private final BlockPlaceHelper blockPlaceHelper;
@@ -60,7 +62,8 @@ public final class InputOverrideHandler extends Behavior implements IInputOverri
      */
     @Override
     public final boolean isInputForcedDown(Input input) {
-        return input == null ? false : this.inputForceStateMap.getOrDefault(input, false);
+        return input != null && this.inputForceStateMap.getOrDefault(input, false)
+                && hivemind.getActions().owns(channel(input),inputOwners.get(input));
     }
 
     /**
@@ -71,7 +74,10 @@ public final class InputOverrideHandler extends Behavior implements IInputOverri
      */
     @Override
     public final void setInputForceState(Input input, boolean forced) {
+        if(!forced){if(hivemind.getActions().canClear(inputOwners.get(input))){inputForceStateMap.remove(input);inputOwners.remove(input);}return;}
+        if(!hivemind.getActions().allow(channel(input)))return;
         this.inputForceStateMap.put(input, forced);
+        inputOwners.put(input,hivemind.getActions().current());
     }
 
     /**
@@ -79,8 +85,10 @@ public final class InputOverrideHandler extends Behavior implements IInputOverri
      */
     @Override
     public final void clearAllKeys() {
-        this.inputForceStateMap.clear();
+        inputForceStateMap.keySet().removeIf(input->{if(!hivemind.getActions().canClear(inputOwners.get(input)))return false;inputOwners.remove(input);return true;});
     }
+
+    private static ActionArbiter.Channel channel(Input input){return input==Input.CLICK_LEFT||input==Input.CLICK_RIGHT?ActionArbiter.Channel.USE:ActionArbiter.Channel.MOVEMENT;}
 
     @Override
     public final void onTick(TickEvent event) {

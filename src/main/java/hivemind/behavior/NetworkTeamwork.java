@@ -38,8 +38,18 @@ public final class NetworkTeamwork {
     private Plan plan;
     private BlockPos mineClaim;
     private long nextSend;
+    private hivemind.utils.mining.WorldRoutes.Endpoint storageClaim;
+    private Map<String,Integer> storageTargets=Map.of();
+    private long storageRenewed;
     NetworkTeamwork(NetworkBehavior parent,HiveMind bot){this.parent=parent;this.bot=bot;}
     public boolean enabled(){return parent.transport()!=null;}
+    public boolean storageAccess(hivemind.utils.mining.WorldRoutes.Endpoint point,Map<String,Integer> targets){
+        if(!enabled()||!parent.transport().isHost()&&parent.transport().protocol()<8)return true;long now=System.currentTimeMillis();storageRenewed=now;
+        if(!Objects.equals(storageClaim,point)){storageClaim=point;nextSend=0;}
+        storageTargets=targets.entrySet().stream().limit(16).collect(java.util.stream.Collectors.toUnmodifiableMap(Map.Entry::getKey,Map.Entry::getValue));
+        if(!ready()||plan==null)return false;Lease lease=plan.leases().get(parent.localIdentity().id());return lease!=null&&lease.until()>now&&lease.point().equals(point);
+    }
+    public void releaseStorage(){storageClaim=null;storageTargets=Map.of();nextSend=0;}
     public boolean ready(){return !enabled()||plan!=null&&plan.valid(System.currentTimeMillis())&&(parent.transport().isHost()||parent.transport().connected());}
     public void reset(boolean forget){host=new Teamwork(System.currentTimeMillis()+4000+NetworkProtocol.CLOCK_SKEW_MS);plan=null;mineClaim=null;nextSend=0;if(forget)allies.clear();}
     private void remember(UUID id){allies.remove(id);allies.add(id);while(allies.size()>256)allies.remove(allies.iterator().next());}
@@ -60,13 +70,14 @@ public final class NetworkTeamwork {
         var ctx=bot.getPlayerContext();var who=parent.localIdentity();
         var controlled=bot.getPathingControlManager().mostRecentInControl().orElse(null);
         var stalk=bot.getStalkProcess();Kind kind=Kind.IDLE;UUID target=null;BlockPos work=null;boolean explosive=false,engaged=false;
-        if(controlled==bot.getMineProcess()&&bot.getMineProcess().isActive()){kind=Kind.MINE;work=mineClaim;}
+        if(storageClaim!=null&&now-storageRenewed<2000&&bot.getDepositProcess().isActive()){kind=Kind.STORAGE;work=MiningRouteAccess.position(storageClaim);}
+        else if(controlled==bot.getMineProcess()&&bot.getMineProcess().isActive()){kind=Kind.MINE;work=mineClaim;}
         else if(stalk.isActive()){
             kind=stalk.hunting()?Kind.HUNT:Kind.STALK;target=stalk.target();work=stalk.teamPoint();
             explosive=controlled==stalk&&stalk.teamExplosives();engaged=controlled==stalk&&stalk.committedCombat();
         }else if(bot.getRoamProcess().isActive()){kind=Kind.ROAM;work=bot.getRoamProcess().destination();}
         if(kind!=Kind.MINE)mineClaim=null;
-        Intent intent=new Intent(who.id(),who.name(),kind,target,MiningRouteAccess.endpoint(ctx,ctx.playerFeet()),work==null?null:MiningRouteAccess.endpoint(ctx,work),explosive,engaged,now);
+        Intent intent=new Intent(who.id(),who.name(),kind,target,MiningRouteAccess.endpoint(ctx,ctx.playerFeet()),work==null?null:MiningRouteAccess.endpoint(ctx,work),explosive,engaged,now,kind==Kind.STORAGE?storageTargets:Map.of());
         if(wire.isHost())host.accept(intent,now);else wire.publish(intent);
         if(wire.isHost()){
             plan=host.plan(who,wire.peers(),now);plan.members().keySet().forEach(this::remember);wire.publish(plan);

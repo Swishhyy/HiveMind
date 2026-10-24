@@ -18,6 +18,7 @@
 package hivemind.process;
 
 import hivemind.HiveMind;
+import hivemind.utils.mining.MiningRouteAccess;
 import hivemind.api.IHiveMind;
 import hivemind.api.event.events.*;
 import hivemind.api.event.events.type.EventState;
@@ -775,6 +776,14 @@ public class ElytraProcess extends HiveMindProcessHelper implements IHiveMindPro
 
     private BetterBlockPos findSafeLandingSpot(BetterBlockPos start) {
         long now=System.currentTimeMillis();if(!landingRetry.canSearch(now))return null;
+        if(this.landingSearchState==null){
+            for(var previous:hivemind.getReliability().routes().recent("landing",now)){
+                var p=previous.point();if(!p.dimension().equals(MiningRouteAccess.dimension(ctx))||!hivemind.getReliability().routes().available("landing",p,now))continue;
+                BlockPos position=MiningRouteAccess.position(p);if(position.distSqr(start)>128*128||!ctx.world().hasChunkAt(position))continue;
+                BetterBlockPos checked=checkLandingSpot(position,new LongOpenHashSet());
+                if(checked!=null&&isColumnAir(checked,SHORT_LANDING_COLUMN_HEIGHT)&&hasAirBubble(checked.above(SHORT_LANDING_COLUMN_HEIGHT))&&!badLandingSpots.contains(checked.above(SHORT_LANDING_COLUMN_HEIGHT))){landingColumnHeight=SHORT_LANDING_COLUMN_HEIGHT;return checked.above(SHORT_LANDING_COLUMN_HEIGHT);}
+            }
+        }
         final boolean useHeightmap = ctx.player().getY() > ctx.world().getHeight(Heightmap.Types.MOTION_BLOCKING, start.getX(), start.getZ());
         if (this.landingSearchState == null || this.landingSearchState.exhausted || !this.landingSearchState.isCompatible(start, useHeightmap)) {
             this.landingSearchState = new LandingSearchState(start, this.behavior.destination, useHeightmap);

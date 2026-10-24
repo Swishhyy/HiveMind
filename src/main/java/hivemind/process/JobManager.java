@@ -18,6 +18,8 @@
 package hivemind.process;
 
 import hivemind.HiveMind;
+import hivemind.utils.network.ControlPackets.Stage;
+import hivemind.utils.network.ControlPackets.Receipt;
 import hivemind.api.behavior.IBehavior;
 import hivemind.api.event.events.TickEvent;
 import hivemind.api.process.PathingCommand;
@@ -43,7 +45,11 @@ public final class JobManager extends HiveMindProcessHelper implements IBehavior
     private long nextId = 1;
     private String reason = "No jobs";
     private UUID requestOwner;
+    private UUID requestOrder,requestRequester;
+    public <T>T withOrder(UUID id,UUID requester,java.util.concurrent.Callable<T> operation)throws Exception{UUID old=requestOrder,oldRequester=requestRequester;requestOrder=id;requestRequester=requester;try{return operation.call();}finally{requestOrder=old;requestRequester=oldRequester;}}
     private long nextError;
+    private boolean recoverableHold;
+    private long retryAt;
 
     public JobManager(HiveMind bot) { super(bot); }
     @Override public boolean isTemporary() { return true; }
@@ -61,6 +67,7 @@ public final class JobManager extends HiveMindProcessHelper implements IBehavior
         root = here; store = next; queue.clear(); queue.addAll(saved); current = null;
         nextId = Math.max(System.currentTimeMillis(), queue.stream().mapToLong(JobStore.Job::id).max().orElse(0) + 1);
         paused = !queue.isEmpty(); completedMining = false;
+        recoverableHold=paused&&!hivemind.getReliability().holding();retryAt=System.currentTimeMillis()+10000;
         reason = queue.isEmpty() ? "No jobs" : "Saved jobs are paused; use job resume";
     }
     public boolean runningJobs(){ensureLoaded();return !paused&&!queue.isEmpty();}
@@ -79,15 +86,16 @@ public final class JobManager extends HiveMindProcessHelper implements IBehavior
             if (block.getBlock() == Blocks.AIR) throw new IllegalArgumentException("Air is not a mining target");
             return net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(block.getBlock()).toString();
         }).toList();
-        JobStore.Job job = new JobStore.Job(nextId++, quantity, blocks, 0, requestOwner);
+        JobStore.Job job = new JobStore.Job(nextId++, quantity, blocks, 0, requestOwner,requestOrder,requestRequester);
         List<JobStore.Job> updated = new ArrayList<>(queue); updated.add(job);
         store.write(updated);
         boolean empty = queue.isEmpty(); queue.add(job);
         if (empty) { paused = false; reason = "Waiting for current bot work to finish"; }
+        announce(job,Stage.ACCEPTED,"Queued mining job #"+job.id());
         return job.id();
     }
     public void pauseJobs() {
-        ensureLoaded(); paused = true; reason = "Paused by controller"; save();
+        ensureLoaded();for(var job:queue)announce(job,Stage.BLOCKED,"Paused by controller"); paused = true;recoverableHold=false; reason = "Paused by controller"; save();
         hivemind.getPathingBehavior().softCancelIfSafe();
     }
     public void resumeJobs() {
@@ -96,16 +104,18 @@ public final class JobManager extends HiveMindProcessHelper implements IBehavior
         if (current != null && !hivemind.getMineProcess().isActive() && !hivemind.getDepositProcess().isActive()
                 && !hivemind.getPortalTravelProcess().isActive()) { current = null; completedMining = false; }
         paused = false; reason = "Ready to resume";
+        recoverableHold=false;
     }
     public void cancelJobs() {
-        ensureLoaded(); stopOwnedWork(); queue.clear(); current = null; paused = true; completedMining = false;
+        ensureLoaded();for(var job:queue)announce(job,Stage.CANCELLED,"Mining job cancelled by controller");
+         stopOwnedWork(); queue.clear(); current = null; paused = true; completedMining = false;
         reason = "Jobs canceled"; save();
     }
     public void remove(long id) {
         ensureLoaded();
         if (queue.stream().noneMatch(j -> j.id() == id)) throw new IllegalArgumentException("Unknown job #" + id);
         if (current != null && current.id() == id) { stopOwnedWork(); current = null; completedMining = false; }
-        queue.removeIf(j -> j.id() == id); save();
+        queue.stream().filter(j->j.id()==id).forEach(j->announce(j,Stage.CANCELLED,"Mining job removed by controller"));queue.removeIf(j -> j.id() == id); save();
     }
     private void stopOwnedWork() {
         if (current == null) return;
@@ -125,7 +135,6 @@ public final class JobManager extends HiveMindProcessHelper implements IBehavior
     }
     public void miningFinished() {
         if (current == null) return;
-        current = current.withDeposited(Math.max(current.deposited(), current.quantity())); queue.set(0, current);
         completedMining = true; reason = "Mining target reached; finishing storage trip"; save();
     }
     public void recordDeposit(int quantity) {
@@ -136,29 +145,38 @@ public final class JobManager extends HiveMindProcessHelper implements IBehavior
         if (current == null) return;
         boolean changed = !paused || !reason.equals(message);
         paused = true; reason = message; save();
+        recoverableHold=true;var recovery=hivemind.getReliability().failed("job:"+current.id(),message,current.deposited());retryAt=recovery.retryAt();
         if (changed) notifyOwner(current.owner(), "Job #" + current.id() + " paused: " + message);
+        announce(current,Stage.BLOCKED,message);
     }
     private void notifyOwner(UUID owner, String message) {
         logDirect(message);
         if (owner != null && hivemind.getBotControl() != null) hivemind.getBotControl().reply(owner, message);
     }
+    private void announce(JobStore.Job job,Stage stage,String message){if(job.order()==null||ctx.player()==null||ctx.world()==null||root==null||!root.equals(MiningRouteAccess.root(ctx)))return;var who=hivemind.getNetwork().localIdentity();hivemind.getNetwork().publishReceipt(new Receipt(who.id(),who.name(),job.order(),job.requester(),stage!=Stage.FAILED,message,System.currentTimeMillis(),stage));}
     private void save() { if (store != null) store.write(queue); }
     @Override public void onLostControl() {
         if (launching || queue.isEmpty()) return;
         paused = true; reason = "Stopped or disconnected; use job resume"; current = null; completedMining = false; save();
+        recoverableHold=!hivemind.getReliability().holding();retryAt=System.currentTimeMillis()+10000;
     }
     @Override public void onPlayerDeath() { fail("Player died; inspect equipment before resuming"); onLostControl(); }
     @Override public void onTick(TickEvent event) {
         if (event.getType() == TickEvent.Type.OUT || ctx.world() == null || ctx.player() == null) return;
         try {
             ensureLoaded();
-            if (paused || queue.isEmpty() || hivemind.getCompanionProcess().awaitingDeathInventory()) return;
+            if(paused&&recoverableHold&&System.currentTimeMillis()>=retryAt&&!hivemind.getReliability().holding()&&!hivemind.getAutonomy().paused()&&ctx.player().isAlive()&&!hivemind.getConflictProcess().isActive()&&!hivemind.getCompanionProcess().awaitingDeathInventory()&&ctx.player().containerMenu==ctx.player().inventoryMenu&&ctx.player().inventoryMenu.getCarried().isEmpty()){
+                paused=false;recoverableHold=false;current=null;completedMining=false;reason="Retrying saved job after checking recovery conditions";
+            }
+            if (hivemind.getReliability().holding() || paused || queue.isEmpty() || hivemind.getCompanionProcess().awaitingDeathInventory()) return;
             if (current != null) {
                 if (hivemind.getMineProcess().isActive() || hivemind.getDepositProcess().isActive()
                         || hivemind.getPortalTravelProcess().isActive() || hivemind.getSurvivalProcess().isActive()) return;
                 if (!completedMining) { fail("Mining stopped before the requested quantity was reached"); return; }
                 notifyOwner(current.owner(), "Finished job #" + current.id() + " (" + current.quantity() + " " + String.join(",", current.blocks()) + ")");
-                queue.remove(0); current = null; completedMining = false; reason = "Ready for next job"; save();
+                announce(current,Stage.COMPLETED,"Requested mining quantity observed; storage work completed");
+                hivemind.getReliability().success("job:"+current.id(),"Requested mining quantity observed; storage work finished without a reported failure");
+                queue.remove(0);if(queue.isEmpty())hivemind.getReliability().completed("mine job","Requested mining quantity observed and storage work completed"); current = null; completedMining = false; reason = "Ready for next job"; save();
             }
             if (queue.isEmpty() || BotWork.active(hivemind) || hivemind.getConflictProcess().isActive() || hivemind.getSculkProcess().isActive()
                     || hivemind.getPathingControlManager().mostRecentInControl().map(p -> p.priority() >= 0).orElse(false)) return;
@@ -170,6 +188,7 @@ public final class JobManager extends HiveMindProcessHelper implements IBehavior
                 hivemind.getMineProcess().restoreDepositCredit(current.deposited());
                 reason = "Mining " + String.join(",", current.blocks());
                 notifyOwner(current.owner(), "Started job #" + current.id() + ": " + current.quantity() + " " + String.join(",", current.blocks()));
+                announce(current,Stage.STARTED,"Started mining job #"+current.id());
             } finally { launching = false; }
         } catch (RuntimeException e) {
             paused = true; reason = "Job error: " + e.getMessage();

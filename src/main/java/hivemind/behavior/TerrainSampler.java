@@ -37,32 +37,39 @@ final class TerrainSampler {
     private long next;
     private BlockPos lastPosition;
     private boolean stationary;
+    private PendingTile pending;
+    private static final class PendingTile {
+        final Object world;final String dimension;final int x,z;final int[] colors=new int[256],heights=new int[256];int cursor;
+        PendingTile(Object world,String dimension,int x,int z){this.world=world;this.dimension=dimension;this.x=x;this.z=z;}
+    }
     private final Map<String,String> fingerprints=new LinkedHashMap<>();
     TerrainSampler(NetworkBehavior parent,HiveMind bot){this.parent=parent;this.bot=bot;}
     void tick(long now){
-        if(now<next)return;var feet=bot.getPlayerContext().playerFeet();stationary=lastPosition!=null&&lastPosition.distSqr(feet)<4;lastPosition=feet.immutable();next=now+(stationary?250:50);
+        if(now<next)return;var feet=bot.getPlayerContext().playerFeet();stationary=lastPosition!=null&&lastPosition.distSqr(feet)<4;lastPosition=feet.immutable();next=now+(stationary&&pending==null?250:50);
         if(parent.transport()!=null&&parent.transport().congested()){next=now+1000;return;}
         sampled.values().removeIf(time->now-time>300000);
         long deadline=System.nanoTime()+3_000_000;
         for(int tiles=0;tiles<8;tiles++){
             if(tiles>0&&System.nanoTime()>=deadline)return;
-            if(!sample(now))return;
+            if(!sample(now,deadline))return;
         }
     }
-    private boolean sample(long now){
+    private boolean sample(long now,long deadline){
         var ctx=bot.getPlayerContext();var world=ctx.world();String dimension=MiningRouteAccess.dimension(ctx);
+        if(pending!=null&&(pending.world!=world||!dimension.equals(pending.dimension)||!world.hasChunkAt(new BlockPos(pending.x*16,ctx.playerFeet().getY(),pending.z*16))))pending=null;
         int cx=Math.floorDiv(ctx.playerFeet().getX(),16),cz=Math.floorDiv(ctx.playerFeet().getZ(),16),bestX=0,bestZ=0;double best=Double.POSITIVE_INFINITY;boolean found=false;
         int requested=(Math.max(32,Math.min(512,HiveMind.settings().botTerrainViewRange.value))+15)/16;
         int radius=Math.min(requested,Math.max(2,ctx.minecraft().options.renderDistance().get()));
-        for(int x=cx-radius;x<=cx+radius;x++)for(int z=cz-radius;z<=cz+radius;z++){
+        if(pending==null)for(int x=cx-radius;x<=cx+radius;x++)for(int z=cz-radius;z<=cz+radius;z++){
             BlockPos point=new BlockPos(x*16,ctx.playerFeet().getY(),z*16);if(!world.hasChunkAt(point))continue;
             String key=dimension+":"+x+":"+z;long previous=sampled.getOrDefault(key,0L);if(now-previous<(stationary?120000:30000))continue;
             double score=(previous==0?0:1000)+(x-cx)*(x-cx)+(z-cz)*(z-cz);if(score<best){best=score;bestX=x;bestZ=z;found=true;}
         }
-        if(!found)return false;sampled.put(dimension+":"+bestX+":"+bestZ,now);
-        int[] colors=new int[256],heights=new int[256];
+        if(pending==null){if(!found)return false;pending=new PendingTile(world,dimension,bestX,bestZ);}
+        bestX=pending.x;bestZ=pending.z;int[] colors=pending.colors,heights=pending.heights;
         boolean ceiling=dimension.equals("minecraft:the_nether")&&ctx.playerFeet().getY()<128;
-        for(int z=0;z<16;z++)for(int x=0;x<16;x++){
+        for(;pending.cursor<256;pending.cursor++){
+            if(System.nanoTime()>=deadline)return true;int x=pending.cursor%16,z=pending.cursor/16;
             int wx=bestX*16+x,wz=bestZ*16+z,y=world.getHeight(Heightmap.Types.WORLD_SURFACE,wx,wz)-1;
             if(ceiling){
                 y=Math.min(120,ctx.playerFeet().getY()+24);
@@ -76,6 +83,8 @@ final class TerrainSampler {
             int tint=source==null?-1:source.colorInWorld(state,ctx.minecraft().level,pos);
             colors[z*16+x]=(tint==-1?color:tint)&0xffffff;heights[z*16+x]=y;
         }
+        // Publish a complete tile only. A budget boundary or unloaded chunk cannot introduce black partial tiles.
+        pending=null;sampled.put(dimension+":"+bestX+":"+bestZ,now);
         StringBuilder rgb=new StringBuilder(1536),h=new StringBuilder(1024);
         HexFormat hex=HexFormat.of();
         for(int i=0;i<256;i++){rgb.append(hex.toHexDigits(colors[i]),2,8);h.append(hex.toHexDigits((short)heights[i]));}

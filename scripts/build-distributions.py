@@ -18,12 +18,12 @@ def compile_to(output,sources):
     run('javac','--release','17','--add-modules','jdk.httpserver','-encoding','UTF-8','-d',output,'@'+str(listing))
 def helper():
     out=Path('build/helper-classes')
-    compile_to(out,[JAVA/'update/UpdateManifest.java',JAVA/'update/UpdateInstaller.java'])
+    compile_to(out,[JAVA/'update/UpdateManifest.java',JAVA/'update/UpdateInstaller.java',JAVA/'update/UpdateHealth.java'])
     jar=Path('build/generated/update/assets/hivemind/update-helper.bin');jar.parent.mkdir(parents=True,exist_ok=True)
     run('jar','--create','--file',jar,'--main-class','hivemind.utils.update.UpdateInstaller','-C',out,'.')
 def controller():
     out=Path('build/controller-classes')
-    sources=list((JAVA/'network').glob('*.java'))+[JAVA/'bot/AtomicProperties.java',JAVA/'bot/StorageRule.java',JAVA/'bot/TrustedControl.java',JAVA/'mining/WorldRoutes.java']+list(Path('controller/src/main/java').rglob('*.java'))
+    sources=[JAVA/'update/UpdateManifest.java',JAVA/'update/UpdateInstaller.java',JAVA/'update/UpdateHealth.java']+list((JAVA/'network').glob('*.java'))+[JAVA/'bot/AtomicProperties.java',JAVA/'reliability/RegionRules.java',JAVA/'bot/StorageRule.java',JAVA/'bot/TrustedControl.java',JAVA/'mining/WorldRoutes.java']+list(Path('controller/src/main/java').rglob('*.java'))
     compile_to(out,sources)
     shutil.copytree('src/main/resources/assets',out/'assets',dirs_exist_ok=True)
     version=next(line.split('=',1)[1] for line in Path('gradle.properties').read_text().splitlines() if line.startswith('controller_version='))

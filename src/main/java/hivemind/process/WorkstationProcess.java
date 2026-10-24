@@ -18,6 +18,7 @@
 package hivemind.process;
 
 import hivemind.HiveMind;
+import hivemind.utils.reliability.ActionArbiter;
 import hivemind.api.pathing.goals.GoalGetToBlock;
 import hivemind.api.process.PathingCommand;
 import hivemind.api.process.PathingCommandType;
@@ -64,7 +65,7 @@ public final class WorkstationProcess extends HiveMindProcessHelper {
         var saved=MiningRouteAccess.locations(ctx).station(action.method()==GatherPlanner.Method.SMELT?"furnace":"crafting");
         if(saved==null)throw new IllegalStateException("Register the "+(action.method()==GatherPlanner.Method.SMELT?"furnace":"crafting table")+" with station first");
         if(ctx.player().containerMenu!=ctx.player().inventoryMenu||!ctx.player().inventoryMenu.getCarried().isEmpty())throw new IllegalStateException("Close containers and clear the cursor before crafting");
-        this.action=action;station=saved;root=MiningRouteAccess.root(ctx);startCount=BotItems.count(ctx,action.item());
+        this.action=action;station=saved;root=MiningRouteAccess.root(ctx);startCount=BotItems.supplyCount(ctx,action.item());
         deadline=System.currentTimeMillis()+Math.max(60000L,Math.min(3600000L,HiveMind.settings().companionTaskTimeoutMS.value));
         error=null;touched=pendingTake=ownsCursor=openRequested=false;crafts=delay=0;transition(Stage.TRAVEL);
     }
@@ -79,6 +80,7 @@ public final class WorkstationProcess extends HiveMindProcessHelper {
         if(ctx.world().hasChunkAt(pos)&&!ctx.world().getBlockState(pos).is(action.method()==GatherPlanner.Method.SMELT?Blocks.FURNACE:Blocks.CRAFTING_TABLE))return fail("The registered workstation is missing or changed");
         if(stage==Stage.TRAVEL){var goal=new GoalGetToBlock(pos);if(!goal.isInGoal(ctx.playerFeet()))return new PathingCommand(goal,PathingCommandType.REVALIDATE_GOAL_AND_PATH);if(safe)transition(Stage.OPEN);return pause();}
         if(!safe)return pause();
+        if(!hivemind.getActions().allow(ActionArbiter.Channel.INVENTORY,ActionArbiter.Channel.HAND,ActionArbiter.Channel.LOOK,ActionArbiter.Channel.USE))return new PathingCommand(null,PathingCommandType.DEFER);
         hivemind.getInputOverrideHandler().clearAllKeys();ctx.playerController().resetBlockRemoving();ticks++;
         if(stage==Stage.OPEN)return open(pos);
         if(ctx.player().containerMenu!=menu)return fail("The workstation was closed unexpectedly");
@@ -95,17 +97,17 @@ public final class WorkstationProcess extends HiveMindProcessHelper {
         if(current!=ctx.player().inventoryMenu){
             boolean supported=action.method()==GatherPlanner.Method.SMELT?current instanceof AbstractFurnaceMenu:current instanceof CraftingMenu;
             if(!openRequested||!supported)return fail("Unexpected workstation menu");
-            if(synchronizedMenu!=current.containerId||revision<=openRevision)return ticks>100?fail("Server did not send workstation contents"):pause();
+            if(synchronizedMenu!=current.containerId||revision<=openRevision)return ticks>timeoutTicks(100)?fail("Server did not send workstation contents"):pause();
             menu=current;openRequested=false;
             if(pendingTake){
-                int received=BotItems.count(ctx,action.item())-beforeTake;
+                int received=BotItems.supplyCount(ctx,action.item())-beforeTake;
                 if(received<=0)return fail("The server did not confirm the crafted output; check recipe changes and inventory space");
                 pendingTake=false;
-                if(BotItems.count(ctx,action.item())>=startCount+action.amount())return finish();
+                if(BotItems.supplyCount(ctx,action.item())>=startCount+action.amount())return finish();
             }
             transition(Stage.PREPARE);return pause();
         }
-        if(openRequested)return ticks>100?fail("The workstation is blocked or protected"):pause();
+        if(openRequested)return ticks>timeoutTicks(100)?fail("The workstation is blocked or protected"):pause();
         var rotation=RotationUtils.reachable(ctx,pos);if(rotation.isEmpty())return fail("Workstation is not reachable from the arrival position");
         hivemind.getLookBehavior().updateTarget(rotation.get(),true);
         if(ctx.isLookingAt(pos)){openRequested=true;openRevision=revision;ticks=0;ctx.playerController().processRightClickBlock(ctx.player(),ctx.world(),InteractionHand.MAIN_HAND,new BlockHitResult(Vec3.atCenterOf(pos),Direction.UP,pos,false));}
@@ -126,8 +128,8 @@ public final class WorkstationProcess extends HiveMindProcessHelper {
             if(!input.isEmpty()&&!BotItems.id(input).equals(action.grid().get(0)))return fail("Furnace input was replaced");
             if(!output.isEmpty()&&!BotItems.id(output).equals(action.item()))return fail("Furnace result was replaced");
             if(touched&&(!input.isEmpty()||!output.isEmpty())){lastOutput=output.getCount();lastProgress=System.currentTimeMillis();transition(Stage.WAIT);return pause();}
-            int units=Math.min(64,(startCount+action.amount()-BotItems.count(ctx,action.item())+action.recipe().count()-1)/action.recipe().count());
-            batchGoal=BotItems.count(ctx,action.item())+units*action.recipe().count();
+            int units=Math.min(64,(startCount+action.amount()-BotItems.supplyCount(ctx,action.item())+action.recipe().count()-1)/action.recipe().count());
+            batchGoal=BotItems.supplyCount(ctx,action.item())+units*action.recipe().count();
             fills.add(new Fill(0,action.grid().get(0),units));
             var fuel=menu.slots.get(1).getItem();if(!fuel.isEmpty()&&!BotItems.id(fuel).equals(action.fuel()))return fail("Clear incompatible furnace fuel before continuing");
             fills.add(new Fill(1,action.fuel(),(units+7)/8));
@@ -156,10 +158,10 @@ public final class WorkstationProcess extends HiveMindProcessHelper {
     private PathingCommand waitForResult(){
         int resultSlot=action.method()==GatherPlanner.Method.SMELT?2:0;ItemStack output=menu.slots.get(resultSlot).getItem();
         if(output.getCount()!=lastOutput){lastOutput=output.getCount();lastProgress=System.currentTimeMillis();}
-        if(!output.isEmpty()&&(!BotItems.id(output).equals(action.item())||!BotItems.ordinary(output)))return fail("Server recipe result differs from the vanilla plan");
+        if(!output.isEmpty()&&(!BotItems.id(output).equals(action.item())||!BotItems.expeditionSupply(output)))return fail("Server recipe result differs from the vanilla plan");
         if(action.method()==GatherPlanner.Method.CRAFT&&!output.isEmpty()&&output.getCount()!=action.recipe().count())return fail("Server recipe yield differs from the vanilla plan");
-        boolean ready=action.method()==GatherPlanner.Method.CRAFT?!output.isEmpty():!output.isEmpty()&&(menu.slots.get(0).getItem().isEmpty()||BotItems.count(ctx,action.item())+output.getCount()>=batchGoal);
-        if(ready){beforeTake=BotItems.count(ctx,action.item());pendingTake=true;click(resultSlot,0,ContainerInput.QUICK_MOVE);delay=5;transition(Stage.VERIFY);return pause();}
+        boolean ready=action.method()==GatherPlanner.Method.CRAFT?!output.isEmpty():!output.isEmpty()&&(menu.slots.get(0).getItem().isEmpty()||BotItems.supplyCount(ctx,action.item())+output.getCount()>=batchGoal);
+        if(ready){beforeTake=BotItems.supplyCount(ctx,action.item());pendingTake=true;click(resultSlot,0,ContainerInput.QUICK_MOVE);delay=hivemind.getReliability().health().interactionTicks();transition(Stage.VERIFY);return pause();}
         long timeout=action.method()==GatherPlanner.Method.SMELT?90000L:10000L;
         if(System.currentTimeMillis()-lastProgress>timeout)return fail("No workstation progress; check fuel, ingredients, or server recipe changes");
         return pause();
@@ -174,10 +176,12 @@ public final class WorkstationProcess extends HiveMindProcessHelper {
         if(!isActive())return;if(ownsCursor)restoreCursor();closeMenu();openRequested=false;fills.clear();transition(Stage.TRAVEL);
     }
     private void closeMenu(){if(menu!=null&&ctx.player()!=null&&ctx.player().containerMenu==menu&&menu.getCarried().isEmpty())ctx.player().closeContainer();menu=null;}
-    private PathingCommand finish(){onLostControl();error=null;logDirect("Workstation output confirmed");return new PathingCommand(null,PathingCommandType.CANCEL_AND_SET_GOAL);}
+    private PathingCommand finish(){hivemind.getReliability().success("production","Server confirmed workstation output");onLostControl();error=null;logDirect("Workstation output confirmed");return new PathingCommand(null,PathingCommandType.CANCEL_AND_SET_GOAL);}
     private PathingCommand fail(String message){onLostControl();error=message;logDirect("Workstation paused: "+message);return new PathingCommand(null,PathingCommandType.CANCEL_AND_SET_GOAL);}
     private void transition(Stage next){stage=next;ticks=0;}
     private PathingCommand pause(){return new PathingCommand(null,PathingCommandType.REQUEST_PAUSE);}
     @Override public void onLostControl(){if(ownsCursor)restoreCursor();closeMenu();stage=Stage.IDLE;action=null;station=null;root=null;fills.clear();openRequested=ownsCursor=touched=pendingTake=false;sourceSlot=-1;}
     @Override public String displayName0(){return "Workstation "+stage+(action==null?"":" "+action.item());}
+    private int timeoutTicks(int normal){return (int)(hivemind.getReliability().health().timeout(normal*50L)/50);}
+
 }

@@ -229,3 +229,23 @@ Every opened, server-confirmed storage menu updates that bot's stock history, in
 Portal trips remember their **actual** observed entrance and exit. When traveling to a known cross-dimension destination, the bot chooses the observed pair with the shortest combined approach and exit route. `#portal status` lists recent pairs; `#portal clear` forgets that dimension's saved portal and related observed links. Set an active portal with `#portal set` for initial travel. The bot does not assume 8:1 coordinates identify a real connected exit.
 
 For a crashed Minecraft process, use the controller JAR's local `--supervise` mode on the **same machine as that bot**. It runs a configured foreground game process, waits for the client update installer, and retries nonzero exits with capped backoff. A normal zero exit stops it. Each bot needs its own profile and supervisor process; your usual standalone controller remains a separate process. See [CONTROLLER.md](CONTROLLER.md#local-game-supervisor). An authenticated Minecraft launcher/session must already be set up; the supervisor does not log into accounts.
+
+
+## Coordinated recovery (0.1.2.0)
+
+Bots now retain the original job across interruptions, reconcile real inventory after reconnecting, and coordinate competing movement/inventory actions. Reserve bands prevent repeated tiny refills; shared flight commitments prevent ordinary top-ups from undoing a launch. Launch, landing, portal and storage failures are remembered and retried with different approaches. Three deaths near the same area within ten minutes cause a five-minute regroup; `#resume` releases that hold.
+
+- `#recall` — finish safe inventory work, return to a registered base, then hold the original task. `#resume` continues it. The controller has the same quick action; `#bots all recall` works from the player client.
+- `#botbase add <name> <dimension> <x> <y> <z> [radius]`, `#botbase list`, `#botbase remove <name>` — keep alternate bases alongside the existing default base.
+- `#region add <name> <protect|danger|explore|build|storage> <x> <z> <radius> [dimension]` — mark an area. `#region list/remove <name>` manage it. The map's right-click menu can save areas for a selected bot. Protection prevents automated terrain changes, danger adds route cost, exploration guides idle surveys, building guides placement, and storage registers a supply base.
+- `#doctor status`, `#doctor export`, `#doctor retry` — inspect owners, blockers and recovery; save a support ZIP; reassess supply failures.
+- `#deliver resolve received|returned|lost` — explicitly resolve an interrupted, unconfirmed dropped handoff after inspecting the outcome. Ordinary observed pickups are automatic.
+
+Settings → Reliability controls maintenance, teammate supply requests, safe supervised update restarts and controller-outage behavior (`continue`, `hold` or `return`). Immediate survival remains local. A missing controller does not erase intent. Player clients continue sharing observations without automated inputs or inventory changes.
+
+The standalone controller grants fleet update restarts one bot at a time after a healthy canary. Run a local supervisor per bot instance to recover a crashed/frozen JVM or perform safe update restarts; a remote controller cannot start Minecraft by itself. Failed new builds restore the previous verified artifact and hold that release. Individual bot/player/controller versions remain independent, and protocol 7 peers can connect during migration. See [CONTROLLER.md](CONTROLLER.md) for setup and limitations.
+
+For live unattended validation, run `python3 scripts/soak-monitor.py 'http://localhost:28767/#YOUR_VIEW_TOKEN' --hours 8 --output soak-results` (or supply the token in `HIVEMIND_VIEW_TOKEN`). The collector writes selected metrics and a summary, excluding network keys, raw settings, launcher data and chat. A long stationary watch can legitimately look like a progress stall. Automated checks include simulated time and failure injection; they do not claim an overnight gameplay run.
+
+
+Flight fallback now releases after 16 blocks of displacement (with a two-second settling period), or at most twenty seconds. A remote placed-box recovery record remains saved without grounding the bot everywhere; nearby active inventory work still finishes first. The Flight field on each bot card reports the actual takeoff blocker, including usable loose rocket counts and required reserves. Navigation progress checks also cover an expected journey while its path is still being calculated, and exclude intentional pauses/watching.

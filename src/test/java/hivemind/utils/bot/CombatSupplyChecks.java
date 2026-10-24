@@ -8,7 +8,13 @@ import java.util.*;
 
 public final class CombatSupplyChecks {
     private static void check(boolean value,String why){if(!value)throw new AssertionError(why);}
-    public static void main(String[] args)throws Exception{runAll();System.out.println("Combat/supply checks passed: recovery ownership, durable portable-box checkpoints, bounded chest-box unpacking, reserved pickup space and fast-fall clutch windows");}
+    public static void main(String[] args)throws Exception{
+        check(!PortableSupplyPolicy.blocksTravel(false,true,true,400*400,true,true),"distant recovery evidence cannot ground a supplied bot");
+        check(!PortableSupplyPolicy.blocksTravel(false,true,false,4,true,true),"another dimension's box cannot block this takeoff");
+        check(PortableSupplyPolicy.blocksTravel(false,true,true,16,true,true),"a nearby recoverable box must be finished before flight");
+        check(PortableSupplyPolicy.blocksTravel(true,true,false,400*400,false,false),"an active inventory transaction always blocks takeoff");
+        check(!PortableSupplyPolicy.blocksTravel(false,true,true,16,true,false),"failed recovery cooldown retains the record without preventing all travel");
+runAll();System.out.println("Combat/supply checks passed: recovery ownership, durable portable-box checkpoints, bounded chest-box unpacking, reserved pickup space and fast-fall clutch windows");}
     public static void runAll()throws Exception{
         check(!StorageAccessPolicy.permits(true,false,true),"Private ender inventory must never receive deposits, including deposit all");
         check(StorageAccessPolicy.permits(true,true,true)&&!StorageAccessPolicy.permits(true,true,false),"Ender stock withdrawal requires its own setting");

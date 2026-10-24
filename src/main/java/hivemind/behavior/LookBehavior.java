@@ -18,6 +18,7 @@
 package hivemind.behavior;
 
 import hivemind.HiveMind;
+import hivemind.utils.reliability.ActionArbiter;
 import hivemind.api.Settings;
 import hivemind.api.behavior.ILookBehavior;
 import hivemind.api.behavior.look.IAimProcessor;
@@ -66,6 +67,7 @@ public final class LookBehavior extends Behavior implements ILookBehavior {
 
     @Override
     public void updateTarget(Rotation rotation, boolean blockInteract) {
+        if(!hivemind.getActions().allow(ActionArbiter.Channel.LOOK))return;
         this.target = new Target(rotation, Target.Mode.resolve(ctx, blockInteract));
     }
 

@@ -222,7 +222,20 @@ public abstract class MixinClientPlayNetHandler extends ClientCommonPacketListen
             bot.getDepositProcess().onContainerContents(packet.containerId());
             bot.getWorkstationProcess().onContents(packet.containerId());
             bot.getShulkerProcess().onContents(packet.containerId());
+            bot.getReliability().inventoryConfirmed(packet.containerId());
         }
+    }
+
+    @Inject(method = "handleContainerSetSlot", at = @At("RETURN"))
+    private void onReliableInventorySlot(ClientboundContainerSetSlotPacket packet,CallbackInfo ci){
+        IHiveMind instance=HiveMindAPI.getProvider().getHiveMindForConnection((ClientPacketListener)(Object)this);
+        if(instance instanceof HiveMind bot)bot.getReliability().inventoryConfirmed(packet.getContainerId());
+    }
+
+    @Inject(method = "handleSetPlayerInventory", at = @At("RETURN"))
+    private void onReliablePlayerInventory(ClientboundSetPlayerInventoryPacket packet,CallbackInfo ci){
+        IHiveMind instance=HiveMindAPI.getProvider().getHiveMindForConnection((ClientPacketListener)(Object)this);
+        if(instance instanceof HiveMind bot)bot.getReliability().inventoryConfirmed(0);
     }
 
     @Inject(method = "handleTakeItemEntity", at = @At("HEAD"))

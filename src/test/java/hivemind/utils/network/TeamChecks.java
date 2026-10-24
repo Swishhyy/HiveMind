@@ -101,7 +101,7 @@ public final class TeamChecks {
     private static void relay()throws Exception{
         String key=NetworkProtocol.newKey();try(BotNetwork host=BotNetwork.host(HOST,key,"127.0.0.1",0)){
             await(()->host.boundPort()>0,"Relay did not start");try(BotNetwork a=BotNetwork.join(A,key,"127.0.0.1",host.boundPort());BotNetwork b=BotNetwork.join(B,key,"127.0.0.1",host.boundPort())){
-                await(()->host.peers().size()==2,"Team peers did not join");long now=System.currentTimeMillis();Intent intent=work(A,Kind.MINE,point(12),false,now);a.publish(intent);List<Message> inbox=new ArrayList<>();
+                await(()->host.peers().size()==2&&a.connected()&&b.connected(),"Team peers did not join on both ends");long now=System.currentTimeMillis();Intent intent=work(A,Kind.MINE,point(12),false,now);a.publish(intent);List<Message> inbox=new ArrayList<>();
                 await(()->{inbox.addAll(host.drain(128));return inbox.contains(intent);},"Intent failed to reach host");
                 Teamwork coordinator=new Teamwork();coordinator.accept(intent,now);Plan plan=coordinator.plan(HOST,List.of(A,B),System.currentTimeMillis());check(host.publish(plan),"Host can publish assignments");List<Message> received=new ArrayList<>();
                 await(()->{received.addAll(b.drain(128));return received.contains(plan);},"Another bot did not receive the same plan");

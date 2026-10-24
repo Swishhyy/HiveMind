@@ -21,6 +21,9 @@ public final class BotBaseCommand extends Command {
         String action=args.hasAny()?args.getString().toLowerCase(Locale.ROOT):"status";
         try{
             var store=BotBaseAccess.store(ctx);
+            if(action.equals("list")){args.requireMax(0);store.all().forEach((name,base)->report(name+": "+base));return;}
+            if(action.equals("remove")){String name=args.getString();args.requireMax(0);if(name.equals("default"))store.set(null);else store.named(name,null);report("Removed base "+name);return;}
+            if(action.equals("add")){String name=args.getString(),dimension=args.getString();int x=args.getAs(Integer.class),y=args.getAs(Integer.class),z=args.getAs(Integer.class),radius=args.hasAny()?args.getAs(Integer.class):16;args.requireMax(0);store.named(name,new BotBaseStore.Base(new WorldRoutes.Endpoint(dimension,x,y,z),radius));report("Added alternate base "+name);BotBaseAccess.scan(ctx);return;}
             if(action.equals("set")){
                 if(bot.getDepositProcess().isActive()||bot.getShulkerProcess().isActive()||bot.getOperations().isActive())throw new IllegalStateException("Finish the active supply trip before changing the base");
                 WorldRoutes.Endpoint point;int radius=16;
@@ -34,7 +37,7 @@ public final class BotBaseCommand extends Command {
                 case "scan"->report("Bot base scan found "+BotBaseAccess.scan(ctx)+" loaded supply containers");
                 case "clear"->{if(bot.getOperations().isActive()||bot.getDepositProcess().isActive())throw new IllegalStateException("Finish the supply trip first");store.set(null);report("Bot base cleared. Registered storage remains; remove it with #deposit remove if needed.");}
                 case "resupply"->{if(bot.isPlayerClient())throw new IllegalStateException("Player clients remain under manual control");bot.getOperations().requestRestock();report("Resupply requested; the current task is preserved");}
-                default->throw new IllegalArgumentException("Use #botbase set [radius], set <dimension> <x> <y> <z> [radius], status, scan, resupply or clear");
+                default->throw new IllegalArgumentException("Use botbase set/status/scan/resupply/clear, add <name> <dimension> <x> <y> <z> [radius], list, or remove <name>");
             }
         }catch(IllegalArgumentException|IllegalStateException e){throw new CommandInvalidStateException(e.getMessage());}
     }

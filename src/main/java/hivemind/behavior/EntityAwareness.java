@@ -21,21 +21,27 @@ public final class EntityAwareness extends Behavior {
     private final Map<UUID,Contact> contacts=new LinkedHashMap<>();
     private Object world;
     private long next;
+    private Iterator<net.minecraft.world.entity.Entity> background;
     public EntityAwareness(HiveMind bot){super(bot);}
     private void refresh(){
         long now=System.currentTimeMillis();
         if(world!=ctx.world()||ctx.player()==null||!ctx.player().isAlive()||!HiveMind.settings().botEntityAwareness.value){
-            contacts.clear();next=0;world=ctx.world();
+            contacts.clear();background=null;next=0;world=ctx.world();
         }
         if(ctx.player()==null||ctx.world()==null||!ctx.player().isAlive()||!HiveMind.settings().botEntityAwareness.value||now<next)return;
         next=now+40;
         int radius=AwarenessPolicy.range(HiveMind.settings().botEntityAwarenessRange.value);
-        UUID watched=hivemind.getStalkProcess().target();
-        contacts.clear();
-        ctx.entitiesStream().filter(entity->entity!=ctx.player()&&entity instanceof LivingEntity&&entity.isAlive()&&!entity.isSpectator()
-                        &&AwarenessPolicy.within(entity.distanceToSqr(ctx.player()),radius))
-                .sorted(Comparator.comparingDouble(entity->AwarenessPolicy.priority(entity instanceof Player,entity.getUUID().equals(watched),entity.distanceToSqr(ctx.player())))).limit(1024)
-                .forEach(entity->contacts.put(entity.getUUID(),new Contact((LivingEntity)entity,now)));
+        contacts.values().removeIf(contact->!current(contact)||!AwarenessPolicy.within(contact.entity().distanceToSqr(ctx.player()),radius));
+        // Loaded players always get refreshed; a crowded mob area cannot hide the tracked player behind a scan quota.
+        for(Player player:ctx.world().players())if(player!=ctx.player()&&player.isAlive()&&!player.isSpectator()&&AwarenessPolicy.within(player.distanceToSqr(ctx.player()),radius))contacts.put(player.getUUID(),new Contact(player,now));
+        var budget=new hivemind.utils.reliability.WorkBudget(2_000_000,512);
+        try{
+            if(background==null||!background.hasNext())background=ctx.entitiesStream().iterator();
+            while(budget.take()&&background.hasNext()){
+                var entity=background.next();if(entity==ctx.player()||!(entity instanceof LivingEntity living)||!entity.isAlive()||entity.isSpectator()||!AwarenessPolicy.within(entity.distanceToSqr(ctx.player()),radius))continue;
+                if(contacts.size()<1024||contacts.containsKey(entity.getUUID()))contacts.put(entity.getUUID(),new Contact(living,now));
+            }
+        }catch(ConcurrentModificationException stale){background=null;}
     }
     private boolean current(Contact contact){
         return contact!=null&&world==ctx.world()&&ctx.player()!=null&&System.currentTimeMillis()-contact.sampledAt()<=1000

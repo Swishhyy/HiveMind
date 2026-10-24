@@ -63,7 +63,7 @@ public final class CombatBehavior extends Behavior {
             ctx.minecraft().gameMode.releaseUsingItem(ctx.player());
         }
         if(!hivemind.getNetwork().team().clearStrike(target)||!attacks.claim(hivemind.clientTick(),1))return false;
-        int slot=MeleeCombat.weapon(ctx,target.isBlocking());ctx.player().getInventory().setSelectedSlot(slot);ctx.playerController().syncHeldItem();
+        int slot=MeleeCombat.weapon(ctx,target.isBlocking());hivemind.getReliability().select(slot);ctx.playerController().syncHeldItem();
         strike(target);hivemind.getStalkProcess().onMeleeStrike(target);return true;
     }
     public boolean crystal(Entity target){

@@ -679,7 +679,7 @@ public final class StalkProcess extends HiveMindProcessHelper implements IBehavi
         int selected=weapon(blocking);if(selected<0)return scatter(target,"Weapon unavailable",true);
         hivemind.getInputOverrideHandler().clearAllKeys();ctx.playerController().resetBlockRemoving();
         if(previousSlot<0)previousSlot=ctx.player().getInventory().getSelectedSlot();
-        ctx.player().getInventory().setSelectedSlot(selected);ctx.playerController().syncHeldItem();
+        hivemind.getReliability().select(selected);ctx.playerController().syncHeldItem();
         if(MeleeCombat.aim(ctx,hivemind,target)&&ctx.player().getAttackStrengthScale(0)>=0.95f) {
             if(!hivemind.getNetwork().team().clearStrike(target))return path(new GoalNear(target.blockPosition().offset((int)Math.round(Math.cos(hivemind.getNetwork().team().heading(Kind.HUNT,targetId))*3),0,(int)Math.round(Math.sin(hivemind.getNetwork().team().heading(Kind.HUNT,targetId))*3)),1));
             hivemind.getCombat().melee(target);
@@ -704,7 +704,7 @@ public final class StalkProcess extends HiveMindProcessHelper implements IBehavi
         if(!safe||ctx.minecraft().gameMode==null)return pause();
         hivemind.getInputOverrideHandler().clearAllKeys();ctx.playerController().resetBlockRemoving();
         if(previousSlot<0)previousSlot=ctx.player().getInventory().getSelectedSlot();
-        ctx.player().getInventory().setSelectedSlot(slot);ctx.playerController().syncHeldItem();ownsUse=true;
+        hivemind.getReliability().select(slot);ctx.playerController().syncHeldItem();ownsUse=true;
         if(ctx.player().isUsingItem()&&ctx.player().getUseItem().is(Items.POTION))drinkStarted=true;
         else if(!ctx.player().isUsingItem())ctx.playerController().processRightClick(ctx.player(),ctx.world(),InteractionHand.MAIN_HAND);
         return pause();
@@ -868,7 +868,7 @@ public final class StalkProcess extends HiveMindProcessHelper implements IBehavi
         if(recipient!=null)hivemind.getBotControl().reply(recipient,message);
     }
     private void restoreWeapon() {
-        if(previousSlot>=0&&ctx.player()!=null) { ctx.player().getInventory().setSelectedSlot(previousSlot);if(ctx.minecraft().gameMode!=null)ctx.playerController().syncHeldItem(); }
+        if(previousSlot>=0&&ctx.player()!=null) { hivemind.getReliability().select(previousSlot);if(ctx.minecraft().gameMode!=null)ctx.playerController().syncHeldItem(); }
         previousSlot=-1;
     }
     private PathingCommand path(Goal goal) {

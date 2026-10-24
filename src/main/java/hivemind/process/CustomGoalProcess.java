@@ -89,6 +89,8 @@ public final class CustomGoalProcess extends HiveMindProcessHelper implements IC
         return this.mostRecentGoal;
     }
 
+    public boolean travelling(){return state==State.PATH_REQUESTED||state==State.EXECUTING;}
+
     @Override
     public boolean isActive() {
         return this.state != State.NONE;
@@ -115,6 +117,7 @@ public final class CustomGoalProcess extends HiveMindProcessHelper implements IC
                     return new PathingCommand(this.goal, PathingCommandType.CANCEL_AND_SET_GOAL);
                 }
                 if (this.goal == null || (this.goal.isInGoal(ctx.playerFeet()) && this.goal.isInGoal(hivemind.getPathingBehavior().pathStart()))) {
+                    if(this.goal!=null)hivemind.getReliability().completed("goto path","Requested goal reached at "+ctx.playerFeet().toShortString());
                     onLostControl(); // we're there xd
                     if (HiveMind.settings().disconnectOnArrival.value) {
                         if (ctx.world() instanceof ClientLevel clientLevel) {

@@ -37,9 +37,13 @@ final class NetworkControls {
     private record Pending(String description, List<UUID> expected, long time) {}
     private final NetworkBehavior parent;
     private final HiveMind bot;
-    private final Path settingsFile;
+    private final Path settingsFile,policyFile;
+    private final Properties policyVersions;
     private final ControlRules rules;
     private final ControlRules.Coordinator coordinator;
+    private final CommandLedger ledger;
+    private final OrderLifecycle lifecycle;
+    private final ReceiptJournal receiptJournal;
     private final ArrayBlockingQueue<WebControlAction> actions=new ArrayBlockingQueue<>(64);
     private final Map<String,Object> before=new HashMap<>();
     private final Map<String,String> managed=new LinkedHashMap<>();
@@ -51,14 +55,19 @@ final class NetworkControls {
     private Defaults group;
     private State lastSnapshot;
     private long lastOperations;
+    private long lastLifecycleSend;
     private long appliedVersion,lastState,lastReplayEpoch=-1;
     private final Deque<Receipt> replayReceipts=new ArrayDeque<>();
     private volatile boolean closed;
     NetworkControls(NetworkBehavior parent,HiveMind bot,Path root){
         this.parent=parent;this.bot=bot;settingsFile=root.resolve("bot-web-settings.properties");
+        policyFile=root.resolve("policy-revisions-"+parent.localIdentity().id()+".properties");policyVersions=AtomicProperties.read(policyFile);
         rules=new ControlRules(root);coordinator=new ControlRules.Coordinator(rules,parent.localIdentity());
+        ledger=new CommandLedger(root,parent.localIdentity().id());
+        lifecycle=new OrderLifecycle(root,parent.localIdentity().id());
+        receiptJournal=new ReceiptJournal(root,parent.localIdentity().id());
         Properties saved=AtomicProperties.read(settingsFile);
-        if(saved.size()>128)throw new IllegalStateException("Too many saved web settings");
+        if(saved.size()>160)throw new IllegalStateException("Too many saved web settings");
         Map<String,String> values=new LinkedHashMap<>();
         for(String key:saved.stringPropertyNames())values.put(key,saved.getProperty(key));
         Map<String,String> normalized=NetworkSettings.normalize(values);
@@ -91,10 +100,23 @@ final class NetworkControls {
         else if(packet instanceof Execute execute){
             if(execute.target()!=null&&!execute.target().equals(who().id()))return;
             if(bot.isPlayerClient()&&execute.target()==null)return;
-            applyOnce(execute.reporter(),execute.id(),execute.requester(),()->run(execute.command()),now);
+            String root=execute.command().split(" ",2)[0],domain=ControlRules.mutatesTask(execute.command())?"task":Set.of("session","update").contains(root)?root:"query";
+            UUID authority=CommandLedger.domain(execute.reporter(),domain);var verdict=domain.equals("query")?ledger.query(execute.id()):ledger.check(authority,execute.id(),execute.observedAt());
+            if(verdict!=CommandLedger.Verdict.NEW){Receipt previous=receiptJournal.get(execute.id());if(previous==null)previous=applied.get(execute.reporter()+":"+execute.id());if(lifecycle.active()!=null&&lifecycle.active().id().equals(execute.id()))publish(lifecycle.receipt(who(),now));else if(previous!=null)publish(new Receipt(who().id(),who().name(),previous.id(),previous.requester(),previous.success(),previous.message(),now,previous.stage()));else publish(receipt(execute.id(),execute.requester(),verdict==CommandLedger.Verdict.DUPLICATE,verdict==CommandLedger.Verdict.DUPLICATE?"Already accepted before reconnect/restart; inspect current status":"Superseded by a newer controller order",now));return;}
+            if(domain.equals("query"))ledger.queryAccepted(execute.id());else ledger.accept(authority,execute.id(),execute.observedAt());
+            applyOnce(execute.reporter(),execute.id(),execute.requester(),()->bot.getJobManager().withOrder(execute.id(),execute.requester(),()->run(execute.command())),now);
+            Receipt result=applied.get(execute.reporter()+":"+execute.id());
+            if(result!=null&&result.success()){
+                if(execute.command().matches("mine\\s+[1-9][0-9]*\\s+.+")||execute.command().startsWith("job mine ")){Receipt queued=new Receipt(who().id(),who().name(),execute.id(),execute.requester(),true,result.message(),now,Stage.ACCEPTED);remember(queued);publish(queued);}
+                else if(execute.command().equals("recall")){lifecycle.interrupt(execute.id(),execute.requester(),execute.command());Receipt paused=lifecycle.suspendedReceipt(who(),now);if(paused!=null){remember(paused);publish(paused);}publish(lifecycle.receipt(who(),now));}
+                else if(ControlRules.workCommand(execute.command())){Receipt cancelled=lifecycle.cancelSuspended(who(),now,"Replaced by a newer controller order");if(cancelled!=null){remember(cancelled);publish(cancelled);}if(!lifecycle.terminal()){lifecycle.update(Stage.CANCELLED,"Replaced by a newer order");remember(lifecycle.receipt(who(),now));publish(lifecycle.receipt(who(),now));}lifecycle.accepted(execute.id(),execute.requester(),execute.command());publish(lifecycle.receipt(who(),now));}
+                else if(Set.of("stop","cancel","forcecancel").contains(execute.command().split(" ",2)[0])){Receipt cancelled=lifecycle.cancelSuspended(who(),now,"Stopped by controller");if(cancelled!=null){remember(cancelled);publish(cancelled);}if(lifecycle.update(Stage.CANCELLED,"Stopped by controller")){remember(lifecycle.receipt(who(),now));publish(lifecycle.receipt(who(),now));}}
+            }
         }else if(packet instanceof Policy policy){
             if(bot.isPlayerClient())return;
             if(!policy.target().equals(who().id())||bot.getPlayerContext().player()==null||bot.getPlayerContext().world()==null)return;
+            long previousPolicy=Long.parseLong(policyVersions.getProperty(policy.reporter().toString(),"-1"));
+            if(policy.version()<=previousPolicy){appliedVersion=previousPolicy;Receipt reply=receipt(policy.id(),policy.requester(),true,"Already applied this policy revision or a newer one",now);remember(reply);publish(reply);return;}
             applyOnce(policy.reporter(),policy.id(),policy.requester(),()->{
                 Map<String,String> values=NetworkSettings.normalize(policy.settings());
                 var trust=bot.getBotControl().config();Set<UUID> next=new HashSet<>(trust.players());
@@ -107,7 +129,7 @@ final class NetworkControls {
                 if(changed)AtomicProperties.write(settingsFile,saved);
                 try{trust.apply(policy.trust());}
                 catch(RuntimeException error){if(changed)try{AtomicProperties.write(settingsFile,previous);}catch(RuntimeException rollback){error.addSuppressed(rollback);}throw error;}
-                setValues(values);appliedVersion=policy.version();
+                setValues(values);appliedVersion=policy.version();policyVersions.setProperty(policy.reporter().toString(),""+appliedVersion);while(policyVersions.size()>32)policyVersions.remove(policyVersions.stringPropertyNames().iterator().next());AtomicProperties.write(policyFile,policyVersions);
                 return "Settings and trust saved and applied";
             },now);
         }
@@ -128,12 +150,17 @@ final class NetworkControls {
     }
     private void remember(Receipt receipt){
         String receiptKey=receipt.id()+":"+receipt.reporter();boolean fresh=!receipts.containsKey(receiptKey);
+        Receipt prior=receipts.get(receiptKey);if(prior!=null&&(receipt.observedAt()<prior.observedAt()||Set.of(Stage.COMPLETED,Stage.CANCELLED,Stage.FAILED).contains(prior.stage())&&!Set.of(Stage.COMPLETED,Stage.CANCELLED,Stage.FAILED).contains(receipt.stage())))return;
         receipts.put(receiptKey,receipt);
         if(fresh&&receipt.requester().equals(who().id())&&chatRequests.containsKey(receipt.id()))hivemind.api.utils.Helper.HELPER.logDirect("["+receipt.reporterName()+"] "+(receipt.success()?"":"Failed: ")+receipt.message());
-        while(receipts.size()>256)receipts.remove(receipts.keySet().iterator().next());
+        while(receipts.size()>2048)receipts.remove(receipts.keySet().iterator().next());
+        if(receipt.reporter().equals(who().id()))receiptJournal.put(receipt);
     }
+    void record(Receipt receipt){remember(receipt);}
+    Receipt result(UUID id){return receipts.values().stream().filter(r->r.id().equals(id)&&r.valid(System.currentTimeMillis())).findFirst().orElse(null);}
     private void dispatch(Request request,long now){
-        List<UUID> online=states(now).stream().filter(state->!ClientRole.player(state.session())).map(State::reporter).toList();
+        boolean updates=request.action()==Action.COMMAND&&request.value().replaceFirst("^#","").startsWith("update");
+        List<UUID> online=states(now).stream().filter(state->updates||!ClientRole.player(state.session())).map(State::reporter).toList();
         for(Packet packet:coordinator.handle(request,online,now)){
             accept(packet,now);publish(packet);
         }
@@ -156,9 +183,21 @@ final class NetworkControls {
                 else if(parent.transport()==null||!parent.transport().connected()||!parent.transport().publish(request))throw new IllegalStateException("Host disconnected; action was not sent");
             }catch(RuntimeException error){remember(receipt(action.id(),who().id(),false,Objects.toString(error.getMessage(),"Action rejected"),now));}
         }
-        receipts.values().removeIf(receipt->!receipt.valid(now));
         if(now-lastState<500)return;
         lastState=now;State local=state(now);publish(local);if(now-lastOperations>=1000){lastOperations=now;publish(activity(now));}
+        if(!bot.isPlayerClient()&&bot.getPlayerContext().player()!=null&&bot.getPlayerContext().world()!=null&&lifecycle.suspended()!=null&&!bot.getReliability().checkpoint().recall()&&!bot.getReliability().holding()){
+            if(!lifecycle.terminal()&&lifecycle.update(Stage.CANCELLED,"Recall ended before arrival")){remember(lifecycle.receipt(who(),now));publish(lifecycle.receipt(who(),now));}
+            if(lifecycle.restore()){remember(lifecycle.receipt(who(),now));publish(lifecycle.receipt(who(),now));}
+        }
+        if(!bot.isPlayerClient()&&bot.getPlayerContext().player()!=null&&bot.getPlayerContext().world()!=null&&!lifecycle.terminal()){
+            var task=bot.getReliability().checkpoint();String blocker=bot.getOperations().blocker();if(blocker.isBlank())blocker=bot.getReliability().blocker();Stage stage;String reason;
+            if(lifecycle.active().command().equals("recall")&&bot.getReliability().recallArrived()){stage=Stage.COMPLETED;reason="Reached a known base; original task held until resume";}
+            else if(task.held()||bot.getReliability().holding()||!task.stack().isEmpty()||!blocker.isBlank()){stage=Stage.BLOCKED;reason=task.held()?"Held by controller":!blocker.isBlank()?blocker:task.stack().isEmpty()?"Waiting for recovery conditions":task.stack().get(0).reason();}
+            else if(task.intent().isBlank()&&!task.result().isBlank()){stage=task.result().startsWith("Cancelled")?Stage.CANCELLED:Stage.COMPLETED;reason=task.result();}
+            else {stage=Stage.STARTED;reason="Working: "+lifecycle.active().command();}
+            if(lifecycle.update(stage,reason)){Receipt receipt=lifecycle.receipt(who(),now);remember(receipt);publish(receipt);}
+        }
+        if(!lifecycle.terminal()&&now-lastLifecycleSend>=30000){lastLifecycleSend=now;Receipt receipt=lifecycle.receipt(who(),now);remember(receipt);publish(receipt);}
         if(authority()){
             group=new Defaults(who().id(),who().name(),rules.version(),rules.settings(null),rules.trust(null),now);
             publish(group);
@@ -174,7 +213,8 @@ final class NetworkControls {
         if(wire!=null&&!wire.isHost()&&wire.connected()){
             if(lastReplayEpoch!=wire.connectionEpoch()){
                 lastReplayEpoch=wire.connectionEpoch();replayReceipts.clear();
-                applied.values().stream().filter(receipt->receipt.valid(now)).skip(Math.max(0,applied.size()-16)).forEach(replayReceipts::add);
+                receiptJournal.latest(who(),now,64).forEach(replayReceipts::add);
+                applied.values().stream().filter(receipt->receipt.valid(now)&&receipt.stage()==Stage.APPLIED).skip(Math.max(0,applied.size()-16)).forEach(replayReceipts::add);
             }
             // Pace reconnection receipts so a large team cannot overflow every peer's priority queue.
             for(int i=0;i<2&&!replayReceipts.isEmpty();i++){Receipt receipt=replayReceipts.poll();if(receipt.valid(now))publish(receipt);}
@@ -202,11 +242,11 @@ final class NetworkControls {
         if(label.equals("status")){args.requireMax(0);return status();}
         if(label.equals("mine")&&expanded.second().size()>=2&&expanded.second().get(0).getValue().matches("[1-9][0-9]*")){
             int quantity=args.getAs(Integer.class);List<String> blocks=new ArrayList<>();while(args.hasAny())blocks.add(args.getString());
-            long id=bot.getJobManager().submit(quantity,blocks);bot.getAutonomy().afterCommand(label,"start");return "Queued mining job #"+id;
+            long id=bot.getJobManager().submit(quantity,blocks);bot.getAutonomy().afterCommand(label,"start");bot.getReliability().command(command);return "Queued mining job #"+id;
         }
         var target=bot.getCommandManager().getCommand(label);if(target==null)throw new IllegalArgumentException("Unknown bot command");
         String first=expanded.second().isEmpty()?"":expanded.second().get(0).getValue().toLowerCase(Locale.ROOT);bot.getAutonomy().beforeCommand(label,first);
-        target.execute(label,args);bot.getAutonomy().afterCommand(label,first);
+        target.execute(label,args);bot.getAutonomy().afterCommand(label,first);bot.getReliability().command(command);
         if(label.equals("deposit")&&first.equals("point")&&bot.getCommandManager().getCommand("storagepoint") instanceof hivemind.command.defaults.StoragePointCommand storage)return storage.result();
         if(target instanceof hivemind.command.defaults.BotBaseCommand base)return base.result();
         return "Accepted #"+command+"; "+status();
@@ -236,13 +276,20 @@ final class NetworkControls {
                 details.put("stock"+index++,stock.seen()+"|"+(stock.privateStock()?"private":"shared")+"|"+point.dimension()+"|"+point.x()+" "+point.y()+" "+point.z()+"|"+items);
             }
         }
-        details.put("flight",bot.isPlayerClient()?"Manual":bot.getFlight().status());details.put("recoveries",""+bot.getOperations().recoveries());
+        details.put("flight",bot.isPlayerClient()?"Manual":bot.getFlight().status());details.put("flightPlan",bot.isPlayerClient()?"Manual":bot.getFlight().planStatus());details.put("recoveries",""+bot.getOperations().recoveries());
+        if(online&&!bot.isPlayerClient())details.putAll(bot.getReliability().details());
+        if(!lifecycle.terminal())details.put("orderStage",lifecycle.active().stage().name().toLowerCase(Locale.ROOT));
+        if(online&&!bot.isPlayerClient()){
+            details.put("spareRockets",""+Math.max(0,hivemind.utils.bot.ExpeditionLoadout.count(ctx,"@rockets")-128));
+            int best=0;String food="";for(int i=0;i<36;i++){var item=ctx.player().getInventory().getItem(i);if(hivemind.utils.bot.BotInventory.food(item)&&hivemind.utils.bot.BotItems.ordinary(item)){String id=hivemind.utils.bot.BotItems.id(item);int amount=hivemind.utils.bot.BotItems.count(ctx,id);if(amount>best){best=amount;food=id;}}}
+            details.put("foodItem",food);details.put("spareFood",""+Math.max(0,best-64));details.put("flightReady",""+bot.getFlight().capable());
+        }
         details.put("available",""+(online&&!bot.isPlayerClient()&&!hivemind.utils.bot.BotWork.foreground(bot)&&!bot.getJobManager().hasQueuedJobs()&&!bot.getAutonomy().paused()&&bot.getAutonomy().order()==null));
         if(parent.transport()!=null)details.putAll(parent.transport().health());
         var queue=online&&!bot.isPlayerClient()?bot.getScoutProcess().queue():null;
         if(online&&!bot.isPlayerClient()&&bot.getPathingBehavior().getGoal()!=null)details.put("goal",bot.getPathingBehavior().getGoal().toString());
         if(queue!=null&&queue.first()!=null&&!bot.getOperations().isActive()&&details.get("blocker").isEmpty())details.put("next",queue.paused()?"Waiting for map queue resume":queue.tasks().size()>1?"Finish this task, then "+queue.tasks().get(1).kind()+" at "+queue.tasks().get(1).point().x()+" "+queue.tasks().get(1).point().z():"Finish the current map task");
-        details.replaceAll((key,value)->shorten(value,256));return new OperationsPackets.Snapshot(who().id(),who().name(),details,queue==null?List.of():queue.tasks(),queue!=null&&queue.paused(),now);
+        details.replaceAll((key,value)->shorten(value,256));return new OperationsPackets.Snapshot(who().id(),who().name(),details,queue==null?List.of():queue.tasks(),queue!=null&&queue.paused(),now,online&&!bot.isPlayerClient()?bot.getReliability().regions().regions():List.of());
     }
     private String status(){
         if(bot.isPlayerClient())return "Player client · sharing terrain and sightings";
@@ -269,6 +316,7 @@ final class NetworkControls {
     State state(long now){
         var ctx=bot.getPlayerContext();var session=SessionRuntime.get(ctx.minecraft().gameDirectory.toPath());
         Map<String,String> sessionState=new LinkedHashMap<>(session.snapshot());sessionState.put("role",bot.getClientRole().mode());
+        sessionState.put("protocol",""+NetworkProtocol.VERSION);sessionState.put("capabilities","reliability1,storage-leases,manual-player");
         sessionState.put("connected",Boolean.toString(ctx.player()!=null&&ctx.world()!=null&&ctx.minecraft().getConnection()!=null));if(bot.isPlayerClient())sessionState.put("automatic","false");
         Map<String,String> update=UpdateRuntime.ready()?UpdateRuntime.service().snapshot():Map.of();
         Map<String,String> settings=new LinkedHashMap<>();for(var spec:NetworkSettings.all())settings.put(spec.name(),setting(spec.name()).value.toString());

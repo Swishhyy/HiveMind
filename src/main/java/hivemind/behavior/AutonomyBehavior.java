@@ -52,10 +52,10 @@ public final class AutonomyBehavior extends Behavior {
     public Order order(){load();return store.order();}
     public void arm(Order order){load();store.clear();store.set(order);nextTry=0;reason="Order saved for "+order.name();}
     public void clear(){if(ctx.world()!=null&&ctx.player()!=null)load();if(store!=null){store.clear();nextTry=0;reason="No tracking order";}}
-    public void pause(boolean held){load();store.pause(held);}
+    public void pause(boolean held){load();store.pause(held);var task=hivemind.getReliability().checkpoint();if(task!=null)task.hold(held);}
     public boolean paused(){load();return store.paused();}
     public void defer(String message,long delay){reason=message;nextTry=System.currentTimeMillis()+Math.max(1000,delay);}
-    public void complete(){clear();reason="Target death observed; order completed";}
+    public void complete(){hivemind.getReliability().completed("kill","Target death observed; hunt order completed");clear();reason="Target death observed; order completed";}
     public String status(){
         load();Order o=store.order();return (store.paused()?"Paused · ":"")+(o==null?reason:(o.hunt()?"Hunt order: ":"Watch order: ")+o.name()+" · "+reason);
     }
@@ -63,7 +63,7 @@ public final class AutonomyBehavior extends Behavior {
     public void replaceWork(){load();clear();hivemind.getFlight().cancel();}
     private boolean workCommand(String label,String first){
         if(label.equals("deposit")&&first.equals("point"))return false;
-        if(Set.of("status","list","history","sightings","report","supported").contains(first))return false;
+        if(Set.of("status","list","history","sightings","report","supported","resolve","handoff").contains(first))return false;
         if(label.equals("scout")&&Set.of("add","list","move","remove","pause","clear","status").contains(first))return false;
         if(label.equals("job"))return Set.of("resume","start").contains(first);
         return Set.of("scout","mine","follow","goto","path","explore","farm","build","gettoblock","deposit","deliver","escort","recover","gather","repair","elytra").contains(label);
@@ -95,7 +95,7 @@ public final class AutonomyBehavior extends Behavior {
             if(now-lastRoster>=500){roster(now);lastRoster=now;}
             if(now>=nextReport){report(now);nextReport=now+AutonomyPolicy.reportInterval(HiveMind.settings().botReportIntervalMS.value);}
             Order order=store.order();
-            if(order==null||store.paused()||!HiveMind.settings().botPersistentTracking.value||now<nextTry||hivemind.getStalkProcess().isActive()||BotWork.foreground(hivemind)||hivemind.getConflictProcess().isActive()||hivemind.getSculkProcess().isActive()||hivemind.getElytraProcess().isActive()||ctx.minecraft().gui.screen()!=null)return;
+            if(order==null||hivemind.getReliability().holding()||store.paused()||!HiveMind.settings().botPersistentTracking.value||now<nextTry||hivemind.getStalkProcess().isActive()||BotWork.foreground(hivemind)||hivemind.getConflictProcess().isActive()||hivemind.getSculkProcess().isActive()||hivemind.getElytraProcess().isActive()||ctx.minecraft().gui.screen()!=null)return;
             if(order.owner()!=null&&!hivemind.getBotControl().isTrusted(order.owner())){clear();reason="Order removed: controller is no longer trusted";return;}
             Order requested=order;
             var info=order.target()==null?ctx.minecraft().getConnection().getOnlinePlayers().stream().filter(p->p.getProfile().name().equalsIgnoreCase(requested.name())).findFirst().orElse(null):ctx.minecraft().getConnection().getPlayerInfo(order.target());

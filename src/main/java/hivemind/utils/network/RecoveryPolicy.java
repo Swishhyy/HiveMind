@@ -12,4 +12,8 @@ public final class RecoveryPolicy {
         return Action.NONE;
     }
     public int attempts(){return attempts;}
+    public static boolean groundOnly(long now,long since,long until,double displacement){return now<until&&(now-since<2000||displacement<16);}
+    /** Expected navigation also covers a path calculation that has not produced a usable path. */
+    public static boolean navigationPending(boolean held,boolean intentionalPause,boolean flying,boolean explicitJourney,boolean hasPath,boolean hasGoal,boolean goalReached){return !held&&(flying||!intentionalPause&&hasGoal&&!goalReached&&(explicitJourney||hasPath));}
+
 }

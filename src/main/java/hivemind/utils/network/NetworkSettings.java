@@ -42,6 +42,9 @@ public final class NetworkSettings {
     }
     private static final Map<String, Spec> SPECS = new LinkedHashMap<>();
     static {
+        bool("Reliability","botFleetHold botFleetRecall botAutomaticMaintenance botRequestSupplyDelivery botUpdateRestart");
+        number("Reliability","long",0,Long.MAX_VALUE,"botFleetControlRevision");
+        choice("Reliability","botControllerOfflinePolicy","continue","hold","return");
         bool("Sessions","botCombatLog botAutoReconnect");
         number("Sessions","integer",1,20,"botCombatLogHealth");
         number("Sessions","long",5000,86400000,"botCombatLogWaitMS");
@@ -115,6 +118,7 @@ public final class NetworkSettings {
         number("Sharing","long",10000,600000,"networkSightingTTLMS");
     }
     private NetworkSettings() {}
+    public static boolean legacySupported(String name){Spec spec=SPECS.get(name);return spec==null||!spec.group().equals("Reliability");}
     /** Old capability switches are accepted only while migrating saved settings or older policies. */
     public static boolean retired(String name) {
         return Set.of("allowbreak", "allowbreakanyway", "allowplace", "allowinventory", "botuseshulkers")

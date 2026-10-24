@@ -23,7 +23,7 @@ public final class ControllerChecks {
     private static State state(Identity bot,long now,Map<String,String> settings,Map<String,String> session){return new State(bot.id(),bot.name(),"Testing",6,20,new Endpoint("minecraft:overworld",30,64,40),Map.of(),settings,Map.of(),0,now,Map.of("version","0.1.0.0"),session);}
     public static void main(String[] args)throws Exception{
         Path data=Files.createTempDirectory("hivemind-controller");long now=System.currentTimeMillis();
-        check(NetworkSettings.all().size()<=128,"Settings exceed protocol bounds");
+        check(NetworkSettings.all().size()<=160,"Settings exceed protocol bounds");
         SessionState session=new SessionState(data);session.observe(true,"example.test","Example",now,10000);session.command("session logout 60",now);check(session.takeDisconnect(),"Logout not requested");session.observe(false,null,null,now+1,10000);
         check(!session.shouldConnect(now+59000,false)&&session.shouldConnect(now+60001,false),"Reconnect did not respect cooldown");
         session.resumeJob(1234);check(new SessionState(data).resumeJob()==1234,"Mining resume anchor did not survive restart");

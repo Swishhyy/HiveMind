@@ -17,6 +17,7 @@ public final class WhyCommand extends Command {
         args.requireMax(0);var bot=(HiveMind)hivemind;
         if(bot.isPlayerClient()||ctx.player()==null||ctx.world()==null)throw new CommandInvalidStateException("Select a connected bot");
         logDirect("Current "+bot.getOperations().kitName()+" kit; blocker: "+bot.getOperations().blocker()+"; next: "+bot.getOperations().nextAction());
+        bot.getReliability().details().forEach((key,value)->{if(!value.isBlank())logDirect(key+": "+value);});
         var events=bot.getOperations().journal().recent(12);if(events.isEmpty())logDirect("No recorded bot actions yet");
         else for(var event:events)logDirect(Instant.ofEpochMilli(event.time())+" "+event.kind()+": "+event.message());
     }

@@ -18,6 +18,7 @@
 package hivemind.process;
 
 import hivemind.HiveMind;
+import hivemind.utils.reliability.ActionArbiter;
 import hivemind.api.behavior.IBehavior;
 import hivemind.api.event.events.TickEvent;
 import hivemind.api.pathing.goals.GoalNear;
@@ -49,6 +50,7 @@ public final class CompanionProcess extends HiveMindProcessHelper implements IBe
     private String targetName,item,status="Idle";
     private int quantity,stageTicks,searchStep,quietTicks,delivered,pendingDrop,pendingEntity=-1;
     private boolean returning,fetching,fetchStarted,handoff,arrivalNotified,mining,finishedMine,working,depositing;
+    private boolean retainProduct;
     private WorldRoutes.Endpoint origin,destination;
     private BotLocations.Death death;
     private Map<String,Integer> baseline=Map.of();
@@ -89,10 +91,16 @@ public final class CompanionProcess extends HiveMindProcessHelper implements IBe
     @Override public boolean isTemporary(){return true;}
     @Override public double priority(){return -0.6;}
     public Kind kind(){return kind;}
+    public boolean restartSafe(){return pendingDrop<=0;}
     public boolean isRecovering(){return kind==Kind.RECOVER;}
     public UUID escortedPlayer(){return kind==Kind.ESCORT?targetId:null;}
     public boolean reserves(String id){return isActive()&&reserved.contains(id);}
     public String status(){return status;}
+    public String resumeCommand(){
+        if(kind==Kind.DELIVER&&destination!=null)return "assist bring "+targetName+" "+destination.dimension()+" "+destination.x()+" "+destination.y()+" "+destination.z()+" "+item+" "+Math.max(1,quantity-delivered);
+        if(kind==Kind.ESCORT&&destination!=null)return "assist backup "+targetName+" "+destination.dimension()+" "+destination.x()+" "+destination.y()+" "+destination.z();
+        return kind==Kind.GATHER?"gather "+quantity+" "+item:kind==Kind.RECOVER?"recover now":null;
+    }
     public void stopWithReason(String reason){if(isActive())fail(reason);}
     private void begin(Kind task){
         if(ctx.player()==null||ctx.world()==null||!ctx.player().isAlive())throw new IllegalStateException("Respawn and join a world before starting a task");
@@ -118,13 +126,18 @@ public final class CompanionProcess extends HiveMindProcessHelper implements IBe
         Seen previous=seen.get(profile.getProfile().id());Player visible=player(profile.getProfile().id());
         if(visible==null&&meeting==null&&(previous==null||System.currentTimeMillis()-previous.time()>120000))throw new IllegalStateException("Player position is unknown; include meeting coordinates after the quantity");
         WorldRoutes.Endpoint point=meeting!=null?MiningRouteAccess.endpoint(ctx,meeting):visible!=null?MiningRouteAccess.endpoint(ctx,visible.blockPosition()):previous.point();
+        hivemind.getReliability().delivery().start(profile.getProfile().id(),profile.getProfile().name(),id,amount,point);
         begin(Kind.DELIVER);targetId=profile.getProfile().id();targetName=profile.getProfile().name();item=id;quantity=amount;destination=point;reserved=Set.of(item);
         status="Fetching "+amount+" "+item+" for "+targetName;notifyOwner(status);
     }
+    public void restoreDelivery(){var saved=hivemind.getReliability().delivery().value();if(saved==null)throw new IllegalStateException("No saved delivery");if(saved.pending()>0)throw new IllegalStateException("Handoff pickup unconfirmed; inspect it before resolving");begin(Kind.DELIVER);targetId=saved.recipient();targetName=saved.name();item=saved.item();quantity=saved.quantity();delivered=saved.delivered();destination=saved.point();reserved=Set.of(item);status="Resuming confirmed delivery progress "+delivered+"/"+quantity;}
+    public void resolveDelivery(String result){hivemind.getReliability().delivery().resolve(result);var saved=hivemind.getReliability().delivery().value();if(kind==Kind.DELIVER){delivered=saved.delivered();pendingDrop=0;pendingEntity=-1;handoff=false;}notifyOwner("Handoff resolved as "+result+"; confirmed received "+saved.delivered()+"/"+saved.quantity());}
     public void escortAt(String name,WorldRoutes.Endpoint point){var profile=online(name);begin(Kind.ESCORT);targetId=profile.getProfile().id();targetName=profile.getProfile().name();destination=point;notifyOwner("Meeting and escorting "+targetName);}
     public void escort(String name){var profile=online(name);Player visible=player(profile.getProfile().id());if(visible==null)throw new IllegalStateException("Escort requires a player currently visible to this client");begin(Kind.ESCORT);targetId=profile.getProfile().id();targetName=profile.getProfile().name();destination=MiningRouteAccess.endpoint(ctx,visible.blockPosition());notifyOwner("Escorting "+targetName);}
-    public GatherPlanner.Plan plan(String requested,int amount){var recipes=new VanillaRecipes();return new GatherPlanner(recipes::recipes,HiveMind.settings().gatherMaxActions.value).plan(BotItems.require(requested),amount,BotItems.inventory(ctx));}
-    public void gather(String requested,int amount){String id=BotItems.require(requested);CompanionPolicy.quantity(amount);var recipes=new VanillaRecipes();var next=new GatherPlanner(recipes::recipes,HiveMind.settings().gatherMaxActions.value);var planned=next.plan(id,amount,BotItems.inventory(ctx));begin(Kind.GATHER);item=id;quantity=amount;planner=next;reserved=planned.required().keySet();status="Gathering "+amount+" "+id;notifyOwner(status);}
+    private Map<String,Integer> stockFor(String id){var stock=new HashMap<>(BotItems.inventory(ctx));stock.put(id,BotItems.supplyCount(ctx,id));return stock;}
+    public GatherPlanner.Plan plan(String requested,int amount){String id=BotItems.require(requested);var recipes=new VanillaRecipes();return new GatherPlanner(recipes::recipes,HiveMind.settings().gatherMaxActions.value).plan(id,amount,stockFor(id));}
+    public void gather(String requested,int amount){String id=BotItems.require(requested);CompanionPolicy.quantity(amount);var recipes=new VanillaRecipes();var next=new GatherPlanner(recipes::recipes,HiveMind.settings().gatherMaxActions.value);var planned=next.plan(id,amount,stockFor(id));begin(Kind.GATHER);item=id;quantity=amount;planner=next;reserved=planned.required().keySet();status="Gathering "+amount+" "+id;notifyOwner(status);}
+    public void produceSupplies(String requested,int amount){gather(requested,amount);retainProduct=true;}
     public void confirmHandoff(){
         if(kind!=Kind.DELIVER)throw new IllegalStateException("No delivery is running");UUID caller=hivemind.getJobManager().requestOwner();
         if(caller!=null&&!caller.equals(targetId)&&!caller.equals(owner))throw new IllegalStateException("Only the recipient or delivery controller can confirm handoff");
@@ -184,8 +197,8 @@ public final class CompanionProcess extends HiveMindProcessHelper implements IBe
         return new PathingCommand(goal,PathingCommandType.REVALIDATE_GOAL_AND_PATH);
     }
     private PathingCommand deliverTick(boolean failed,boolean safe){
-        if(fetching){fetching=false;if(BotItems.count(ctx,item)<quantity)return fail("Storage did not provide enough "+item+"; carrying "+BotItems.count(ctx,item)+"/"+quantity);}
-        if(!fetchStarted){fetchStarted=true;if(BotItems.count(ctx,item)<quantity){fetching=true;hivemind.getDepositProcess().startFetch(Map.of(item,quantity));return defer();}}
+        if(fetching){fetching=false;if(BotItems.supplyCount(ctx,item)<quantity-delivered)return fail("Storage did not provide enough "+item+"; carrying "+BotItems.supplyCount(ctx,item)+"/"+quantity);}
+        if(!fetchStarted){fetchStarted=true;if(BotItems.supplyCount(ctx,item)<quantity-delivered){fetching=true;hivemind.getDepositProcess().startExpeditionFetch(Map.of(item,quantity-delivered));return defer();}}
         var target=player(targetId);
         if(target!=null){destination=MiningRouteAccess.endpoint(ctx,target.blockPosition());lastSeen=System.currentTimeMillis();}
         if(target==null){PathingCommand route=travel(destination,failed,safe,false);if(route!=null)return route;return pause();}
@@ -194,20 +207,23 @@ public final class CompanionProcess extends HiveMindProcessHelper implements IBe
         if(target.distanceToSqr(ctx.player())>distance*distance)return new PathingCommand(new GoalNear(target.blockPosition(),distance),PathingCommandType.REVALIDATE_GOAL_AND_PATH);
         if(!safe)return pause();hivemind.getInputOverrideHandler().clearAllKeys();ctx.playerController().resetBlockRemoving();
         status="Delivery to "+targetName+": "+delivered+"/"+quantity+" received";
-        if(delivered>=quantity){notifyOwner(status);onLostControl();return new PathingCommand(null,PathingCommandType.CANCEL_AND_SET_GOAL);}
+        if(delivered>=quantity){hivemind.getReliability().success("delivery","Recipient pickup confirmed: "+delivered+" "+item);hivemind.getReliability().completed("deliver assist","Recipient pickup confirmed: "+delivered+" "+item);notifyOwner(status);onLostControl();return new PathingCommand(null,PathingCommandType.CANCEL_AND_SET_GOAL);}
         if(!arrivalNotified){arrivalNotified=true;notifyOwner("Delivery arrived for "+targetName+"; use deliver handoff to release the requested items");}
         if(pendingDrop>0){
             discoverDrop();if(System.currentTimeMillis()-dropTime>60000)return fail("Handoff pickup was not confirmed; "+status);return pause();
         }
+        if(!handoff&&hivemind.getNetwork().autonomousPeer(targetId))handoff=true;
         if(!handoff&&HiveMind.settings().deliveryRequireHandoff.value)return pause();
         boolean alone=ctx.world().players().stream().noneMatch(other->other!=ctx.player()&&!other.getUUID().equals(targetId)&&other.distanceToSqr(ctx.player())<64);
         if(!CompanionPolicy.mayHandoff(target.getUUID().equals(targetId),target.distanceToSqr(ctx.player())<=16,ctx.player().hasLineOfSight(target),alone,ctx.player().getDeltaMovement().multiply(1,0,1).lengthSqr()<0.0001))return pause();
         if(ctx.player().containerMenu!=ctx.player().inventoryMenu||!ctx.player().inventoryMenu.getCarried().isEmpty())return fail("Clear inventory menus and the cursor before handoff");
         var rotation=RotationUtils.calcRotationFromVec3d(ctx.playerHead(),target.position().add(0,0.4,0),ctx.playerRotations());hivemind.getLookBehavior().updateTarget(rotation,true);
         if(!ctx.playerRotations().isReallyCloseTo(rotation))return pause();
-        int slot=BotItems.slot(ctx,item);if(slot<0)return fail("Delivery payload is missing; "+status);
+        int slot=BotItems.supplySlot(ctx,item);if(slot<0)return fail("Delivery payload is missing; "+status);
         ItemStack stack=ctx.player().getInventory().getItem(slot);int button=CompanionPolicy.dropButton(stack.getCount(),quantity-delivered);
-        pendingDrop=button==1?stack.getCount():1;pendingEntity=-1;beforeEntities.clear();ctx.entitiesStream().forEach(entity->beforeEntities.add(entity.getId()));dropTime=System.currentTimeMillis();
+        if(!hivemind.getActions().allow(ActionArbiter.Channel.INVENTORY,ActionArbiter.Channel.HAND))return pause();
+        int dropping=button==1?stack.getCount():1;hivemind.getReliability().delivery().dropping(dropping);
+        pendingDrop=dropping;pendingEntity=-1;beforeEntities.clear();ctx.entitiesStream().forEach(entity->beforeEntities.add(entity.getId()));dropTime=System.currentTimeMillis();
         ctx.playerController().windowClick(ctx.player().inventoryMenu.containerId,slot<9?slot+36:slot,button,ContainerInput.THROW,ctx.player());return pause();
     }
     private void discoverDrop(){
@@ -220,8 +236,8 @@ public final class CompanionProcess extends HiveMindProcessHelper implements IBe
         if(kind!=Kind.DELIVER||pendingDrop<1)return;discoverDrop();if(pendingEntity!=entityId)return;
         Player target=player(targetId);
         if(target!=null&&collectorId==target.getId()){
-            int accepted=Math.min(Math.max(0,amount),pendingDrop);delivered+=accepted;pendingDrop-=accepted;if(pendingDrop==0){pendingEntity=-1;handoff=handoff||!HiveMind.settings().deliveryRequireHandoff.value;}
-        }else if(collectorId==ctx.player().getId()){pendingDrop=0;pendingEntity=-1;handoff=false;notifyOwner("Bot picked the handoff back up; move closer and confirm handoff again");}
+            int accepted=Math.min(Math.max(0,amount),pendingDrop);if(accepted<1)return;hivemind.getReliability().delivery().received(accepted);delivered+=accepted;pendingDrop-=accepted;if(pendingDrop==0){pendingEntity=-1;handoff=handoff||!HiveMind.settings().deliveryRequireHandoff.value;}
+        }else if(collectorId==ctx.player().getId()){hivemind.getReliability().delivery().returned();pendingDrop=0;pendingEntity=-1;handoff=false;notifyOwner("Bot picked the handoff back up; move closer and confirm handoff again");}
         else fail("Another entity collected the handoff; "+delivered+"/"+quantity+" were confirmed for the recipient");
     }
     private PathingCommand escortTick(boolean failed,boolean safe){
@@ -238,13 +254,14 @@ public final class CompanionProcess extends HiveMindProcessHelper implements IBe
     private PathingCommand gatherTick(boolean failed,boolean safe){
         if(fetching){fetching=false;if(hivemind.getDepositProcess().lastFetchError()!=null)throw new IllegalStateException(hivemind.getDepositProcess().lastFetchError());}
         if(working){working=false;if(hivemind.getWorkstationProcess().error()!=null)throw new IllegalStateException(hivemind.getWorkstationProcess().error());}
-        if(depositing){depositing=false;if(hivemind.getDepositProcess().lastDepositError()!=null)throw new IllegalStateException(hivemind.getDepositProcess().lastDepositError());notifyOwner("Gathered and deposited "+quantity+" "+item);onLostControl();return new PathingCommand(null,PathingCommandType.CANCEL_AND_SET_GOAL);}
+        if(depositing){depositing=false;if(hivemind.getDepositProcess().lastDepositError()!=null)throw new IllegalStateException(hivemind.getDepositProcess().lastDepositError());hivemind.getReliability().completed("gather","Requested product quantity gathered and storage transfer completed");notifyOwner("Gathered and deposited "+quantity+" "+item);onLostControl();return new PathingCommand(null,PathingCommandType.CANCEL_AND_SET_GOAL);}
         if(mining){if(hivemind.getMineProcess().isActive())return defer();if(!finishedMine)return fail("Resource mining stopped before its target was reached");mining=finishedMine=false;}
-        if(BotItems.count(ctx,item)>=quantity){
-            if(MiningRouteAccess.deposits(ctx).isEmpty()){notifyOwner("Gathered "+quantity+" "+item+"; carrying it because no storage is registered");onLostControl();return new PathingCommand(null,PathingCommandType.CANCEL_AND_SET_GOAL);}
+        if(BotItems.supplyCount(ctx,item)>=quantity){
+            if(retainProduct){hivemind.getReliability().success("production","Produced and retained "+quantity+" "+item);onLostControl();return new PathingCommand(null,PathingCommandType.CANCEL_AND_SET_GOAL);}
+            if(MiningRouteAccess.deposits(ctx).isEmpty()){hivemind.getReliability().completed("gather","Requested product quantity confirmed in the inventory");notifyOwner("Gathered "+quantity+" "+item+"; carrying it because no storage is registered");onLostControl();return new PathingCommand(null,PathingCommandType.CANCEL_AND_SET_GOAL);}
             hivemind.getDepositProcess().startProductDeposit(item);depositing=true;return defer();
         }
-        var plan=planner.plan(item,quantity,BotItems.inventory(ctx));reserved=plan.required().keySet();
+        var plan=planner.plan(item,quantity,stockFor(item));reserved=plan.required().keySet();
         for(var entry:plan.required().entrySet())if(!fetched.contains(entry.getKey())&&BotItems.count(ctx,entry.getKey())<entry.getValue()){
             fetched.add(entry.getKey());
             if(!MiningRouteAccess.deposits(ctx).isEmpty()){hivemind.getDepositProcess().startFetch(Map.of(entry.getKey(),entry.getValue()));fetching=true;return defer();}
@@ -282,6 +299,6 @@ public final class CompanionProcess extends HiveMindProcessHelper implements IBe
         for(Player player:ctx.world().players())if(player!=ctx.player()&&player.isAlive())seen.put(player.getUUID(),new Seen(MiningRouteAccess.endpoint(ctx,player.blockPosition()),now));
     }
     private boolean nowExpired(){return System.currentTimeMillis()>deadline;}
-    @Override public void onLostControl(){kind=Kind.IDLE;root=null;owner=targetId=null;targetName=item=null;quantity=stageTicks=searchStep=quietTicks=delivered=pendingDrop=0;pendingEntity=-1;returning=fetching=fetchStarted=handoff=arrivalNotified=mining=finishedMine=working=depositing=false;origin=destination=null;death=null;baseline=Map.of();reserved=Set.of();fetched.clear();failedRecoveryItems.clear();beforeEntities.clear();planner=null;status="Idle";}
+    @Override public void onLostControl(){kind=Kind.IDLE;root=null;owner=targetId=null;targetName=item=null;quantity=stageTicks=searchStep=quietTicks=delivered=pendingDrop=0;pendingEntity=-1;returning=fetching=fetchStarted=handoff=arrivalNotified=mining=finishedMine=working=depositing=retainProduct=false;origin=destination=null;death=null;baseline=Map.of();reserved=Set.of();fetched.clear();failedRecoveryItems.clear();beforeEntities.clear();planner=null;status="Idle";}
     @Override public String displayName0(){return status;}
 }

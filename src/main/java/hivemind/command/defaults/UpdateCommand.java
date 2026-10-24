@@ -14,7 +14,8 @@ public final class UpdateCommand extends Command {
             var service=UpdateRuntime.service();String action=args.hasAny()?args.getString().toLowerCase(Locale.ROOT):"status";
             switch(action){
                 case "status" -> args.requireMax(0);
-                case "check","install" -> {args.requireMax(0);service.check(action.equals("install"));}
+                case "check","install" -> {String expected=action.equals("install")&&args.hasAny()?args.getString():"";args.requireMax(0);if(!expected.isBlank()&&!expected.matches("[0-9]+(?:\\.[0-9]+){3}"))throw new IllegalArgumentException("Use a four-part release version");service.check(action.equals("install"),expected);}
+                case "unpin" -> {args.requireMax(0);service.unpin();}
                 case "auto" -> {String value=args.getString();args.requireMax(0);if(!Set.of("on","off").contains(value))throw new IllegalArgumentException("Use update auto on/off");service.consent(value.equals("on"));}
                 default -> throw new IllegalArgumentException("Use update status/check/install/auto on/off");
             }

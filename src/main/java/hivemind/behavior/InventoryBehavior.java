@@ -18,6 +18,7 @@
 package hivemind.behavior;
 
 import hivemind.HiveMind;
+import hivemind.utils.reliability.ActionArbiter;
 import hivemind.utils.bot.BotWork;
 import hivemind.api.event.events.TickEvent;
 import hivemind.api.utils.Helper;
@@ -62,6 +63,7 @@ public final class InventoryBehavior extends Behavior implements Helper {
         if (event.getType() == TickEvent.Type.OUT) {
             return;
         }
+        if(hivemind.isPlayerClient()||!hivemind.getActions().allow(ActionArbiter.Channel.INVENTORY,ActionArbiter.Channel.HAND))return;
         if (hivemind.getMineProcess().isCleaningWaste() || hivemind.getDepositProcess().isActive()
                 || hivemind.getSurvivalProcess().isActive()&&!hivemind.getSurvivalProcess().isWaiting() || hivemind.getConflictProcess().isActive()
                 || hivemind.getCompanionProcess().isActive() || hivemind.getWorkstationProcess().isActive()
@@ -212,7 +214,7 @@ public final class InventoryBehavior extends Behavior implements Helper {
             // acceptableThrowawayItems to the CalculationContext
             if (desired.test(item)) {
                 if (select) {
-                    p.getInventory().setSelectedSlot(i);
+                    hivemind.getReliability().select(i);
                 }
                 return true;
             }
@@ -227,7 +229,7 @@ public final class InventoryBehavior extends Behavior implements Helper {
                 ItemStack item = inv.get(i);
                 if (item.isEmpty() || item.getItem().components().has(DataComponents.TOOL)) {
                     if (select) {
-                        p.getInventory().setSelectedSlot(i);
+                        hivemind.getReliability().select(i);
                     }
                     return true;
                 }
@@ -238,7 +240,7 @@ public final class InventoryBehavior extends Behavior implements Helper {
             if (desired.test(inv.get(i))) {
                 if (select) {
                     requestSwapWithHotBar(i, 7);
-                    p.getInventory().setSelectedSlot(7);
+                    hivemind.getReliability().select(7);
                 }
                 return true;
             }

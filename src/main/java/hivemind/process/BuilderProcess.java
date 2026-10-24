@@ -511,6 +511,7 @@ public final class BuilderProcess extends HiveMindProcessHelper implements IBuil
             numRepeats++;
             if (repeat.equals(new Vec3i(0, 0, 0)) || (max != -1 && numRepeats >= max)) {
                 logDirect("Done building");
+                hivemind.getReliability().completed("build","Build verification pass completed");
                 if (HiveMind.settings().notificationOnBuildFinished.value) {
                     logNotification("Done building", false);
                 }
@@ -554,7 +555,7 @@ public final class BuilderProcess extends HiveMindProcessHelper implements IBuil
         if (toPlace.isPresent() && isSafeToCancel && ctx.player().onGround() && ticks <= 0) {
             Rotation rot = toPlace.get().rot;
             hivemind.getLookBehavior().updateTarget(rot, true);
-            ctx.player().getInventory().setSelectedSlot(toPlace.get().hotbarSelection);
+            hivemind.getReliability().select(toPlace.get().hotbarSelection);
             hivemind.getInputOverrideHandler().setInputForceState(Input.SNEAK, true);
             if ((ctx.isLookingAt(toPlace.get().placeAgainst) && ((BlockHitResult) ctx.objectMouseOver()).getDirection().equals(toPlace.get().side)) || ctx.playerRotations().isReallyCloseTo(rot)) {
                 hivemind.getInputOverrideHandler().setInputForceState(Input.CLICK_RIGHT, true);

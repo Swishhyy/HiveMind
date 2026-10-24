@@ -8,4 +8,9 @@ public final class PortableSupplyPolicy {
         return emptySlots>=1&&stack>0&&maximumStack>0&&stack<=(long)Math.max(0,matchingCapacity)+(long)Math.max(0,emptySlots-1)*maximumStack;
     }
     public static boolean mayRecover(boolean confirmedPlacement,boolean expectedBlock,boolean emptyCursor){return confirmedPlacement&&expectedBlock&&emptyCursor;}
+    /** Keep a nearby placed box safe without grounding travel forever for a distant recovery record. */
+    public static boolean blocksTravel(boolean active,boolean pending,boolean sameDimension,double distanceSquared,boolean loaded,boolean retryReady){
+        return active||pending&&sameDimension&&distanceSquared<=64D*64&&loaded&&retryReady;
+    }
+
 }
