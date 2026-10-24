@@ -17,7 +17,7 @@ public final class TaskCheckpoint {
     private long fleetRevision;
     private List<Interruption> stack=List.of();
     public TaskCheckpoint(Path root,UUID account){
-        file=root.resolve("task-runtime-"+account+".properties");Properties p=AtomicProperties.read(file);
+        file=root.resolve("task-runtime-"+account+".properties");Properties p=AtomicProperties.readValidated(file,TaskCheckpoint::validate);
         generation=Long.parseLong(p.getProperty("generation","0"));held=Boolean.parseBoolean(p.getProperty("held","false"));
         intent=p.getProperty("intent","");result=p.getProperty("result","");
         resume=p.getProperty("resume",intent);dimension=p.getProperty("dimension","");
@@ -25,6 +25,11 @@ public final class TaskCheckpoint {
         if(generation<0||intent.length()>512)throw new IllegalStateException("Invalid task checkpoint");
         int count=Integer.parseInt(p.getProperty("count","0"));if(count<0||count>12)throw new IllegalStateException("Invalid task interruptions");
         List<Interruption> saved=new ArrayList<>();for(int i=0;i<count;i++){String k="interrupt."+i+".";saved.add(new Interruption(p.getProperty(k+"owner",""),p.getProperty(k+"reason",""),p.getProperty(k+"resume",""),Long.parseLong(p.getProperty(k+"since","0"))));}stack=List.copyOf(saved);
+    }
+    private static void validate(Properties p){
+        long generation=Long.parseLong(p.getProperty("generation","0")),revision=Long.parseLong(p.getProperty("fleetRevision","0"));int count=Integer.parseInt(p.getProperty("count","0"));
+        if(generation<0||generation==Long.MAX_VALUE||revision<0||count<0||count>12||p.getProperty("intent","").length()>512||p.getProperty("resume","").length()>512)throw new IllegalArgumentException("Invalid checkpoint fields");
+        for(int i=0;i<count;i++)if(Long.parseLong(p.getProperty("interrupt."+i+".since","0"))<0)throw new IllegalArgumentException("Invalid interruption time");
     }
     public long generation(){return generation;}public boolean held(){return held;}public String intent(){return intent;}public String result(){return result;}public List<Interruption> stack(){return stack;}
     public String resume(){return resume;}public String dimension(){return dimension;}

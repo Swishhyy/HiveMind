@@ -45,7 +45,9 @@ public final class CompatFixture {
 }
 '''
 
-def run(*args): subprocess.run([str(a) for a in args], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+def run(*args):
+    result=subprocess.run([str(a) for a in args], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    if result.returncode:raise RuntimeError(result.stderr or result.stdout or 'Compatibility subprocess failed')
 try: subprocess.check_output(['git','rev-parse',REFERENCE],stderr=subprocess.DEVNULL)
 except subprocess.CalledProcessError: subprocess.run(['git','fetch','origin','tag',REFERENCE,'--depth=1'],check=True)
 
@@ -66,8 +68,8 @@ with tempfile.TemporaryDirectory(prefix='hivemind-protocol-') as temporary:
         server=subprocess.Popen([str(JAVA),'-cp',modern if server_new else legacy,'CompatFixture','server',str(port),str(server_new).lower()],stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
         try:
             deadline=time.monotonic()+10
-            while not port.exists() and server.poll() is None and time.monotonic()<deadline:time.sleep(.02)
-            if not port.exists():raise RuntimeError('Compatibility server failed: '+server.communicate(timeout=2)[1])
+            while (not port.exists() or port.stat().st_size==0) and server.poll() is None and time.monotonic()<deadline:time.sleep(.02)
+            if not port.exists() or port.stat().st_size==0:raise RuntimeError('Compatibility server failed: '+server.communicate(timeout=2)[1])
             run(JAVA,'-cp',modern if client_new else legacy,'CompatFixture','client',port.read_text(),str(client_new).lower())
             stdout,stderr=server.communicate(timeout=10)
             if server.returncode:raise RuntimeError(stderr)

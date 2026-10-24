@@ -43,6 +43,18 @@ public final class AtomicProperties {
         file=file.toAbsolutePath().normalize();
         synchronized(LOCKS.computeIfAbsent(file,p->new Object())){writeLocked(file,values);}
     }
+    /** Schema validation also participates in recovery; parseable text is not necessarily valid state. */
+    public static Properties readValidated(Path file,java.util.function.Consumer<Properties> validator){
+        Properties candidate=read(file);
+        try{validator.accept(candidate);return candidate;}
+        catch(RuntimeException original){
+            for(int i=1;i<=3;i++)try(InputStream in=Files.newInputStream(backup(file,i))){
+                Properties recovered=new Properties();recovered.load(in);validator.accept(recovered);
+                System.err.println("HiveMind recovered validated "+file.getFileName()+" from snapshot "+i+"; original retained");return recovered;
+            }catch(IOException|RuntimeException invalid){}
+            throw new IllegalStateException("Invalid "+file.getFileName()+"; no valid snapshots",original);
+        }
+    }
     public static Path backup(Path file,int index){if(index<1||index>3)throw new IllegalArgumentException("Snapshot must be 1–3");return file.resolveSibling(file.getFileName()+".bak"+index);}
     private static void writeLocked(Path file,Properties values){
         Path temp = null;

@@ -20,6 +20,7 @@ public final class ControllerUpdateChecks {
     }
     public static void main(String[] args)throws Exception {
         if(args.length>0&&args[0].equals("--hold")){try(var channel=java.nio.channels.FileChannel.open(Path.of(args[2]),StandardOpenOption.WRITE);var lock=channel.lock()){Files.writeString(Path.of(args[1]),"ready");Thread.sleep(30000);}return;}
+        if(args.length>0&&args[0].equals("--boot-check")){if(!ControllerUpdater.digest(Path.of(args[1])).equals(args[2]))System.exit(7);Files.writeString(Path.of(args[3]),"restored");return;}
         if(args.length>0&&args[0].equals("--probe")){Path marker=Path.of(args[1]),partial=Path.of(args[1]+".tmp");Files.writeString(partial,String.join("\n",Arrays.copyOfRange(args,2,args.length)));Files.move(partial,marker,StandardCopyOption.ATOMIC_MOVE);return;}
         Path root=Files.createTempDirectory("hivemind controller update ");try{
             Path jar=root.resolve("my controller.jar"),candidate=root.resolve("candidate.jar");Files.copy(Path.of("build/distributions/hivemind-controller.jar"),jar);byte[] original=Files.readAllBytes(jar);candidate(candidate,"hivemind-controller");var p=manifest(candidate,"0.1.0.10");byte[] metadata=properties(p),data=Files.readAllBytes(candidate);
@@ -54,6 +55,15 @@ public final class ControllerUpdateChecks {
             var failed=new ProcessBuilder(commands.get(0)).inheritIO().start();check(failed.waitFor(30,TimeUnit.SECONDS)&&failed.exitValue()==0,"Failed install did not relaunch the controller");
             deadline=System.nanoTime()+TimeUnit.SECONDS.toNanos(10);while(!Files.exists(marker)&&System.nanoTime()<deadline)Thread.sleep(25);
             check(Files.exists(marker)&&!Files.exists(plan),"Failed install did not clean its journal and restart");ControllerUpdater.verify(jar,expected);
+            // A verified download can still fail at runtime: restore the previous build and hold that release.
+            Files.write(jar,original);Files.write(updates.resolve("download.jar"),data);Files.delete(marker);
+            var boot=List.of(ControllerUpdater.javaExecutable().toString(),"-cp",System.getProperty("java.class.path"),ControllerUpdateChecks.class.getName(),"--boot-check",jar.toString(),ControllerUpdater.digest(jar),marker.toString());
+            saved.setProperty("target",jar.toString());saved.setProperty("argc",""+boot.size());for(int i=0;i<boot.size();i++)saved.setProperty("arg."+i,boot.get(i));Files.write(plan,properties(saved));
+            var brokenBoot=new ProcessBuilder(commands.get(0)).inheritIO().start();check(brokenBoot.waitFor(30,TimeUnit.SECONDS)&&brokenBoot.exitValue()==0,"Failed new boot did not roll back");
+            deadline=System.nanoTime()+TimeUnit.SECONDS.toNanos(10);while(!Files.exists(marker)&&System.nanoTime()<deadline)Thread.sleep(25);
+            check(Files.exists(marker)&&Files.readString(marker).equals("restored")&&Arrays.equals(original,Files.readAllBytes(jar)),"Previous controller did not actually relaunch after startup failure");
+            check(ControllerUpdater.readPlan(updates.resolve("pinned-release.properties")).getProperty("version").equals("0.1.0.10"),"Failed controller release was not held");
+            check(!ControllerUpdater.prepare(jar,"0.1.0.9",flags,fetch,(c,w)->{throw new AssertionError("Held release relaunched");}),"Held controller release must not loop");
             // Malicious endpoint plans cannot replace an unrelated file.
             saved.setProperty("target",root.resolve("outside/other.jar").toString());Files.write(plan,properties(saved));Files.write(updates.resolve("download.jar"),data);rejects(()->ControllerUpdater.replace(plan));
             System.out.println("Controller updater checks passed: channel isolation, no-op/downgrade, corrupted downloads, failed handoff, real helper replacement/backup/restart and argument preservation");

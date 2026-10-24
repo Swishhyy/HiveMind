@@ -8,7 +8,7 @@ import java.util.*;
 public final class UpdateHealth {
     private UpdateHealth(){}
     private static Path root(Path instance){return instance.resolve("hivemind/updates");}
-    private static Properties read(Path file)throws IOException{Properties p=new Properties();if(Files.exists(file))try(var in=Files.newInputStream(file)){p.load(in);}return p;}
+    private static Properties read(Path file)throws IOException{Properties p=new Properties();try(var in=Files.newInputStream(file)){p.load(in);}catch(NoSuchFileException absent){}return p;}
     private static void write(Path file,Properties p)throws IOException{Files.createDirectories(file.getParent());Path temp=Files.createTempFile(file.getParent(),"update-state-",".tmp");try{try(var out=Files.newOutputStream(temp)){p.store(out,"HiveMind update health");}move(temp,file);}finally{Files.deleteIfExists(temp);}}
     private static void move(Path from,Path to)throws IOException{try{Files.move(from,to,StandardCopyOption.ATOMIC_MOVE,StandardCopyOption.REPLACE_EXISTING);}catch(AtomicMoveNotSupportedException e){Files.move(from,to,StandardCopyOption.REPLACE_EXISTING);}}
     public static void installed(Path instance,Path target,Path backup,UpdateManifest manifest)throws IOException{
@@ -34,7 +34,7 @@ public final class UpdateHealth {
     }
     public static void healthy(Path instance,String version)throws IOException{
         Path file=root(instance).resolve("boot-check.properties");Properties p=read(file);if(p.isEmpty()||!version.equals(p.getProperty("version")))return;
-        Path target=Path.of(p.getProperty("target"));if(!UpdateInstaller.digest(target).equals(p.getProperty("nextSha")))throw new IOException("Healthy boot identity differs from the installed update");Files.delete(file);
+        Path target=Path.of(p.getProperty("target"));if(!UpdateInstaller.digest(target).equals(p.getProperty("nextSha")))throw new IOException("Healthy boot identity differs from the installed update");Files.deleteIfExists(file);
     }
     public static boolean rollback(Path instance,String reason)throws IOException{
         Path updates=root(instance).toAbsolutePath().normalize(),file=updates.resolve("boot-check.properties");Properties p=read(file);if(p.isEmpty())return false;
@@ -48,7 +48,7 @@ public final class UpdateHealth {
         if(Files.isDirectory(config))try(var files=Files.walk(config)){for(Path saved:files.filter(Files::isRegularFile).toList()){
             if(Files.isSymbolicLink(saved))continue;Path restored=instance.resolve("hivemind").resolve(config.relativize(saved)).normalize();if(!restored.startsWith(instance.resolve("hivemind").toAbsolutePath().normalize()))throw new IOException("Invalid configuration rollback path");Files.createDirectories(restored.getParent());Files.copy(saved,restored,StandardCopyOption.REPLACE_EXISTING);
         }}
-        Properties pin=new Properties();pin.setProperty("version",p.getProperty("version"));pin.setProperty("reason",reason.substring(0,Math.min(240,reason.length())));pin.setProperty("time",""+System.currentTimeMillis());write(updates.resolve("pinned-release.properties"),pin);Files.delete(file);Files.deleteIfExists(updates.resolve("restart-request.properties"));return true;
+        Properties pin=new Properties();pin.setProperty("version",p.getProperty("version"));pin.setProperty("reason",reason.substring(0,Math.min(240,reason.length())));pin.setProperty("time",""+System.currentTimeMillis());write(updates.resolve("pinned-release.properties"),pin);Files.deleteIfExists(file);Files.deleteIfExists(updates.resolve("restart-request.properties"));return true;
     }
     public static String pinned(Path instance)throws IOException{return read(root(instance).resolve("pinned-release.properties")).getProperty("version","");}
     public static void unpin(Path instance)throws IOException{Files.deleteIfExists(root(instance).resolve("pinned-release.properties"));}
